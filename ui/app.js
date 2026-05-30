@@ -1301,17 +1301,23 @@ const deleteMarker = async (markerIndex) => {
   }
 };
 
-const jumpToMarkerTime = (markerIndex, type) => {
-  const marker = markers[markerIndex];
-  if (!marker) return;
-  const time = type === "start" ? marker.startTime : marker.endTime;
+const jumpToMarkerTime = (markerIndexOrTime, type) => {
+  if (!player.src) {
+    alert("Please load a video first.");
+    return;
+  }
+  let time;
+  if (type === undefined) {
+    time = Number.parseFloat(markerIndexOrTime);
+  } else {
+    const marker = markers[markerIndexOrTime];
+    if (!marker) return;
+    time = type === "start" ? marker.startTime : marker.endTime;
+  }
   if (time !== undefined && time !== null) {
-    if (player.src) {
-      player.currentTime = time;
-      toConsole(`Jumped to marker ${type} time`, time, debuggin);
-    } else {
-      alert("Please load a video first.");
-    }
+    player.currentTime = time;
+    player.pause();
+    toConsole("Jumped to marker time", time, debuggin);
   }
 };
 
