@@ -18,7 +18,7 @@
     <!-- Header -->
     <header class="bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 shadow-sm py-1.5 px-4 flex justify-between items-center z-10 min-h-8">
       <div class="flex items-center gap-2 sm:gap-3">
-        <h1 id="appHeaderTitle" class="text-xl font-bold tracking-tight text-zinc-900 dark:text-white whitespace-nowrap hidden lg:block">TimeStudy v0.1.0</h1>
+        <h1 id="appHeaderTitle" class="text-xl font-bold tracking-tight text-zinc-900 dark:text-white whitespace-nowrap hidden lg:block">TMVideo v0.1.0</h1>
         <span class="text-zinc-300 dark:text-zinc-600 hidden lg:inline font-light text-xl">/</span>
         <input type="text" id="projectNameInput" placeholder="Untitled Project" class="project-name-input" />
         <span class="text-zinc-300 dark:text-zinc-600 hidden sm:inline font-light text-xl">/</span>
@@ -35,19 +35,19 @@
       <div class="flex items-center gap-3 sm:gap-4">
         <!-- File Management Actions -->
         <div class="flex items-center gap-1 sm:gap-2 border-r border-zinc-200 dark:border-zinc-700 pr-2 sm:pr-4">
-          <button id="newProjectButton" class="btn btn-sm btn-outline-secondary flex items-center gap-1 sm:gap-1.5 shadow-sm" title="New Project">
+          <button id="newProjectButton" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2" title="New Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></svg>
             <span class="hidden md:inline">New</span>
           </button>
-          <button id="projectImportButton" class="btn btn-sm btn-outline-secondary flex items-center gap-1 sm:gap-1.5 shadow-sm" title="Load Project">
+          <button id="projectImportButton" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2" title="Load Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             <span class="hidden md:inline">Load</span>
           </button>
-          <button id="projectExportButton" class="btn btn-sm btn-outline-secondary flex items-center gap-1 sm:gap-1.5 shadow-sm" title="Save Project">
+          <button id="projectExportButton" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2" title="Save Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.5l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             <span class="hidden md:inline">Save</span>
           </button>
-          <button id="projectSaveAsButton" class="btn btn-sm btn-outline-secondary flex items-center gap-1 sm:gap-1.5 shadow-sm" title="Save Project As...">
+          <button id="projectSaveAsButton" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2" title="Save Project As...">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.5l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             <span class="hidden md:inline">Save As</span>
           </button>
@@ -253,74 +253,15 @@
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
             <circle cx="12" cy="12" r="3"></circle>
           </svg>
-          Project Variables
+          Project Settings
         </h5>
         <button type="button" id="closeSettingsBtn" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-2xl font-bold px-2 leading-none">&times;</button>
       </div>
       <div class="p-5 overflow-y-auto flex-1 flex flex-col gap-6 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb]:rounded-full">
         <div>
           <label for="projectCommentsInput" class="form-label">Project Comments</label>
-          <textarea id="projectCommentsInput" class="form-control w-full" rows="3" placeholder="Notes about this study or trial..."></textarea>
+          <textarea id="projectCommentsInput" class="form-control w-full" rows="3" placeholder="Notes about this project..."></textarea>
         </div>
-        <div>
-          <!-- Takt Time -->
-          <label for="taktTimeInput" class="form-label">Takt Time</label>
-          <input type="text" id="taktTimeInput" class="form-control w-full font-mono tabular-nums" placeholder="00:00:00.00" />
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-3">Format: HH:MM:SS.MS</p>
-          
-          <label for="hourlyRateInput" class="form-label">Labor Hourly Rate</label>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400 font-medium">$</span>
-            <input type="number" id="hourlyRateInput" class="form-control w-full pl-8! no-spinners" placeholder="0.00" min="0" step="0.01">
-          </div>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Used for cost estimation in generated reports.</p>
-        </div>
-        <div>
-          <label for="shiftLengthInput" class="form-label">Shift Length (Minutes)</label>
-          <input type="number" id="shiftLengthInput" class="form-control w-full no-spinners" placeholder="480" min="1" step="1">
-        </div>
-        <div>
-          <label for="targetEfficiencyInput" class="form-label">Target Efficiency (%)</label>
-          <div class="relative">
-            <input type="number" id="targetEfficiencyInput" class="form-control w-full pr-8! no-spinners" placeholder="100" min="1" max="200" step="1">
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400 font-medium">%</span>
-          </div>
-        </div>
-        <div>
-          <label for="unitsPerCycleInput" class="form-label">Units per Cycle</label>
-          <input type="number" id="unitsPerCycleInput" class="form-control w-full no-spinners" placeholder="1" min="1" step="1">
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Number of units produced in a single process cycle.</p>
-        </div>
-        <hr class="border-zinc-200 dark:border-zinc-700 my-2">
-        <div>
-          <label class="form-label font-semibold">Master Data Imports</label>
-          <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">Upload 2-column CSV files to populate dropdowns for tagging.</p>
-          <div class="flex flex-col gap-3">
-            <div class="flex gap-2">
-              <button type="button" id="partsUploadBtn" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload Parts CSV
-              </button>
-              <button type="button" id="partsViewBtn" class="btn btn-sm btn-outline-secondary px-3" title="View Parts Data">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-              <input type="file" id="partsFileInput" accept=".csv" style="display: none" />
-            </div>
-            <div class="flex gap-2">
-              <button type="button" id="labourUploadBtn" class="btn btn-sm btn-outline-secondary flex-1 flex justify-center items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload Labour CSV
-              </button>
-              <button type="button" id="labourViewBtn" class="btn btn-sm btn-outline-secondary px-3" title="View Labour Data">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-              <input type="file" id="labourFileInput" accept=".csv" style="display: none" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="p-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
-        <button type="button" id="saveSettingsBtn" class="btn btn-primary w-full shadow-md">Save Variables</button>
       </div>
     </div>
 

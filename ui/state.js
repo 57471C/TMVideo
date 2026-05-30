@@ -11,7 +11,6 @@ let videoQueue = [];
 let activeQueueIndex = 0;
 const videoBlobCache = {};
 let operations = [];
-let taktTime = 60000;
 let preserveProcessTimes = false;
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let durationMode = "hhmmssms";
@@ -25,10 +24,6 @@ let translateX = 0;
 let translateY = 0;
 let processStartTime = 0;
 let processEndTime = 0;
-let hourlyRate = 0;
-let shiftLength = 480;
-let targetEfficiency = 100;
-let unitsPerCycle = 1;
 let playbackSpeed = 1;
 let volumeLevel = 1;
 // biome-ignore lint/style/useConst: Global state modified in other scripts
@@ -88,18 +83,6 @@ const DOM = {
   settingsBackdrop: document.getElementById("settingsBackdrop"),
   settingsPanel: document.getElementById("settingsPanel"),
   closeSettingsBtn: document.getElementById("closeSettingsBtn"),
-  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
-  hourlyRateInput: document.getElementById("hourlyRateInput"),
-  shiftLengthInput: document.getElementById("shiftLengthInput"),
-  targetEfficiencyInput: document.getElementById("targetEfficiencyInput"),
-  unitsPerCycleInput: document.getElementById("unitsPerCycleInput"),
-  taktTimeInput: document.getElementById("taktTimeInput"),
-  partsFileInput: document.getElementById("partsFileInput"),
-  labourFileInput: document.getElementById("labourFileInput"),
-  partsUploadBtn: document.getElementById("partsUploadBtn"),
-  labourUploadBtn: document.getElementById("labourUploadBtn"),
-  partsViewBtn: document.getElementById("partsViewBtn"),
-  labourViewBtn: document.getElementById("labourViewBtn"),
   masterDataModal: document.getElementById("masterDataModal"),
   masterDataModalTitle: document.getElementById("masterDataModalTitle"),
   masterDataList: document.getElementById("masterDataList"),
@@ -120,7 +103,6 @@ const saveLocalState = () => {
     videoQueue[activeQueueIndex] = {
       videoId: activeQueueIndex + 1,
       videoName: `Video ${activeQueueIndex + 1}`,
-      costingConfig: {},
       appState: {},
     };
   }
@@ -130,8 +112,6 @@ const saveLocalState = () => {
   videoQueue[activeQueueIndex].videoFilePath = videoFilePath;
   videoQueue[activeQueueIndex].processStartTime = processStartTime;
   videoQueue[activeQueueIndex].processEndTime = processEndTime;
-  videoQueue[activeQueueIndex].taktTime = taktTime;
-  videoQueue[activeQueueIndex].costingConfig = { hourlyRate, shiftLength, targetEfficiency, unitsPerCycle };
   videoQueue[activeQueueIndex].appState = { operations };
 
   const state = {
@@ -194,8 +174,6 @@ const loadLocalState = () => {
       videoFilePath: "",
       processStartTime: 0,
       processEndTime: 0,
-      taktTime: 60000,
-      costingConfig: { hourlyRate: 0, shiftLength: 480, targetEfficiency: 100, unitsPerCycle: 1 },
       appState: { operations: [] },
     },
   ];
@@ -207,12 +185,6 @@ const loadLocalState = () => {
   videoFilePath = currentVideo.videoFilePath || "";
   processStartTime = currentVideo.processStartTime || 0;
   processEndTime = currentVideo.processEndTime || 0;
-  taktTime = currentVideo.taktTime || 60000;
-
-  hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
-  shiftLength = currentVideo.costingConfig?.shiftLength || 480;
-  targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
-  unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
   operations = currentVideo.appState?.operations || [];
 
@@ -327,12 +299,6 @@ const importFromJSON = (jsonText) => {
     videoFilePath = currentVideo.videoFilePath || "";
     processStartTime = currentVideo.processStartTime || 0;
     processEndTime = currentVideo.processEndTime || 0;
-    taktTime = currentVideo.taktTime || 60000;
-
-    hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
-    shiftLength = currentVideo.costingConfig?.shiftLength || 480;
-    targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
-    unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
     operations = currentVideo.appState?.operations || [];
 
@@ -442,9 +408,9 @@ const exportToCSV = async () => {
 
   // 1. Metadata Block
   // Row 1: Titles
-  csvContent += "Project Name,Video Name,Process Start Time,Process End Time,Takt Time,Video File Name\n";
+  csvContent += "Project Name,Video Name,Process Start Time,Process End Time,Video File Name\n";
   // Row 2: Values
-  csvContent += `${escapeCSV(projectName)},${escapeCSV(videoNameVal)},${formatTimeToHHMMSSMS(processStartTime)},${formatTimeToHHMMSSMS(processEndTime)},${formatDurationForExport(taktTime)},${escapeCSV(videoFileName)}\n`;
+  csvContent += `${escapeCSV(projectName)},${escapeCSV(videoNameVal)},${formatTimeToHHMMSSMS(processStartTime)},${formatTimeToHHMMSSMS(processEndTime)},${escapeCSV(videoFileName)}\n`;
   // Row 3: Blank
   csvContent += "\n";
 

@@ -49,11 +49,6 @@ const switchVideoInQueue = async (index) => {
   videoFilePath = currentVideo.videoFilePath || "";
   processStartTime = currentVideo.processStartTime || 0;
   processEndTime = currentVideo.processEndTime || 0;
-  taktTime = currentVideo.taktTime || 60000;
-  hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
-  shiftLength = currentVideo.costingConfig?.shiftLength || 480;
-  targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
-  unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
   operations = currentVideo.appState?.operations || [];
 
@@ -111,8 +106,6 @@ const addVideoToQueue = async () => {
         videoFilePath: "",
         processStartTime: 0,
         processEndTime: 0,
-        taktTime,
-        costingConfig: { hourlyRate, shiftLength, targetEfficiency },
         appState: { operations: [] },
       };
 
@@ -277,99 +270,26 @@ const initializePlayer = () => {
   // Settings Panel Logic
   if (DOM.openSettingsBtn) {
     const saveSettingsData = () => {
-      hourlyRate = Number.parseFloat(DOM.hourlyRateInput.value) || 0;
-      shiftLength = Number.parseFloat(DOM.shiftLengthInput.value) || 480;
-      targetEfficiency = Number.parseFloat(DOM.targetEfficiencyInput.value) || 100;
-      unitsPerCycle = Number.parseFloat(DOM.unitsPerCycleInput.value) || 1;
-      if (DOM.taktTimeInput) {
-        const parsedTakt = parseTaktTime(DOM.taktTimeInput.value);
-        if (parsedTakt !== null) {
-          taktTime = parsedTakt;
-        } else {
-          alert("Invalid Takt Time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
-          return false; // Prevent saving and closing if invalid
-        }
-      }
       if (DOM.projectCommentsInput) projectComments = DOM.projectCommentsInput.value;
       saveLocalState();
-      // Redraw charts and update UI to reflect new Takt Time
-      if (typeof updateProcessTimes === "function") updateProcessTimes();
-      if (typeof drawTable === "function") drawTable();
       return true;
     };
 
     DOM.openSettingsBtn.addEventListener("click", () => toggleSettings(true));
 
     DOM.closeSettingsBtn.addEventListener("click", () => {
-      if (saveSettingsData()) {
-        toggleSettings(false);
-      }
+      saveSettingsData();
+      toggleSettings(false);
     });
 
     DOM.settingsBackdrop.addEventListener("click", () => {
-      if (saveSettingsData()) {
-        toggleSettings(false);
-      }
+      saveSettingsData();
+      toggleSettings(false);
     });
 
-    DOM.saveSettingsBtn.addEventListener("click", () => {
-      if (saveSettingsData()) {
-        toggleSettings(false);
-        showToast("Project variables saved successfully.", "success");
-      }
-    });
-
-    // Basic CSV parser for 2 columns: [ID], [Description]
-    const parseTwoColumnCSV = (csvText) => {
-      const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== "");
-      const results = [];
-      for (const line of lines) {
-        const firstComma = line.indexOf(",");
-        if (firstComma > -1) {
-          const col1 = line.substring(0, firstComma).replace(/^"|"$/g, "").trim();
-          const col2 = line
-            .substring(firstComma + 1)
-            .replace(/^"|"$/g, "")
-            .trim();
-          results.push(`${col1} - ${col2}`);
-        } else {
-          results.push(line.replace(/^"|"$/g, "").trim());
-        }
-      }
-      return results;
-    };
-
-    DOM.partsUploadBtn.addEventListener("click", () => DOM.partsFileInput.click());
-    DOM.partsFileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        masterParts = parseTwoColumnCSV(evt.target.result);
-        showToast(`Loaded ${masterParts.length} Part Numbers`, "success");
-        saveLocalState();
-      };
-      reader.readAsText(file);
-    });
-
-    DOM.labourUploadBtn.addEventListener("click", () => DOM.labourFileInput.click());
-    DOM.labourFileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        masterLabour = parseTwoColumnCSV(evt.target.result);
-        showToast(`Loaded ${masterLabour.length} Labour Codes`, "success");
-        saveLocalState();
-      };
-      reader.readAsText(file);
-    });
-
-    DOM.partsViewBtn.addEventListener("click", () => showMasterDataModal("Part Numbers", masterParts, "part"));
-    DOM.labourViewBtn.addEventListener("click", () => showMasterDataModal("Labour Codes", masterLabour, "labour"));
     const closeMasterModal = () => DOM.masterDataModal.close();
-    DOM.closeMasterDataBtnX.addEventListener("click", closeMasterModal);
-    DOM.closeMasterDataBtn.addEventListener("click", closeMasterModal);
+    if (DOM.closeMasterDataBtnX) DOM.closeMasterDataBtnX.addEventListener("click", closeMasterModal);
+    if (DOM.closeMasterDataBtn) DOM.closeMasterDataBtn.addEventListener("click", closeMasterModal);
   }
 
   if (DOM.statusModal) {
@@ -428,11 +348,7 @@ const initializePlayer = () => {
       processStartTime = 0;
       processEndTime = duration;
     }
-    if (duration > 0 && duration < 60 && operations.length === 0) {
-      taktTime = Math.max(1000, Math.round(duration * 0.9) * 1000);
-      saveLocalState();
-      toConsole("Takt time auto-adjusted for short video", taktTime, debuggin);
-    }
+
     updateTimeDisplay(duration, "durationTime");
     positionControls();
     updateLoadButtonColor();
@@ -494,9 +410,7 @@ const initializePlayer = () => {
   volumeSlider = document.getElementById("volumeSlider");
 
   loadLocalState();
-  if (!taktTime) {
-    taktTime = 60000;
-  }
+
   if (operations.length > 0) {
     updateTaskList();
     drawTable();
@@ -656,8 +570,6 @@ const initializePlayer = () => {
         videoFilePath: "",
         processStartTime: 0,
         processEndTime: 0,
-        taktTime: taktTime,
-        costingConfig: { hourlyRate, shiftLength, targetEfficiency, unitsPerCycle },
         appState: { operations: [] },
       },
     ];
@@ -1314,11 +1226,6 @@ const toggleSettings = (show) => {
       DOM.settingsBackdrop.classList.remove("opacity-0");
       DOM.settingsPanel.classList.remove("translate-x-full");
     });
-    DOM.hourlyRateInput.value = hourlyRate || "";
-    DOM.shiftLengthInput.value = shiftLength || 480;
-    DOM.targetEfficiencyInput.value = targetEfficiency || 100;
-    DOM.unitsPerCycleInput.value = unitsPerCycle || 1;
-    if (DOM.taktTimeInput) DOM.taktTimeInput.value = formatTaktTime(taktTime);
     if (DOM.projectCommentsInput) DOM.projectCommentsInput.value = projectComments || "";
   } else {
     DOM.settingsPanel.classList.add("translate-x-full");
