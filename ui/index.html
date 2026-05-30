@@ -103,7 +103,7 @@
                   <div id="startGreyOut" class="absolute h-1.5 bg-zinc-800 dark:bg-zinc-950 top-1/2 -translate-y-1/2 z-20 pointer-events-none left-0 w-0 rounded-l-full hidden"></div>
                   <div id="endGreyOut" class="absolute h-1.5 bg-zinc-800 dark:bg-zinc-950 top-1/2 -translate-y-1/2 z-20 pointer-events-none right-0 w-0 rounded-r-full hidden"></div>
                   <input type="range" class="form-range w-full timeline-ticks z-10" min="0" max="100" value="0" id="seekBar" aria-label="Seek Video" />
-                  <div id="opTicksContainer" class="absolute inset-0 z-25 pointer-events-none"></div>
+                  <div id="markerTicksContainer" class="absolute inset-0 z-25 pointer-events-none"></div>
                   <div id="startTick" class="absolute h-3 w-0.5 bg-blue-500 top-1/2 -translate-y-1/2 z-30 pointer-events-none hidden"></div>
                   <div id="endTick" class="absolute h-3 w-0.5 bg-blue-500 top-1/2 -translate-y-1/2 z-30 pointer-events-none hidden"></div>
                 </div>
@@ -206,15 +206,10 @@
             <div class="flex justify-between items-center w-full flex-wrap gap-3">
               <!-- Left Side: Active Logging -->
               <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <button id="addOpButton" class="btn btn-primary shadow-sm flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>
-                  Add Operation
+                <button id="addMarkerBtn" class="btn btn-primary shadow-sm flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add Marker
                 </button>
-                <button id="addTaskButton" class="btn btn-primary shadow-sm flex items-center gap-1.5" disabled>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
-                  Add Task
-                </button>
-                <div class="hidden sm:block w-px h-6 bg-zinc-200 dark:bg-zinc-700 mx-1"></div>
 
               </div>
 
@@ -233,8 +228,8 @@
           </div>
           </div>
 
-          <!-- Task List Table -->
-          <div id="taskList"></div>
+          <!-- Markers List Table -->
+          <div id="markersList"></div>
         </div>
       </div>
 
@@ -297,28 +292,17 @@
       <button id="setEndBtn" class="w-full text-left px-4 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors">Set End</button>
     </div>
 
-    <!-- Operation Context Menu -->
-    <div id="opContextMenu" class="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg rounded-md py-1 z-50 hidden min-w-40">
-      <button id="opRenameBtn" class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
+    <!-- Marker Context Menu -->
+    <div id="markerContextMenu" class="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg rounded-md py-1 z-50 hidden min-w-40">
+      <button id="markerRenameBtn" class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-zinc-500 dark:text-zinc-400"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
         Rename
       </button>
-      <button id="opDeleteBtn" class="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors flex items-center gap-2 cursor-pointer">
+      <button id="markerDeleteBtn" class="w-full text-left px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors flex items-center gap-2 cursor-pointer">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-red-500 dark:text-red-400"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         Delete
       </button>
     </div>
-
-    <!-- Status Select Modal -->
-    <dialog id="statusModal" class="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-md shadow-xl border border-zinc-200 dark:border-zinc-700 p-1.5 backdrop:bg-transparent w-fit fixed m-0">
-      <div class="flex flex-col gap-1">
-        <button type="button" class="status-btn px-4 py-1 rounded border border-emerald-500/50 text-emerald-600 dark:border-emerald-400/50 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 font-bold transition-colors shadow-sm text-xs" data-status="VA">VA</button>
-        <button type="button" class="status-btn px-4 py-1 rounded border border-amber-500/50 text-amber-600 dark:border-amber-400/50 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 font-bold transition-colors shadow-sm text-xs" data-status="NVA">NVA</button>
-        <button type="button" class="status-btn px-4 py-1 rounded border border-rose-500/50 text-rose-600 dark:border-rose-400/50 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 font-bold transition-colors shadow-sm text-xs" data-status="W">W</button>
-      </div>
-    </dialog>
-
-
 
     <!-- Trim Video Modal -->
     <dialog id="trimModal" class="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-lg shadow-2xl border border-zinc-200 dark:border-zinc-700 p-0 backdrop:bg-black/50 backdrop:backdrop-blur-sm w-full max-w-md fixed inset-0 m-auto transition-all duration-300 ease-in-out transform opacity-100 scale-100">
@@ -440,8 +424,7 @@
               <tr><td><strong>Right Arrow</strong></td><td>Forward 1s</td></tr>
               <tr><td><strong>Down Arrow</strong></td><td>Rewind 5s</td></tr>
               <tr><td><strong>Up Arrow</strong></td><td>Forward 5s</td></tr>
-              <tr><td><strong>o</strong></td><td>Add Operation</td></tr>
-              <tr><td><strong>t</strong></td><td>Add Task</td></tr>
+              <tr><td><strong>Enter / o</strong></td><td>Add Marker</td></tr>
               <tr><td><strong>m</strong></td><td>Toggle Mute</td></tr>
               <tr><td><strong>` (Backtick)</strong></td><td>0.5x Speed</td></tr>
               <tr><td><strong>1 - 8</strong></td><td>1x to 8x Speed</td></tr>

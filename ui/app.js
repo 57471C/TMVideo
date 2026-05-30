@@ -1,7 +1,6 @@
 let player;
 let loadVideoButton;
-let addTaskButton;
-let addOpButton;
+let addMarkerBtn;
 let toggleFormatButton;
 let exportButton;
 let projectExportButton;
@@ -50,11 +49,10 @@ const switchVideoInQueue = async (index) => {
   processStartTime = currentVideo.processStartTime || 0;
   processEndTime = currentVideo.processEndTime || 0;
 
-  operations = currentVideo.appState?.operations || [];
+  markers = currentVideo.appState?.markers || [];
 
   renderVideoQueueSelect();
-  updateTaskList();
-  drawTable();
+  updateMarkersList();
 
   player.pause();
   const isTauri = window.__TAURI__ !== undefined;
@@ -106,7 +104,7 @@ const addVideoToQueue = async () => {
         videoFilePath: "",
         processStartTime: 0,
         processEndTime: 0,
-        appState: { operations: [] },
+        appState: { markers: [] },
       };
 
   videoQueue.push(newVideo);
@@ -128,7 +126,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
   const currentSrc = player.getAttribute("src");
   const hasExistingVideo = currentSrc && currentSrc !== "";
 
-  if (hasExistingVideo && operations.length > 0) {
+  if (hasExistingVideo && markers.length > 0) {
     const save = await asyncConfirm(
       "You have unsaved data. Would you like to save your project before loading a new video?",
       "Unsaved Data",
@@ -138,7 +136,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
       toConsole("Project saved before loading new video", null, debuggin);
     }
     const proceed = await asyncConfirm(
-      "Loading a new video will clear all existing data and charts. Are you sure you want to proceed?",
+      "Loading a new video will clear all existing data. Are you sure you want to proceed?",
       "Load New Video",
     );
     if (!proceed) {
@@ -147,7 +145,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
     }
   }
 
-  const isRelinking = !hasExistingVideo && (operations.length > 0 || projectName !== "");
+  const isRelinking = !hasExistingVideo && (markers.length > 0 || projectName !== "");
 
   if (isTauriPath) {
     const filePath = typeof fileOrPath === "object" ? fileOrPath.path : fileOrPath;
@@ -178,15 +176,13 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
   player.load();
 
   if (!isRelinking) {
-    operations = [];
+    markers = [];
     projectName = "";
     if (DOM.projectNameInput) {
       DOM.projectNameInput.value = "";
     }
-    updateTaskList();
-    if (typeof drawTable === "function") drawTable();
-    addTaskButton.disabled = true;
-    toConsole("Cleared all previous data and charts", null, debuggin);
+    updateMarkersList();
+    toConsole("Cleared all previous data", null, debuggin);
   } else {
     toConsole("Re-linked video to existing project", videoFileName, debuggin);
   }
@@ -236,10 +232,7 @@ const initializePlayer = () => {
     localStorage.setItem("darkMode", isDark);
     toConsole("Dark mode toggled", isDark ? "On" : "Off", debuggin);
 
-    updateTaskList();
-    if (operations.length > 0) {
-      drawTable();
-    }
+    updateMarkersList();
   });
 
   if (DOM.videoQueueSelect) {
@@ -411,9 +404,8 @@ const initializePlayer = () => {
 
   loadLocalState();
 
-  if (operations.length > 0) {
-    updateTaskList();
-    drawTable();
+  if (markers.length > 0) {
+    updateMarkersList();
   }
 
   // Setup Context Menu for Current Time
@@ -426,20 +418,20 @@ const initializePlayer = () => {
     DOM.timeContextMenu.classList.remove("hidden");
   });
 
-  // Setup Context Menu for Operation
-  if (DOM.opContextMenu) {
-    DOM.opRenameBtn.addEventListener("click", () => {
-      if (currentOpContextIndex !== null && currentOpContextIndex !== undefined) {
-        renameOperation(currentOpContextIndex);
+  // Setup Context Menu for Marker
+  if (DOM.markerContextMenu) {
+    DOM.markerRenameBtn.addEventListener("click", () => {
+      if (currentMarkerContextIndex !== null && currentMarkerContextIndex !== undefined) {
+        renameMarker(currentMarkerContextIndex);
       }
-      DOM.opContextMenu.classList.add("hidden");
+      DOM.markerContextMenu.classList.add("hidden");
     });
 
-    DOM.opDeleteBtn.addEventListener("click", () => {
-      if (currentOpContextIndex !== null && currentOpContextIndex !== undefined) {
-        deleteOperation(currentOpContextIndex);
+    DOM.markerDeleteBtn.addEventListener("click", () => {
+      if (currentMarkerContextIndex !== null && currentMarkerContextIndex !== undefined) {
+        deleteMarker(currentMarkerContextIndex);
       }
-      DOM.opContextMenu.classList.add("hidden");
+      DOM.markerContextMenu.classList.add("hidden");
     });
   }
 
@@ -447,8 +439,8 @@ const initializePlayer = () => {
     if (!DOM.timeContextMenu.contains(e.target) && e.target !== DOM.currentTime) {
       DOM.timeContextMenu.classList.add("hidden");
     }
-    if (DOM.opContextMenu && !DOM.opContextMenu.contains(e.target)) {
-      DOM.opContextMenu.classList.add("hidden");
+    if (DOM.markerContextMenu && !DOM.markerContextMenu.contains(e.target)) {
+      DOM.markerContextMenu.classList.add("hidden");
     }
   });
 
@@ -456,34 +448,34 @@ const initializePlayer = () => {
     processStartTime = player.currentTime;
     DOM.timeContextMenu.classList.add("hidden");
 
-    const invalidOps = operations.filter((op) => op.startTime < processStartTime);
-    if (invalidOps.length > 0) {
-      invalidOps.forEach((op) => {
-        showToast(`Operation "${op.name}" starts before Process Start Time.`, "error");
+    const invalidMarkers = markers.filter((m) => m.startTime < processStartTime);
+    if (invalidMarkers.length > 0) {
+      invalidMarkers.forEach((m) => {
+        showToast(`Marker "${m.name}" starts before Process Start Time.`, "error");
       });
     }
 
     if (typeof updateProcessTimes === "function") updateProcessTimes();
     saveLocalState();
     updateSliderTicks();
-    if (typeof updateTaskList === "function") updateTaskList();
+    if (typeof updateMarkersList === "function") updateMarkersList();
   });
 
   DOM.setEndBtn.addEventListener("click", () => {
     processEndTime = player.currentTime;
     DOM.timeContextMenu.classList.add("hidden");
 
-    const invalidOps = operations.filter((op) => op.startTime > processEndTime);
-    if (invalidOps.length > 0) {
-      invalidOps.forEach((op) => {
-        showToast(`Operation "${op.name}" starts after Process End Time.`, "error");
+    const invalidMarkers = markers.filter((m) => m.startTime > processEndTime);
+    if (invalidMarkers.length > 0) {
+      invalidMarkers.forEach((m) => {
+        showToast(`Marker "${m.name}" starts after Process End Time.`, "error");
       });
     }
 
     if (typeof updateProcessTimes === "function") updateProcessTimes();
     saveLocalState();
     updateSliderTicks();
-    if (typeof updateTaskList === "function") updateTaskList();
+    if (typeof updateMarkersList === "function") updateMarkersList();
   });
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -496,8 +488,7 @@ const initializePlayer = () => {
     saveLocalState();
   }
 
-  addTaskButton.addEventListener("click", addTask, false);
-  addOpButton.addEventListener("click", addOp, false);
+  addMarkerBtn.addEventListener("click", addMarker, false);
   exportButton.addEventListener("click", (e) => {
     exportToCSV();
   }, false);
@@ -581,8 +572,7 @@ const initializePlayer = () => {
     DOM.videoPlaceholder.textContent = "Load a video to get started";
     toggleVideoPlaceholder(true);
     updateLoadButtonColor();
-    updateTaskList();
-    if (typeof drawTable === "function") drawTable();
+    updateMarkersList();
     saveLocalState();
     updateSliderTicks();
 
@@ -640,8 +630,7 @@ const initializePlayer = () => {
     toggleFormatButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span>Format (${
       durationMode === "hhmmssms" ? "HH:MM:SS.MS" : durationMode === "ms" ? "ms" : "min"
     })</span>`;
-    updateTaskList();
-    drawTable();
+    updateMarkersList();
   });
   playPauseButton.addEventListener("click", () => {
     if (player.paused) {
@@ -847,15 +836,11 @@ const initializePlayer = () => {
         player.currentTime = Math.min(player.duration, player.currentTime + 5);
         toConsole("Forward 5s (Up Arrow)", player.currentTime, debuggin);
         break;
-      case "t":
-        e.preventDefault();
-        if (!player.src) return;
-        if (!addTaskButton.disabled) addTask();
-        break;
+      case "Enter":
       case "o":
         e.preventDefault();
         if (!player.src) return;
-        addOp();
+        addMarker();
         break;
       case "m":
         e.preventDefault();
@@ -913,7 +898,7 @@ const initializePlayer = () => {
   });
 
   window.addEventListener("beforeunload", (e) => {
-    if (operations.length > 0 || player.src) {
+    if (markers.length > 0 || player.src) {
       e.preventDefault();
       e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
       return e.returnValue;
@@ -1137,21 +1122,21 @@ const updateSliderTicks = () => {
     if (DOM.endGreyOut) DOM.endGreyOut.classList.add("hidden");
   }
 
-  if (DOM.opTicksContainer) {
-    DOM.opTicksContainer.innerHTML = "";
-    operations.forEach((op) => {
-      if (op.startTime >= 0 && op.startTime <= player.duration) {
-        const pct = (op.startTime / player.duration) * 100;
+  if (DOM.markerTicksContainer) {
+    DOM.markerTicksContainer.innerHTML = "";
+    markers.forEach((m) => {
+      if (m.startTime >= 0 && m.startTime <= player.duration) {
+        const pct = (m.startTime / player.duration) * 100;
         const tick = document.createElement("div");
         tick.className =
           "absolute h-3 w-0.5 bg-yellow-500 top-1/2 -translate-y-1/2 cursor-pointer transition-colors hover:bg-yellow-400";
         tick.style.pointerEvents = "auto";
         tick.style.left = `calc(${pct}% - 1px)`;
-        tick.title = op.name; // Uses browser's native alt hover text
+        tick.title = m.name; // Uses browser's native alt hover text
         tick.addEventListener("click", () => {
-          player.currentTime = op.startTime;
+          player.currentTime = m.startTime;
         });
-        DOM.opTicksContainer.appendChild(tick);
+        DOM.markerTicksContainer.appendChild(tick);
       }
     });
   }
@@ -1234,30 +1219,20 @@ const toggleSettings = (show) => {
   }
 };
 
-const getAllTaskNames = () => {
-  const names = [];
-  for (const op of operations) {
-    for (const task of op.tasks || []) {
-      if (task?.name) names.push(task.name);
-    }
-  }
-  return names;
-};
-
-const addOp = async () => {
+const addMarker = async () => {
   player.pause();
-  const opName = await asyncPrompt(
-    "Please name the Operation",
+  const markerName = await asyncPrompt(
+    "Please name the Marker",
     "",
-    "New Operation",
-    operations.map((o) => o.name),
+    "New Marker",
+    markers.map((o) => o.name),
   );
-  if (!opName) {
-    alert("Operation name cannot be empty.");
+  if (!markerName) {
+    alert("Marker name cannot be empty.");
     return;
   }
 
-  const lowerName = opName.trim().toLowerCase();
+  const lowerName = markerName.trim().toLowerCase();
   if (lowerName === "terry" || lowerName === "tetris") {
     window.isSecretGame = true;
     const trimModal = document.getElementById("trimModal");
@@ -1276,325 +1251,84 @@ const addOp = async () => {
   }
 
   const startTime = player.currentTime;
-  toConsole("Operation start time", startTime, debuggin);
+  toConsole("Marker start time", startTime, debuggin);
 
   if (startTime < processStartTime) {
-    showToast(`Operation "${opName}" starts before Process Start Time.`, "error");
+    showToast(`Marker "${markerName}" starts before Process Start Time.`, "error");
   } else if (processEndTime > 0 && startTime > processEndTime) {
-    showToast(`Operation "${opName}" starts after Process End Time.`, "error");
+    showToast(`Marker "${markerName}" starts after Process End Time.`, "error");
   }
 
-  operations.push({
-    name: opName,
+  markers.push({
+    id: Date.now(),
+    name: markerName,
     startTime: startTime,
-    partTags: [],
-    tasks: [],
+    endTime: 0,
   });
 
   saveLocalState();
-  updateTaskList();
-  drawTable();
+  updateMarkersList();
 };
 
-const addTask = async () => {
-  player.pause();
-  toConsole("playPause", "play paused to add task", debuggin);
-  if (operations.length === 0) {
-    alert("There's no Operation yet! Please add an Operation first.");
-    toConsole("Tried to add a Task, but No Operation exists", null, debuggin);
-    await addOp();
-    if (operations.length === 0) {
-      return;
-    }
-  }
-  const taskName = await asyncPrompt("Please name the Task", "", "New Task", getAllTaskNames());
-  if (!taskName) {
-    alert("Task name cannot be empty.");
-    return;
-  }
-  toConsole("taskName", taskName, debuggin);
-  const taskEndMs = player.currentTime * 1000;
-  const opIndex = operations.length - 1;
-  const opStartTimeInputId = `opTimeInput-${opIndex}`;
-  const opTimeInput = document.getElementById(opStartTimeInputId);
-  if (!opTimeInput) {
-    alert("Error: Operation input not found. Please try refreshing the page.");
-    return;
-  }
-  const opStartTime = parseTimeFromHHMMSSMS(opTimeInput.value) || 0;
-  toConsole("opStartTime from input", opStartTime, debuggin);
-
-  const op = operations[opIndex];
-  let currentOpDuration = 0;
-  for (const t of op.tasks) {
-    currentOpDuration += t.duration;
-  }
-  const taskStartMs = opStartTime * 1000 + currentOpDuration;
-  const duration = Math.max(0, taskEndMs - taskStartMs);
-
-  let taskStatus = await asyncPrompt("VA, NVA, W? (or 1=VA, 2=NVA, 3=W)", "", "Task Status");
-  if (!taskStatus) {
-    alert("Task status cannot be empty.");
-    return;
-  }
-  toConsole("taskStatus input", taskStatus, debuggin);
-
-  taskStatus = taskStatus.toUpperCase();
-  if (taskStatus === "1") taskStatus = "VA";
-  if (taskStatus === "2") taskStatus = "NVA";
-  if (taskStatus === "3") taskStatus = "W";
-
-  if (!["VA", "NVA", "W"].includes(taskStatus)) {
-    alert("Invalid task status. Please enter VA, NVA, W, 1 (VA), 2 (NVA), or 3 (W).");
-    return;
-  }
-  toConsole("taskStatus processed", taskStatus, debuggin);
-  op.tasks.push({
-    name: taskName,
-    duration: duration,
-    status: taskStatus,
-    partTags: [],
-    labourTags: [],
-  });
-
-  saveLocalState();
-  updateTaskList();
-  drawTable();
-};
-
-/* eslint-disable no-unused-vars */
-const insertTask = async (opIndex, taskIndex) => {
-  player.pause();
-  toConsole("playPause", "play paused to insert task", debuggin);
-  const taskName = await asyncPrompt("Please name the new Task", "", "Split Task", getAllTaskNames());
-  if (!taskName) {
-    alert("Task name cannot be empty.");
-    return;
-  }
-  toConsole("taskName", taskName, debuggin);
-  let taskStatus = await asyncPrompt("VA, NVA, W? (or 1=VA, 2=NVA, 3=W)", "", "Task Status");
-  if (!taskStatus) {
-    alert("Task status cannot be empty.");
-    return;
-  }
-  toConsole("taskStatus input", taskStatus, debuggin);
-
-  taskStatus = taskStatus.toUpperCase();
-  if (taskStatus === "1") taskStatus = "VA";
-  if (taskStatus === "2") taskStatus = "NVA";
-  if (taskStatus === "3") taskStatus = "W";
-
-  if (!["VA", "NVA", "W"].includes(taskStatus)) {
-    alert("Invalid task status. Please enter VA, NVA, W, 1 (VA), 2 (NVA), or 3 (W).");
-    return;
-  }
-  toConsole("taskStatus processed", taskStatus, debuggin);
-
-  const currentTask = operations[opIndex].tasks[taskIndex];
-  const originalDuration = currentTask.duration;
-
-  if (originalDuration <= 0) {
-    alert("Cannot split a task with zero or negative duration.");
-    return;
-  }
-
-  const newDuration = Math.floor(originalDuration / 2);
-  const remainingDuration = originalDuration - newDuration;
-
-  currentTask.duration = remainingDuration;
-
-  const newTask = {
-    name: taskName,
-    duration: newDuration,
-    status: taskStatus,
-    partTags: [],
-    labourTags: [],
-  };
-
-  operations[opIndex].tasks.splice(taskIndex + 1, 0, newTask);
-  saveLocalState();
-  updateTaskList();
-  drawTable();
-};
-
-/* eslint-disable no-unused-vars */
-const splitOperationAt = async (opIndex, taskIndex) => {
-  if (typeof player !== "undefined" && player) player.pause();
-  const originalOp = operations[opIndex];
-  
-  const opName = await asyncPrompt(
-    "Please name the new Operation",
-    "",
-    "Split Operation",
-    operations.map((o) => o.name),
-  );
-  if (!opName) {
-    alert("Operation name cannot be empty.");
-    return;
-  }
-
-  const tasksToMove = originalOp.tasks.slice(taskIndex + 1);
-  originalOp.tasks = originalOp.tasks.slice(0, taskIndex + 1);
-
-  const remainingDurationMs = originalOp.tasks.reduce((sum, t) => sum + t.duration, 0);
-  const newOpStartTime = originalOp.startTime + (remainingDurationMs / 1000);
-
-  const newOp = {
-    name: opName.trim(),
-    startTime: newOpStartTime,
-    partTags: [],
-    tasks: tasksToMove,
-  };
-
-  operations.splice(opIndex + 1, 0, newOp);
-
-  saveLocalState();
-  updateTaskList();
-  drawTable();
-};
-
-const handleInlineNameEdit = (opIndex, taskIndex, newValue) => {
-  const trimmed = newValue.trim();
-  if (!trimmed) {
-    alert("Task name cannot be empty.");
-    updateTaskList();
-    return;
-  }
-  operations[opIndex].tasks[taskIndex].name = trimmed;
-  saveLocalState();
-  drawTable();
-};
-
-const handleInlineStatusEdit = (opIndex, taskIndex, newValue) => {
-  operations[opIndex].tasks[taskIndex].status = newValue;
-  saveLocalState();
-  updateTaskList();
-  drawTable();
-};
-
-const handleInlineDurationEdit = (opIndex, taskIndex, newValue) => {
-  let newDurationMs;
-  if (durationMode === "hhmmssms") {
-    const parts = String(newValue).replace(".", ":").split(":");
-    if (parts.length < 3 || parts.length > 4) {
-      alert("Invalid format. Please use HH:MM:SS.MS (e.g., 00:01:30.50).");
-      updateTaskList();
-      return;
-    }
-    let hours = 0;
-    let minutes;
-    let seconds;
-    let milliseconds;
-    if (parts.length === 4) {
-      hours = Number.parseInt(parts[0], 10);
-      minutes = Number.parseInt(parts[1], 10);
-      seconds = Number.parseInt(parts[2], 10);
-      milliseconds = Number.parseInt(parts[3], 10) * 10;
-    } else {
-      minutes = Number.parseInt(parts[0], 10);
-      seconds = Number.parseInt(parts[1], 10);
-      milliseconds = Number.parseInt(parts[2], 10) * 10;
-    }
-    if (
-      Number.isNaN(hours) ||
-      Number.isNaN(minutes) ||
-      Number.isNaN(seconds) ||
-      Number.isNaN(milliseconds) ||
-      seconds >= 60 ||
-      milliseconds >= 1000
-    ) {
-      alert("Invalid duration. Ensure minutes, seconds (<60), and milliseconds (<100) are valid.");
-      updateTaskList();
-      return;
-    }
-    newDurationMs = hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
-  } else if (durationMode === "ms") {
-    newDurationMs = Number.parseFloat(newValue);
-    if (Number.isNaN(newDurationMs) || newDurationMs < 0) {
-      alert("Invalid duration. Please enter a non-negative number.");
-      updateTaskList();
-      return;
-    }
-  } else {
-    const decimalMinutes = Number.parseFloat(newValue);
-    if (Number.isNaN(decimalMinutes) || decimalMinutes < 0) {
-      alert("Invalid duration. Please enter a non-negative number.");
-      updateTaskList();
-      return;
-    }
-    newDurationMs = decimalMinutes * 60 * 1000;
-  }
-  operations[opIndex].tasks[taskIndex].duration = newDurationMs;
-  saveLocalState();
-  updateTaskList();
-  drawTable();
-};
-
-const deleteTask = async (opIndex, taskIndex) => {
-  if (await asyncConfirm("Are you sure you want to delete this task?", "Delete Task")) {
-    operations[opIndex].tasks.splice(taskIndex, 1);
-    if (operations[opIndex].tasks.length === 0 && opIndex === operations.length - 1) {
-      operations.splice(opIndex, 1);
-      if (operations.length === 0) {
-        addTaskButton.disabled = true;
-      }
-    }
-    saveLocalState();
-    updateTaskList();
-    drawTable();
-  }
-};
-
-const renameOperation = async (opIndex) => {
+const renameMarker = async (markerIndex) => {
   const newName = await asyncPrompt(
-    "Rename Operation",
-    operations[opIndex].name,
-    "Rename Operation",
-    operations.map((o) => o.name),
+    "Rename Marker",
+    markers[markerIndex].name,
+    "Rename Marker",
+    markers.map((o) => o.name),
   );
-  if (newName === null) return; // User clicked Cancel
+  if (newName === null) return;
   if (newName.trim() === "") {
-    alert("Operation name cannot be empty.");
+    alert("Marker name cannot be empty.");
     return;
   }
-  operations[opIndex].name = newName.trim();
-  toConsole(`Renamed operation at index ${opIndex}`, newName, debuggin);
+  markers[markerIndex].name = newName.trim();
+  toConsole(`Renamed marker at index ${markerIndex}`, newName, debuggin);
   saveLocalState();
-  updateTaskList();
-  drawTable(); // Redraw chart to update axis labels
+  updateMarkersList();
 };
 
-const deleteOperation = async (opIndex) => {
+const deleteMarker = async (markerIndex) => {
   if (
     await asyncConfirm(
-      `Are you sure you want to delete the operation "${operations[opIndex].name}" and all its tasks? This action cannot be undone.`,
-      "Delete Operation",
+      `Are you sure you want to delete the marker "${markers[markerIndex].name}"? This action cannot be undone.`,
+      "Delete Marker",
     )
   ) {
-    operations.splice(opIndex, 1);
-    if (operations.length === 0) {
-      addTaskButton.disabled = true;
-    }
-    toConsole(`Deleted operation at index ${opIndex}`, `Total ops left: ${operations.length}`, debuggin);
+    markers.splice(markerIndex, 1);
+    toConsole(`Deleted marker at index ${markerIndex}`, `Total markers left: ${markers.length}`, debuggin);
     saveLocalState();
-    updateTaskList();
-    drawTable();
+    updateMarkersList();
   }
 };
 
-const jumpToOperationTime = (inputId) => {
-  const opTimeInput = document.getElementById(inputId);
-  const time = parseTimeFromHHMMSSMS(opTimeInput.value);
-  if (time !== null) {
+const jumpToMarkerTime = (markerIndex, type) => {
+  const marker = markers[markerIndex];
+  if (!marker) return;
+  const time = type === "start" ? marker.startTime : marker.endTime;
+  if (time !== undefined && time !== null) {
     if (player.src) {
       player.currentTime = time;
-      toConsole("Jumped to operation time", time, debuggin);
+      toConsole(`Jumped to marker ${type} time`, time, debuggin);
     } else {
       alert("Please load a video first.");
     }
-  } else {
-    alert("Invalid time format in the input field.");
   }
+};
+
+const captureMarkerTime = (markerIndex, type) => {
+  if (!player.src) {
+    alert("Please load a video first.");
+    return;
+  }
+  const time = player.currentTime;
+  if (type === "start") {
+    markers[markerIndex].startTime = time;
+  } else {
+    markers[markerIndex].endTime = time;
+  }
+  saveLocalState();
+  updateMarkersList();
 };
 
 // Video Trimming & Compression Feature
@@ -1963,8 +1697,11 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
     // Hide spinner immediately so it stops spinning
     if (spinner) spinner.classList.add("hidden");
 
-    for (let i = 0; i < operations.length; i += 1) {
-      operations[i].startTime = operations[i].startTime - start;
+    for (let i = 0; i < markers.length; i += 1) {
+      markers[i].startTime = markers[i].startTime - start;
+      if (markers[i].endTime) {
+        markers[i].endTime = markers[i].endTime - start;
+      }
     }
 
     processStartTime = 0;
@@ -1980,8 +1717,7 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
     toggleVideoPlaceholder(false);
 
     saveLocalState();
-    updateTaskList();
-    if (typeof drawTable === "function") drawTable();
+    updateMarkersList();
 
     const tetrisCont = document.getElementById("tetrisContainer");
     if (
