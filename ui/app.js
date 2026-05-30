@@ -347,7 +347,7 @@ const initializePlayer = () => {
     updateLoadButtonColor();
     toggleVideoPlaceholder(false);
     updateSliderTicks();
-    updateProcessTimes();
+    updateVideoTimeSummary();
 
     player.playbackRate = playbackSpeed;
     speedSlider.value = playbackSpeed;
@@ -434,7 +434,7 @@ const initializePlayer = () => {
       });
     }
 
-    if (typeof updateProcessTimes === "function") updateProcessTimes();
+    if (typeof updateVideoTimeSummary === "function") updateVideoTimeSummary();
     saveLocalState();
     updateSliderTicks();
     if (typeof updateMarkersList === "function") updateMarkersList();
@@ -451,7 +451,7 @@ const initializePlayer = () => {
       });
     }
 
-    if (typeof updateProcessTimes === "function") updateProcessTimes();
+    if (typeof updateVideoTimeSummary === "function") updateVideoTimeSummary();
     saveLocalState();
     updateSliderTicks();
     if (typeof updateMarkersList === "function") updateMarkersList();

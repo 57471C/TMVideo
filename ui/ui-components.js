@@ -147,12 +147,11 @@ const updateMarkersList = () => {
     DOM.markersList.innerHTML = rows.join("");
 
     DOM.markersTableFoot = document.getElementById("markersTableFoot");
-
     const table = DOM.markersList.querySelector("table");
     if (!table) throw new Error("Markers table element not found");
     if (markers.length > 0) {
       table.style.display = "table";
-      updateProcessTimes();
+      updateVideoTimeSummary();
     } else {
       table.style.display = "none";
     }
@@ -167,7 +166,7 @@ const updateMarkersList = () => {
             markers[i].startTime = newTime;
             markers.sort((a, b) => a.startTime - b.startTime);
             saveLocalState();
-            updateProcessTimes();
+            updateVideoTimeSummary();
             updateMarkersList();
           } else {
             alert("Invalid time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
@@ -183,101 +182,48 @@ const updateMarkersList = () => {
   }
 };
 
-
-const updateProcessTimes = () => {
+const updateVideoTimeSummary = () => {
   try {
-    if (markers.length === 0) return;
-
     if (!DOM.markersTableFoot) {
-      toConsole("updateProcessTimes skipped", "markersTableFoot is null", debuggin);
+      toConsole("updateVideoTimeSummary skipped", "markersTableFoot is null", debuggin);
       return;
     }
 
-    const formattedStartTime = formatTimeToHHMMSSMS(processStartTime);
-    const formattedEndTime = formatTimeToHHMMSSMS(processEndTime);
-    let totalProcessTime = "00:00:00.00";
-    if (markers.length > 0) {
-      const durationSeconds = Math.max(0, processEndTime - processStartTime);
-      totalProcessTime = formatTimeToHHMMSSMS(durationSeconds);
+    const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+
+    const startTime = markers.length > 0 ? markers[0].startTime : 0;
+    
+    let endTime = 0;
+    if (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined) {
+      endTime = activeVideo.virtualEndTime;
+    } else if (typeof player !== "undefined" && player && player.duration) {
+      endTime = player.duration;
     }
 
+    let duration = endTime - startTime;
+    if (duration < 0) duration = 0;
+
+    const formattedStartTime = formatTimeToHHMMSSMS(startTime);
+    const formattedEndTime = formatTimeToHHMMSSMS(endTime);
+    const formattedDuration = formatTimeToHHMMSSMS(duration);
+
     DOM.markersTableFoot.innerHTML = `
-      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 w-full py-1">
-        <span class="inline-flex items-center gap-1.5">
-          <label for="processStartTimeInput" class="form-label font-mono text-sm mb-0" style="width: auto;">Process start time:</label>
-          <input type="text" id="processStartTimeInput" class="form-control w-27.5 px-1 text-center font-mono tabular-nums text-sm" value="${formattedStartTime}">
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 w-full py-1 text-sm font-medium">
+        <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+          <span>Video Start Time:</span>
+          <span id="videoStartTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedStartTime}</span>
         </span>
-        <span class="inline-flex items-center gap-1.5">
-          <label for="processEndTimeInput" class="form-label font-mono text-sm mb-0" style="width: auto;">Process end time:</label>
-          <input type="text" id="processEndTimeInput" class="form-control w-27.5 px-1 text-center font-mono tabular-nums text-sm" value="${formattedEndTime}">
+        <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+          <span>Video End Time:</span>
+          <span id="videoEndTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedEndTime}</span>
         </span>
-        <span class="inline-flex items-center gap-1.5">
-          <label for="totalProcessTimeInput" class="form-label font-mono text-sm mb-0" style="width: auto;">Total Process time:</label>
-          <input type="text" id="totalProcessTimeInput" class="form-control w-27.5 px-1 text-center font-mono tabular-nums text-sm" value="${totalProcessTime}" disabled>
+        <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+          <span>Video Duration:</span>
+          <span id="videoDurationDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedDuration}</span>
         </span>
       </div>
     `;
-
-    const processStartTimeInput = document.getElementById("processStartTimeInput");
-    if (!processStartTimeInput) throw new Error("Process start time input not found");
-    processStartTimeInput.addEventListener("change", (event) => {
-      const newStartTime = parseTimeFromHHMMSSMS(event.target.value);
-      if (newStartTime !== null) {
-        processStartTime = newStartTime;
-        toConsole("Process start time updated", processStartTime, debuggin);
-
-        if (typeof player !== "undefined" && player && player.currentTime < processStartTime) {
-          player.currentTime = processStartTime;
-        }
-
-        const invalidMarkers = markers.filter((m) => m.startTime < processStartTime);
-        if (invalidMarkers.length > 0) {
-          invalidMarkers.forEach((m) => {
-            showToast(`Marker "${m.name}" starts before Process Start Time.`, "error");
-          });
-        }
-
-        const durationSeconds = Math.max(0, processEndTime - processStartTime);
-        document.getElementById("totalProcessTimeInput").value = formatTimeToHHMMSSMS(durationSeconds);
-        saveLocalState();
-        if (typeof updateSliderTicks === "function") updateSliderTicks();
-        if (typeof updateMarkersList === "function") updateMarkersList();
-      } else {
-        alert("Invalid time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
-        processStartTimeInput.value = formatTimeToHHMMSSMS(processStartTime);
-      }
-    });
-
-    const processEndTimeInput = document.getElementById("processEndTimeInput");
-    if (!processEndTimeInput) throw new Error("Process end time input not found");
-    processEndTimeInput.addEventListener("change", (event) => {
-      const newEndTime = parseTimeFromHHMMSSMS(event.target.value);
-      if (newEndTime !== null) {
-        processEndTime = newEndTime;
-        toConsole("Process end time updated", processEndTime, debuggin);
-
-        if (typeof player !== "undefined" && player && processEndTime > 0 && player.currentTime > processEndTime) {
-          player.currentTime = processEndTime;
-        }
-
-        const invalidMarkers = markers.filter((m) => m.startTime > processEndTime);
-        if (invalidMarkers.length > 0) {
-          invalidMarkers.forEach((m) => {
-            showToast(`Marker "${m.name}" starts after Process End Time.`, "error");
-          });
-        }
-
-        const durationSeconds = Math.max(0, processEndTime - processStartTime);
-        document.getElementById("totalProcessTimeInput").value = formatTimeToHHMMSSMS(durationSeconds);
-        saveLocalState();
-        if (typeof updateSliderTicks === "function") updateSliderTicks();
-        if (typeof updateMarkersList === "function") updateMarkersList();
-      } else {
-        alert("Invalid time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
-        processEndTimeInput.value = formatTimeToHHMMSSMS(processEndTime);
-      }
-    });
   } catch (error) {
-    toConsole("updateProcessTimes error", error.message, debuggin);
+    toConsole("updateVideoTimeSummary error", error.message, debuggin);
   }
 };
