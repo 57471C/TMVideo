@@ -180,6 +180,9 @@ const loadLocalState = () => {
   processEndTime = currentVideo.processEndTime || 0;
 
   markers = currentVideo.appState?.markers || [];
+  for (const m of markers) {
+    if (!m.type) m.type = "standard";
+  }
 
   // Sync UI
   if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
@@ -294,6 +297,9 @@ const importFromJSON = (jsonText) => {
     processEndTime = currentVideo.processEndTime || 0;
 
     markers = currentVideo.appState?.markers || [];
+    for (const m of markers) {
+      if (!m.type) m.type = "standard";
+    }
 
     if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
     if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();

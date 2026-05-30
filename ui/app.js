@@ -50,6 +50,9 @@ const switchVideoInQueue = async (index) => {
   processEndTime = currentVideo.processEndTime || 0;
 
   markers = currentVideo.appState?.markers || [];
+  for (const m of markers) {
+    if (!m.type) m.type = "standard";
+  }
 
   renderVideoQueueSelect();
   updateMarkersList();
@@ -1219,6 +1222,7 @@ const addMarker = () => {
     id: Date.now(),
     name: defaultName,
     startTime: startTime,
+    type: "standard",
   });
 
   markers.sort((a, b) => a.startTime - b.startTime);
@@ -1255,6 +1259,13 @@ const updateMarkerName = (markerIndex, newName) => {
   }
   markers[markerIndex].name = trimmed;
   saveLocalState();
+};
+
+const updateMarkerType = (markerIndex, newType) => {
+  markers[markerIndex].type = newType;
+  saveLocalState();
+  updateVideoTimeSummary();
+  updateMarkersList();
 };
 
 const deleteMarker = async (markerIndex) => {

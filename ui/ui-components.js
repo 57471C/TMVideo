@@ -118,6 +118,11 @@ const updateMarkersList = () => {
                 </svg>
               </button>
               <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
+              <select onchange="updateMarkerType(${i}, this.value)" class="bg-transparent text-sm border-none focus:ring-0 cursor-pointer text-zinc-500 dark:text-zinc-400 pr-4">
+                <option value="standard" ${marker.type === "standard" ? "selected" : ""}>📍 Standard</option>
+                <option value="jump" ${marker.type === "jump" ? "selected" : ""}>⏩ Skip/Jump</option>
+                <option value="loop" ${marker.type === "loop" ? "selected" : ""}>🔁 Loop</option>
+              </select>
             </div>
           </td>
           <td class="text-center py-2">
