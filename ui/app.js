@@ -1047,6 +1047,39 @@ const seektimeupdate = () => {
       updateTimeDisplay(duration, "durationTime");
     }
 
+    // Playhead Execution Logic: Jump & Loop
+    if (markers && markers.length > 0) {
+      let currentMarkerIndex = -1;
+      for (let j = 0; j < markers.length; j += 1) {
+        if (markers[j].startTime <= currentTime) {
+          currentMarkerIndex = j;
+        } else {
+          break;
+        }
+      }
+
+      if (currentMarkerIndex !== -1) {
+        const currentMarker = markers[currentMarkerIndex];
+        const nextMarker = markers[currentMarkerIndex + 1];
+
+        const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+        const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined)
+          ? activeVideo.virtualEndTime
+          : (duration || player.duration || 0);
+
+        const boundaryTime = nextMarker ? nextMarker.startTime : endLimit;
+
+        if (currentMarker.type === "jump") {
+          player.currentTime = boundaryTime;
+          return;
+        }
+        if (currentMarker.type === "loop" && currentTime >= boundaryTime) {
+          player.currentTime = currentMarker.startTime;
+          return;
+        }
+      }
+    }
+
     // Constrain seek if we try to go before the processStartTime
     if (processStartTime > 0 && currentTime < processStartTime) {
       player.currentTime = processStartTime;

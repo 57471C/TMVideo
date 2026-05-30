@@ -243,6 +243,23 @@ const updateVideoTimeSummary = () => {
     let duration = endTime - startTime;
     if (duration < 0) duration = 0;
 
+    if (markers.length > 0) {
+      for (let i = 0; i < markers.length; i += 1) {
+        if (markers[i].type === "jump") {
+          let markerDur = 0;
+          if (i < markers.length - 1) {
+            markerDur = markers[i + 1].startTime - markers[i].startTime;
+          } else {
+            markerDur = endTime - markers[i].startTime;
+          }
+          if (markerDur > 0) {
+            duration -= markerDur;
+          }
+        }
+      }
+    }
+    if (duration < 0) duration = 0;
+
     const formattedStartTime = formatTimeToHHMMSSMS(startTime);
     const formattedEndTime = formatTimeToHHMMSSMS(endTime);
     const formattedDuration = formatTimeToHHMMSSMS(duration);
