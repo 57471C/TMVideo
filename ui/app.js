@@ -417,29 +417,9 @@ const initializePlayer = () => {
     DOM.timeContextMenu.classList.remove("hidden");
   });
 
-  // Setup Context Menu for Marker
-  if (DOM.markerContextMenu) {
-    DOM.markerRenameBtn.addEventListener("click", () => {
-      if (currentMarkerContextIndex !== null && currentMarkerContextIndex !== undefined) {
-        renameMarker(currentMarkerContextIndex);
-      }
-      DOM.markerContextMenu.classList.add("hidden");
-    });
-
-    DOM.markerDeleteBtn.addEventListener("click", () => {
-      if (currentMarkerContextIndex !== null && currentMarkerContextIndex !== undefined) {
-        deleteMarker(currentMarkerContextIndex);
-      }
-      DOM.markerContextMenu.classList.add("hidden");
-    });
-  }
-
   document.addEventListener("click", (e) => {
     if (!DOM.timeContextMenu.contains(e.target) && e.target !== DOM.currentTime) {
       DOM.timeContextMenu.classList.add("hidden");
-    }
-    if (DOM.markerContextMenu && !DOM.markerContextMenu.contains(e.target)) {
-      DOM.markerContextMenu.classList.add("hidden");
     }
   });
 
@@ -1269,22 +1249,15 @@ const addMarker = async () => {
   updateMarkersList();
 };
 
-const renameMarker = async (markerIndex) => {
-  const newName = await asyncPrompt(
-    "Rename Marker",
-    markers[markerIndex].name,
-    "Rename Marker",
-    markers.map((o) => o.name),
-  );
-  if (newName === null) return;
-  if (newName.trim() === "") {
+const updateMarkerName = (markerIndex, newName) => {
+  const trimmed = newName.trim();
+  if (!trimmed) {
     alert("Marker name cannot be empty.");
+    updateMarkersList();
     return;
   }
-  markers[markerIndex].name = newName.trim();
-  toConsole(`Renamed marker at index ${markerIndex}`, newName, debuggin);
+  markers[markerIndex].name = trimmed;
   saveLocalState();
-  updateMarkersList();
 };
 
 const deleteMarker = async (markerIndex) => {

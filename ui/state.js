@@ -10,7 +10,7 @@ let projectFileHandle = null;
 let videoQueue = [];
 let activeQueueIndex = 0;
 const videoBlobCache = {};
-let operations = [];
+let markers = [];
 let preserveProcessTimes = false;
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let durationMode = "hhmmssms";
@@ -38,17 +38,13 @@ let startY;
 let marqueeOverlay;
 let marqueeRect;
 
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let currentStatusEdit = null;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let currentOpContextIndex = null;
+
 
 const DOM = {
-  taskList: document.getElementById("taskList"),
+  markersList: document.getElementById("markersList"),
   videoPlaceholder: document.getElementById("videoPlaceholder"),
   videoWrapper: document.getElementById("videoWrapper"),
 
-  taskTableFoot: null, // Initialize as null, set dynamically in updateTaskList
   darkModeToggle: document.getElementById("darkModeToggle"),
   sunIcon: document.getElementById("sunIcon"),
   moonIcon: document.getElementById("moonIcon"),
@@ -58,7 +54,7 @@ const DOM = {
   endGreyOut: document.getElementById("endGreyOut"),
   startTick: document.getElementById("startTick"),
   endTick: document.getElementById("endTick"),
-  opTicksContainer: document.getElementById("opTicksContainer"),
+  markerTicksContainer: document.getElementById("markerTicksContainer"),
   playIcon: document.getElementById("playIcon"),
   pauseIcon: document.getElementById("pauseIcon"),
   speedValue: document.getElementById("speedValue"),
@@ -93,9 +89,6 @@ const DOM = {
   timeContextMenu: document.getElementById("timeContextMenu"),
   setStartBtn: document.getElementById("setStartBtn"),
   setEndBtn: document.getElementById("setEndBtn"),
-  opContextMenu: document.getElementById("opContextMenu"),
-  opRenameBtn: document.getElementById("opRenameBtn"),
-  opDeleteBtn: document.getElementById("opDeleteBtn"),
 };
 
 const saveLocalState = () => {
@@ -112,7 +105,7 @@ const saveLocalState = () => {
   videoQueue[activeQueueIndex].videoFilePath = videoFilePath;
   videoQueue[activeQueueIndex].processStartTime = processStartTime;
   videoQueue[activeQueueIndex].processEndTime = processEndTime;
-  videoQueue[activeQueueIndex].appState = { operations };
+  videoQueue[activeQueueIndex].appState = { markers };
 
   const state = {
     projectMeta: {
@@ -174,7 +167,7 @@ const loadLocalState = () => {
       videoFilePath: "",
       processStartTime: 0,
       processEndTime: 0,
-      appState: { operations: [] },
+      appState: { markers: [] },
     },
   ];
   activeQueueIndex = 0;
@@ -186,7 +179,7 @@ const loadLocalState = () => {
   processStartTime = currentVideo.processStartTime || 0;
   processEndTime = currentVideo.processEndTime || 0;
 
-  operations = currentVideo.appState?.operations || [];
+  markers = currentVideo.appState?.markers || [];
 
   // Sync UI
   if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
@@ -300,12 +293,12 @@ const importFromJSON = (jsonText) => {
     processStartTime = currentVideo.processStartTime || 0;
     processEndTime = currentVideo.processEndTime || 0;
 
-    operations = currentVideo.appState?.operations || [];
+    markers = currentVideo.appState?.markers || [];
 
     if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
     if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 
-    DOM.taskList.innerHTML = "";
+    DOM.markersList.innerHTML = "";
 
     // Handle Video Relinking
     player.pause();
@@ -328,7 +321,7 @@ const importFromJSON = (jsonText) => {
       toggleVideoPlaceholder(true);
     }
 
-    if (typeof updateTaskList === "function") updateTaskList();
+    if (typeof updateMarkersList === "function") updateMarkersList();
     saveLocalState();
     if (typeof drawTable === "function") drawTable();
     if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
@@ -396,8 +389,8 @@ const escapeCSV = (val) => {
 };
 
 const exportToCSV = async () => {
-  if (operations.length === 0) {
-    alert("No operations or tasks to export.");
+  if (markers.length === 0) {
+    alert("No markers to export.");
     return;
   }
 
@@ -414,65 +407,17 @@ const exportToCSV = async () => {
   // Row 3: Blank
   csvContent += "\n";
 
-  // 2. Operations & Tasks Loop
-  for (let i = 0; i < operations.length; i += 1) {
-    const op = operations[i];
-    const opTotalTime = op.tasks.reduce((sum, t) => sum + t.duration, 0);
-
-    // Operation Titles
-    csvContent +=
-      "Operation Name,Operation Part Qty,Operation Part Numbers,Operation Part Description,Operation Start Time,Operation Total Time\n";
-
-    // Operation Values
-    const partTags = op.partTags || [];
-    if (partTags.length === 0) {
-      csvContent += `${escapeCSV(op.name)},,,,${formatTimeToHHMMSSMS(op.startTime)},${formatDecimalMinutes(opTotalTime)}\n`;
-    } else {
-      for (let pIdx = 0; pIdx < partTags.length; pIdx += 1) {
-        const { qty, partNumber, partDescription } = parsePartTag(partTags[pIdx]);
-        if (pIdx === 0) {
-          csvContent += `${escapeCSV(op.name)},${escapeCSV(qty)},${escapeCSV(partNumber)},${escapeCSV(partDescription)},${formatTimeToHHMMSSMS(op.startTime)},${formatDecimalMinutes(opTotalTime)}\n`;
-        } else {
-          csvContent += `,${escapeCSV(qty)},${escapeCSV(partNumber)},${escapeCSV(partDescription)},,\n`;
-        }
-      }
-    }
-
-    // Task Titles
-    csvContent += "Task Name,Task Labour Code,Task Labour Description,VA,NVA,W,Total Task Time\n";
-
-    // Task Values
-    for (let j = 0; j < op.tasks.length; j += 1) {
-      const task = op.tasks[j];
-      const status = task.status.toUpperCase();
-      const laborTags = task.labourTags || [];
-
-      const valVA = status === "VA" ? formatDecimalMinutes(task.duration) : "0.00";
-      const valNVA = status === "NVA" ? formatDecimalMinutes(task.duration) : "0.00";
-      const valW = status === "W" ? formatDecimalMinutes(task.duration) : "0.00";
-      const valTotal = formatDecimalMinutes(task.duration);
-
-      if (laborTags.length === 0) {
-        csvContent += `${escapeCSV(task.name)},,,${valVA},${valNVA},${valW},${valTotal}\n`;
-      } else {
-        for (let lIdx = 0; lIdx < laborTags.length; lIdx += 1) {
-          const { code, description } = parseLabourTag(laborTags[lIdx]);
-          if (lIdx === 0) {
-            csvContent += `${escapeCSV(task.name)},${escapeCSV(code)},${escapeCSV(description)},${valVA},${valNVA},${valW},${valTotal}\n`;
-          } else {
-            csvContent += `,${escapeCSV(code)},${escapeCSV(description)},,,,\n`;
-          }
-        }
-      }
-    }
-
-    // Blank row after each Operation block
-    csvContent += "\n";
+  // 2. Markers List
+  csvContent += "Marker ID,Marker Name,Start Time,End Time,Duration (seconds)\n";
+  for (let i = 0; i < markers.length; i += 1) {
+    const marker = markers[i];
+    const duration = marker.endTime && marker.endTime > marker.startTime ? (marker.endTime - marker.startTime) : 0;
+    csvContent += `${marker.id || i + 1},${escapeCSV(marker.name)},${formatTimeToHHMMSSMS(marker.startTime)},${formatTimeToHHMMSSMS(marker.endTime)},${duration.toFixed(3)}\n`;
   }
 
-  let filename = "operation_task_durations.csv";
+  let filename = "markers.csv";
   if (projectName) {
-    filename = `${sanitizeFilename(projectName)}.csv`;
+    filename = `${sanitizeFilename(projectName)}_markers.csv`;
   }
 
   const isTauri = window.__TAURI__ !== undefined;

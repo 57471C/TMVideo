@@ -4,28 +4,7 @@ const ICONS = {
   capture: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
 };
 
-const openMarkerContextMenu = (e, markerIndex) => {
-  e.stopPropagation();
-  currentMarkerContextIndex = markerIndex;
 
-  const menu = DOM.markerContextMenu;
-  menu.classList.remove("hidden");
-
-  const rect = e.currentTarget.getBoundingClientRect();
-  let left = rect.left + window.scrollX;
-  let top = rect.bottom + 4 + window.scrollY;
-
-  const menuRect = menu.getBoundingClientRect();
-  if (left + menuRect.width > window.innerWidth) {
-    left = window.innerWidth - menuRect.width - 10;
-  }
-  if (top + menuRect.height > window.innerHeight) {
-    top = rect.top + window.scrollY - menuRect.height - 4;
-  }
-
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
-};
 
 const updateStickyOffsets = () => {
   const activeLoggingPanel = document.getElementById("activeLoggingPanel");
@@ -121,7 +100,7 @@ const updateMarkersList = () => {
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
                 </svg>
               </button>
-              <button onclick="openMarkerContextMenu(event, ${i})" class="font-bold text-base bg-transparent border-0 p-0 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer focus:outline-none transition-colors hover:underline select-none" title="Marker Options">${safeMarkerName || `Marker ${i + 1}`}</button>
+              <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
             </div>
           </td>
           <td class="text-center py-2">
