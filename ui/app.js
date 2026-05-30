@@ -1294,17 +1294,14 @@ const jumpToMarkerTime = (markerIndexOrTime, type) => {
   }
 };
 
-const captureMarkerTime = (markerIndex, type) => {
+const syncMarkerToPlayhead = (markerIndex) => {
   if (!player.src) {
     alert("Please load a video first.");
     return;
   }
   const time = player.currentTime;
-  if (type === "start") {
-    markers[markerIndex].startTime = time;
-  } else {
-    markers[markerIndex].endTime = time;
-  }
+  markers[markerIndex].startTime = time;
+  markers.sort((a, b) => a.startTime - b.startTime);
   saveLocalState();
   updateMarkersList();
 };

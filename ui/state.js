@@ -408,11 +408,17 @@ const exportToCSV = async () => {
   csvContent += "\n";
 
   // 2. Markers List
-  csvContent += "Marker ID,Marker Name,Start Time,End Time,Duration (seconds)\n";
+  csvContent += "Marker ID,Marker Name,Start Time,Duration (seconds)\n";
   for (let i = 0; i < markers.length; i += 1) {
     const marker = markers[i];
-    const duration = marker.endTime && marker.endTime > marker.startTime ? (marker.endTime - marker.startTime) : 0;
-    csvContent += `${marker.id || i + 1},${escapeCSV(marker.name)},${formatTimeToHHMMSSMS(marker.startTime)},${formatTimeToHHMMSSMS(marker.endTime)},${duration.toFixed(3)}\n`;
+    let duration = 0;
+    if (i < markers.length - 1) {
+      duration = markers[i + 1].startTime - marker.startTime;
+    } else if (typeof player !== "undefined" && player && player.duration) {
+      duration = player.duration - marker.startTime;
+    }
+    duration = Math.max(0, duration);
+    csvContent += `${marker.id || i + 1},${escapeCSV(marker.name)},${formatTimeToHHMMSSMS(marker.startTime)},${duration.toFixed(3)}\n`;
   }
 
   let filename = "markers.csv";

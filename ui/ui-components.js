@@ -71,7 +71,7 @@ const updateMarkersList = () => {
                Marker Name
              </th>
              <th scope="col" class="text-center w-36 whitespace-nowrap px-1">Start Time</th>
-             <th scope="col" class="text-center w-36 whitespace-nowrap px-1">End Time</th>
+             <th scope="col" class="text-center w-36 whitespace-nowrap px-1">Duration</th>
              <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">Actions</th>
            </tr>
          </thead>`,
@@ -79,9 +79,7 @@ const updateMarkersList = () => {
     for (let i = 0; i < markers.length; i += 1) {
       const marker = markers[i];
       const markerTimeInputId = `markerTimeInput-${i}`;
-      const markerEndTimeInputId = `markerEndTimeInput-${i}`;
       const formattedTime = formatTimeToHHMMSSMS(marker.startTime);
-      const formattedEndTime = marker.endTime ? formatTimeToHHMMSSMS(marker.endTime) : "";
       const safeMarkerName = escapeHTML(marker.name);
 
       const isNegative = marker.startTime < 0;
@@ -90,6 +88,23 @@ const updateMarkersList = () => {
       const rowBgClass = isNegative
         ? "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
         : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40";
+
+      // Dynamically calculate Duration
+      let duration = 0;
+      if (i < markers.length - 1) {
+        duration = markers[i + 1].startTime - marker.startTime;
+      } else if (typeof player !== "undefined" && player && player.duration) {
+        duration = player.duration - marker.startTime;
+      }
+      duration = Math.max(0, duration);
+
+      const absDur = Math.round(duration);
+      const hrs = Math.floor(absDur / 3600);
+      const mins = Math.floor((absDur % 3600) / 60);
+      const secs = absDur % 60;
+      const formattedDuration = hrs > 0
+        ? `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+        : `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
       rows.push(`
         <tr class="marker-row ${rowBgClass} border-b border-zinc-200 dark:border-zinc-700">
@@ -106,19 +121,15 @@ const updateMarkersList = () => {
           <td class="text-center py-2">
             <span class="inline-flex items-center gap-1">
               <input type="text" id="${markerTimeInputId}" class="form-control w-28 px-1 text-center font-mono tabular-nums text-sm ${inputClass}" value="${formattedTime}">
-              <button onclick="captureMarkerTime(${i}, 'start')" class="p-1 text-zinc-400 hover:text-blue-500 transition-colors" title="Set to Current Time">${ICONS.capture}</button>
+              <button onclick="syncMarkerToPlayhead(${i})" class="p-1 text-zinc-400 hover:text-blue-500 transition-colors" title="Sync to Playhead">${ICONS.capture}</button>
             </span>
           </td>
           <td class="text-center py-2">
-            <span class="inline-flex items-center gap-1">
-              <input type="text" id="${markerEndTimeInputId}" class="form-control w-28 px-1 text-center font-mono tabular-nums text-sm" value="${formattedEndTime}" placeholder="--:--:--.--">
-              <button onclick="captureMarkerTime(${i}, 'end')" class="p-1 text-zinc-400 hover:text-blue-500 transition-colors" title="Set to Current Time">${ICONS.capture}</button>
-            </span>
+            <span class="font-mono text-sm text-zinc-600 dark:text-zinc-400">${formattedDuration}</span>
           </td>
           <td class="text-center py-2 pr-1 sm:pr-2">
             <div class="flex gap-1.5 justify-center">
-              <button onclick="jumpToMarkerTime(${i}, 'start')" class="btn btn-outline-secondary p-1 flex items-center justify-center" title="Jump to Start Time">${ICONS.jump}</button>
-              <button onclick="jumpToMarkerTime(${i}, 'end')" class="btn btn-outline-secondary p-1 flex items-center justify-center" title="Jump to End Time" ${!marker.endTime ? "disabled" : ""}>${ICONS.jump}</button>
+              <button onclick="jumpToMarkerTime(${marker.startTime})" class="btn btn-outline-secondary p-1 flex items-center justify-center" title="Jump to Marker">${ICONS.jump}</button>
               <button onclick="deleteMarker(${i})" class="btn btn-outline-danger p-1 flex items-center justify-center" title="Delete Marker">${ICONS.trash}</button>
             </div>
           </td>
@@ -144,7 +155,7 @@ const updateMarkersList = () => {
       table.style.display = "none";
     }
 
-    // Attach listeners for manual input typing in start/end times
+    // Attach listeners for manual input typing in start times
     for (let i = 0; i < markers.length; i += 1) {
       const markerTimeInput = document.getElementById(`markerTimeInput-${i}`);
       if (markerTimeInput) {
@@ -152,36 +163,13 @@ const updateMarkersList = () => {
           const newTime = parseTimeFromHHMMSSMS(event.target.value);
           if (newTime !== null) {
             markers[i].startTime = newTime;
+            markers.sort((a, b) => a.startTime - b.startTime);
             saveLocalState();
             updateProcessTimes();
             updateMarkersList();
           } else {
             alert("Invalid time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
             markerTimeInput.value = formatTimeToHHMMSSMS(markers[i].startTime);
-          }
-        });
-      }
-
-      const markerEndTimeInput = document.getElementById(`markerEndTimeInput-${i}`);
-      if (markerEndTimeInput) {
-        markerEndTimeInput.addEventListener("change", (event) => {
-          const val = event.target.value.trim();
-          if (val === "") {
-            markers[i].endTime = 0;
-            saveLocalState();
-            updateProcessTimes();
-            updateMarkersList();
-          } else {
-            const newTime = parseTimeFromHHMMSSMS(val);
-            if (newTime !== null) {
-              markers[i].endTime = newTime;
-              saveLocalState();
-              updateProcessTimes();
-              updateMarkersList();
-            } else {
-              alert("Invalid time format. Please use HH:MM:SS.MS (e.g., 00:01:00.00).");
-              markerEndTimeInput.value = markers[i].endTime ? formatTimeToHHMMSSMS(markers[i].endTime) : "";
-            }
           }
         });
       }
@@ -192,6 +180,7 @@ const updateMarkersList = () => {
     toConsole("updateMarkersList error", error.message, debuggin);
   }
 };
+
 
 const updateProcessTimes = () => {
   try {
