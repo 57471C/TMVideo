@@ -1198,20 +1198,44 @@ const toggleSettings = (show) => {
   }
 };
 
-const addMarker = async () => {
-  player.pause();
-  const markerName = await asyncPrompt(
-    "Please name the Marker",
-    "",
-    "New Marker",
-    markers.map((o) => o.name),
-  );
-  if (!markerName) {
-    alert("Marker name cannot be empty.");
+const addMarker = () => {
+  if (!player.src) {
+    alert("Please load a video first.");
     return;
   }
 
-  const lowerName = markerName.trim().toLowerCase();
+  const startTime = player.currentTime;
+  toConsole("Marker start time", startTime, debuggin);
+
+  if (startTime < processStartTime) {
+    showToast("Marker starts before Process Start Time.", "error");
+  } else if (processEndTime > 0 && startTime > processEndTime) {
+    showToast("Marker starts after Process End Time.", "error");
+  }
+
+  const defaultName = `Marker ${markers.length + 1}`;
+
+  markers.push({
+    id: Date.now(),
+    name: defaultName,
+    startTime: startTime,
+  });
+
+  markers.sort((a, b) => a.startTime - b.startTime);
+
+  saveLocalState();
+  updateVideoTimeSummary();
+  updateMarkersList();
+};
+
+const updateMarkerName = (markerIndex, newName) => {
+  const trimmed = newName.trim();
+  if (!trimmed) {
+    alert("Marker name cannot be empty.");
+    updateMarkersList();
+    return;
+  }
+  const lowerName = trimmed.toLowerCase();
   if (lowerName === "terry" || lowerName === "tetris") {
     window.isSecretGame = true;
     const trimModal = document.getElementById("trimModal");
@@ -1226,33 +1250,6 @@ const addMarker = async () => {
         window.activateTetris();
       }
     }
-    return;
-  }
-
-  const startTime = player.currentTime;
-  toConsole("Marker start time", startTime, debuggin);
-
-  if (startTime < processStartTime) {
-    showToast(`Marker "${markerName}" starts before Process Start Time.`, "error");
-  } else if (processEndTime > 0 && startTime > processEndTime) {
-    showToast(`Marker "${markerName}" starts after Process End Time.`, "error");
-  }
-
-  markers.push({
-    id: Date.now(),
-    name: markerName,
-    startTime: startTime,
-    endTime: 0,
-  });
-
-  saveLocalState();
-  updateMarkersList();
-};
-
-const updateMarkerName = (markerIndex, newName) => {
-  const trimmed = newName.trim();
-  if (!trimmed) {
-    alert("Marker name cannot be empty.");
     updateMarkersList();
     return;
   }
