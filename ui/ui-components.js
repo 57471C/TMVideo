@@ -93,10 +93,12 @@ const updateMarkersList = () => {
       let duration = 0;
       if (i < markers.length - 1) {
         duration = markers[i + 1].startTime - marker.startTime;
-      } else if (typeof player !== "undefined" && player && player.duration) {
-        duration = player.duration - marker.startTime;
+      } else if (typeof player !== "undefined" && player) {
+        const activeVideo = videoQueue[activeQueueIndex] || {};
+        const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined) ? activeVideo.virtualEndTime : player.duration;
+        duration = endLimit - marker.startTime;
       }
-      duration = Math.max(0, duration);
+      if (duration < 0) duration = 0;
 
       const absDur = Math.round(duration);
       const hrs = Math.floor(absDur / 3600);
