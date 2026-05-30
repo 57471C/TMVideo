@@ -21,43 +21,43 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 
-const renderTrialSelect = () => {
-  if (!DOM.trialSelect) return;
-  DOM.trialSelect.innerHTML = "";
-  for (const [index, trial] of trials.entries()) {
+const renderVideoQueueSelect = () => {
+  if (!DOM.videoQueueSelect) return;
+  DOM.videoQueueSelect.innerHTML = "";
+  for (const [index, video] of videoQueue.entries()) {
     const option = document.createElement("option");
     option.value = index;
-    option.textContent = trial.trialName;
+    option.textContent = video.videoName;
     option.className = "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white";
-    if (index === activeTrialIndex) {
+    if (index === activeQueueIndex) {
       option.selected = true;
     }
-    DOM.trialSelect.appendChild(option);
+    DOM.videoQueueSelect.appendChild(option);
   }
 };
 
-const switchTrial = async (index) => {
-  if (index === activeTrialIndex) return;
+const switchVideoInQueue = async (index) => {
+  if (index === activeQueueIndex) return;
 
   preserveProcessTimes = true;
   saveLocalState();
 
-  activeTrialIndex = index;
-  const currentTrial = trials[activeTrialIndex];
+  activeQueueIndex = index;
+  const currentVideo = videoQueue[activeQueueIndex];
 
-  videoFileName = currentTrial.videoFileName || "";
-  videoFilePath = currentTrial.videoFilePath || "";
-  processStartTime = currentTrial.processStartTime || 0;
-  processEndTime = currentTrial.processEndTime || 0;
-  taktTime = currentTrial.taktTime || 60000;
-  hourlyRate = currentTrial.costingConfig?.hourlyRate || 0;
-  shiftLength = currentTrial.costingConfig?.shiftLength || 480;
-  targetEfficiency = currentTrial.costingConfig?.targetEfficiency || 100;
-  unitsPerCycle = currentTrial.costingConfig?.unitsPerCycle || 1;
+  videoFileName = currentVideo.videoFileName || "";
+  videoFilePath = currentVideo.videoFilePath || "";
+  processStartTime = currentVideo.processStartTime || 0;
+  processEndTime = currentVideo.processEndTime || 0;
+  taktTime = currentVideo.taktTime || 60000;
+  hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
+  shiftLength = currentVideo.costingConfig?.shiftLength || 480;
+  targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
+  unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
-  operations = currentTrial.appState?.operations || [];
+  operations = currentVideo.appState?.operations || [];
 
-  renderTrialSelect();
+  renderVideoQueueSelect();
   updateTaskList();
   drawTable();
 
@@ -77,7 +77,7 @@ const switchTrial = async (index) => {
     player.src = "";
     player.removeAttribute("src");
     DOM.videoPlaceholder.textContent = videoFileName
-      ? `Trial switched. Click here to locate video: ${videoFileName}`
+      ? `Video switched. Click here to locate video: ${videoFileName}`
       : "Load a video to get started";
     toggleVideoPlaceholder(true);
   }
@@ -87,26 +87,26 @@ const switchTrial = async (index) => {
     toggleSettings(true);
   }
 
-  showToast(`Switched to: ${currentTrial.trialName}`, "success");
+  showToast(`Switched to: ${currentVideo.videoName}`, "success");
   updateSliderTicks();
 };
 
-const addTrial = async () => {
-  const trialName = await asyncPrompt("Enter a name for the new trial:", `Trial ${trials.length + 1}`, "New Trial");
-  if (!trialName) return;
+const addVideoToQueue = async () => {
+  const videoName = await asyncPrompt("Enter a name for the new video:", `Video ${videoQueue.length + 1}`, "New Video");
+  if (!videoName) return;
   const duplicate = await asyncConfirm(
-    "Would you like to duplicate the current trial's tasks and video? (Click 'Cancel' to create a blank trial)",
+    "Would you like to duplicate the current video's tasks and video? (Click 'Cancel' to create a blank video slot)",
     "Duplicate Data?",
   );
 
   saveLocalState();
-  const newTrialId = trials.length > 0 ? Math.max(...trials.map((t) => t.trialId)) + 1 : 1;
+  const newVideoId = videoQueue.length > 0 ? Math.max(...videoQueue.map((v) => v.videoId)) + 1 : 1;
 
-  const newTrial = duplicate
-    ? { ...JSON.parse(JSON.stringify(trials[activeTrialIndex])), trialId: newTrialId, trialName }
+  const newVideo = duplicate
+    ? { ...JSON.parse(JSON.stringify(videoQueue[activeQueueIndex])), videoId: newVideoId, videoName }
     : {
-        trialId: newTrialId,
-        trialName,
+        videoId: newVideoId,
+        videoName,
         videoFileName: "",
         videoFilePath: "",
         processStartTime: 0,
@@ -116,19 +116,19 @@ const addTrial = async () => {
         appState: { operations: [] },
       };
 
-  trials.push(newTrial);
-  await switchTrial(trials.length - 1);
+  videoQueue.push(newVideo);
+  await switchVideoInQueue(videoQueue.length - 1);
 };
 
-const editTrial = async () => {
-  const currentName = trials[activeTrialIndex].trialName;
-  const newName = await asyncPrompt("Rename Trial:", currentName, "Edit Trial Name");
+const editVideoInQueue = async () => {
+  const currentName = videoQueue[activeQueueIndex].videoName;
+  const newName = await asyncPrompt("Rename Video:", currentName, "Edit Video Name");
   if (!newName || newName.trim() === "") return;
 
-  trials[activeTrialIndex].trialName = newName.trim();
+  videoQueue[activeQueueIndex].videoName = newName.trim();
   saveLocalState();
-  renderTrialSelect();
-  showToast("Trial renamed successfully.", "success");
+  renderVideoQueueSelect();
+  showToast("Video renamed successfully.", "success");
 };
 
 const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
@@ -249,16 +249,16 @@ const initializePlayer = () => {
     }
   });
 
-  if (DOM.trialSelect) {
-    DOM.trialSelect.addEventListener("change", (e) => {
-      switchTrial(Number.parseInt(e.target.value, 10));
+  if (DOM.videoQueueSelect) {
+    DOM.videoQueueSelect.addEventListener("change", (e) => {
+      switchVideoInQueue(Number.parseInt(e.target.value, 10));
     });
   }
-  if (DOM.addTrialBtn) {
-    DOM.addTrialBtn.addEventListener("click", addTrial);
+  if (DOM.addVideoQueueBtn) {
+    DOM.addVideoQueueBtn.addEventListener("click", addVideoToQueue);
   }
-  if (DOM.editTrialBtn) {
-    DOM.editTrialBtn.addEventListener("click", editTrial);
+  if (DOM.editVideoQueueBtn) {
+    DOM.editVideoQueueBtn.addEventListener("click", editVideoInQueue);
   }
 
   if (DOM.projectNameInput) {
@@ -598,7 +598,7 @@ const initializePlayer = () => {
       try {
         const selected = await window.__TAURI__.dialog.open({
           multiple: false,
-          filters: [{ name: "TimeStudy Project", extensions: ["tsp"] }],
+          filters: [{ name: "TMVideo Project", extensions: ["tmv"] }],
         });
         if (selected) {
           projectFilePath = typeof selected === "object" ? selected.path : selected;
@@ -648,10 +648,10 @@ const initializePlayer = () => {
     processStartTime = 0;
     processEndTime = 0;
 
-    trials = [
+    videoQueue = [
       {
-        trialId: 1,
-        trialName: "Current State",
+        videoId: 1,
+        videoName: "Video 1",
         videoFileName: "",
         videoFilePath: "",
         processStartTime: 0,
@@ -661,8 +661,8 @@ const initializePlayer = () => {
         appState: { operations: [] },
       },
     ];
-    activeTrialIndex = 0;
-    renderTrialSelect();
+    activeQueueIndex = 0;
+    renderVideoQueueSelect();
 
     if (DOM.projectNameInput) DOM.projectNameInput.value = "";
 

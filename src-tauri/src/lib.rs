@@ -13,7 +13,7 @@ fn get_startup_file() -> Option<String> {
     std::env::args()
         .skip(1)
         .map(|arg| arg.trim_matches('"').to_string())
-        .find(|arg| arg.to_lowercase().ends_with(".tsp"))
+        .find(|arg| arg.to_lowercase().ends_with(".tmv"))
 }
 
 #[tauri::command]

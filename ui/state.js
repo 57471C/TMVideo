@@ -7,8 +7,8 @@ let masterParts = [];
 let masterLabour = [];
 let projectFilePath = "";
 let projectFileHandle = null;
-let trials = [];
-let activeTrialIndex = 0;
+let videoQueue = [];
+let activeQueueIndex = 0;
 const videoBlobCache = {};
 let operations = [];
 let taktTime = 60000;
@@ -79,9 +79,9 @@ const DOM = {
   zoomOut: document.getElementById("zoomOut"),
   resetZoom: document.getElementById("resetZoom"),
   projectNameInput: document.getElementById("projectNameInput"),
-  trialSelect: document.getElementById("trialSelect"),
-  addTrialBtn: document.getElementById("addTrialBtn"),
-  editTrialBtn: document.getElementById("editTrialBtn"),
+  videoQueueSelect: document.getElementById("videoQueueSelect"),
+  addVideoQueueBtn: document.getElementById("addVideoQueueBtn"),
+  editVideoQueueBtn: document.getElementById("editVideoQueueBtn"),
 
   projectCommentsInput: document.getElementById("projectCommentsInput"),
   openSettingsBtn: document.getElementById("openSettingsBtn"),
@@ -116,23 +116,23 @@ const DOM = {
 };
 
 const saveLocalState = () => {
-  if (!trials[activeTrialIndex]) {
-    trials[activeTrialIndex] = {
-      trialId: activeTrialIndex + 1,
-      trialName: `Trial ${activeTrialIndex + 1}`,
+  if (!videoQueue[activeQueueIndex]) {
+    videoQueue[activeQueueIndex] = {
+      videoId: activeQueueIndex + 1,
+      videoName: `Video ${activeQueueIndex + 1}`,
       costingConfig: {},
       appState: {},
     };
   }
 
-  // Sync active global variables to the current trial object
-  trials[activeTrialIndex].videoFileName = videoFileName;
-  trials[activeTrialIndex].videoFilePath = videoFilePath;
-  trials[activeTrialIndex].processStartTime = processStartTime;
-  trials[activeTrialIndex].processEndTime = processEndTime;
-  trials[activeTrialIndex].taktTime = taktTime;
-  trials[activeTrialIndex].costingConfig = { hourlyRate, shiftLength, targetEfficiency, unitsPerCycle };
-  trials[activeTrialIndex].appState = { operations };
+  // Sync active global variables to the current video object
+  videoQueue[activeQueueIndex].videoFileName = videoFileName;
+  videoQueue[activeQueueIndex].videoFilePath = videoFilePath;
+  videoQueue[activeQueueIndex].processStartTime = processStartTime;
+  videoQueue[activeQueueIndex].processEndTime = processEndTime;
+  videoQueue[activeQueueIndex].taktTime = taktTime;
+  videoQueue[activeQueueIndex].costingConfig = { hourlyRate, shiftLength, targetEfficiency, unitsPerCycle };
+  videoQueue[activeQueueIndex].appState = { operations };
 
   const state = {
     projectMeta: {
@@ -147,8 +147,8 @@ const saveLocalState = () => {
       playbackSpeed,
       volumeLevel,
     },
-    trials,
-    activeTrialIndex,
+    videoQueue,
+    activeQueueIndex,
   };
 
   localStorage.setItem("timeStudyData", JSON.stringify(state));
@@ -182,14 +182,14 @@ const loadLocalState = () => {
     }
   }
 
-  // Always initialize a blank trial for a fresh project
+  // Always initialize a blank video queue item for a fresh project
   projectFilePath = "";
   projectName = "";
   projectComments = "";
-  trials = [
+  videoQueue = [
     {
-      trialId: 1,
-      trialName: "Current State",
+      videoId: 1,
+      videoName: "Video 1",
       videoFileName: "",
       videoFilePath: "",
       processStartTime: 0,
@@ -199,30 +199,30 @@ const loadLocalState = () => {
       appState: { operations: [] },
     },
   ];
-  activeTrialIndex = 0;
+  activeQueueIndex = 0;
 
-  // Hydrate memory with the active trial data (the blank one)
-  const currentTrial = trials[activeTrialIndex];
-  videoFileName = currentTrial.videoFileName || "";
-  videoFilePath = currentTrial.videoFilePath || "";
-  processStartTime = currentTrial.processStartTime || 0;
-  processEndTime = currentTrial.processEndTime || 0;
-  taktTime = currentTrial.taktTime || 60000;
+  // Hydrate memory with the active video data (the blank one)
+  const currentVideo = videoQueue[activeQueueIndex];
+  videoFileName = currentVideo.videoFileName || "";
+  videoFilePath = currentVideo.videoFilePath || "";
+  processStartTime = currentVideo.processStartTime || 0;
+  processEndTime = currentVideo.processEndTime || 0;
+  taktTime = currentVideo.taktTime || 60000;
 
-  hourlyRate = currentTrial.costingConfig?.hourlyRate || 0;
-  shiftLength = currentTrial.costingConfig?.shiftLength || 480;
-  targetEfficiency = currentTrial.costingConfig?.targetEfficiency || 100;
-  unitsPerCycle = currentTrial.costingConfig?.unitsPerCycle || 1;
+  hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
+  shiftLength = currentVideo.costingConfig?.shiftLength || 480;
+  targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
+  unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
-  operations = currentTrial.appState?.operations || [];
+  operations = currentVideo.appState?.operations || [];
 
   // Sync UI
   if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
-  if (typeof renderTrialSelect === "function") renderTrialSelect();
+  if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 };
 
 const exportToJSON = async (isSaveAs = false) => {
-  saveLocalState(); // Force sync of globals to current trial before export
+  saveLocalState(); // Force sync of globals to current video before export
   const dataStr = localStorage.getItem("timeStudyData");
   if (!dataStr) return;
 
@@ -233,9 +233,9 @@ const exportToJSON = async (isSaveAs = false) => {
     toConsole("Error formatting JSON data for export", e, debuggin);
   }
 
-  let filename = "project.tsp";
+  let filename = "project.tmv";
   if (projectName) {
-    filename = `${sanitizeFilename(projectName)}.tsp`;
+    filename = `${sanitizeFilename(projectName)}.tmv`;
   }
 
   const isTauri = window.__TAURI__ !== undefined;
@@ -244,7 +244,7 @@ const exportToJSON = async (isSaveAs = false) => {
       if (isSaveAs === true || !projectFilePath) {
         const defaultName = projectFilePath ? projectFilePath.split(/[/\\]/).pop() : filename;
         const filePath = await window.__TAURI__.dialog.save({
-          filters: [{ name: "TimeStudy Project", extensions: ["tsp"] }],
+          filters: [{ name: "TMVideo Project", extensions: ["tmv"] }],
           defaultPath: defaultName,
         });
         if (filePath) {
@@ -269,8 +269,8 @@ const exportToJSON = async (isSaveAs = false) => {
             suggestedName: filename,
             types: [
               {
-                description: "TimeStudy Project",
-                accept: { "application/json": [".tsp"] },
+                description: "TMVideo Project",
+                accept: { "application/json": [".tmv"] },
               },
             ],
           });
@@ -309,61 +309,35 @@ const importFromJSON = (jsonText) => {
     preserveProcessTimes = true;
     const data = JSON.parse(jsonText);
 
-    if (data.trials) {
-      // New Multi-Trial format
-      trials = data.trials;
-      activeTrialIndex = data.activeTrialIndex || 0;
+    if (data.videoQueue) {
+      videoQueue = data.videoQueue;
+      activeQueueIndex = data.activeQueueIndex || 0;
       projectName = data.projectMeta?.projectName || "";
       projectComments = data.projectMeta?.projectComments || "";
       masterParts = data.projectMeta?.masterParts || [];
       masterLabour = data.projectMeta?.masterLabour || [];
-    } else if (data.operations || data.appState?.operations) {
-      // Graceful fallback for older single-trial formats
-      trials = [
-        {
-          trialId: 1,
-          trialName: "Current State",
-          videoFileName: data.videoFileName || "",
-          videoFilePath: data.videoFilePath || "",
-          processStartTime: data.processStartTime || 0,
-          processEndTime: data.processEndTime || 0,
-          taktTime: data.taktTime || 60000,
-          costingConfig: data.costingConfig || {
-            hourlyRate: 0,
-            shiftLength: 480,
-            targetEfficiency: 100,
-            unitsPerCycle: 1,
-          },
-          appState: { operations: data.operations || data.appState?.operations || [] },
-        },
-      ];
-      activeTrialIndex = 0;
-      projectName = data.projectName || data.projectMeta?.projectName || "";
-      projectComments = data.projectComments || data.projectMeta?.projectComments || "";
-      masterParts = data.masterParts || data.projectMeta?.masterParts || [];
-      masterLabour = data.masterLabour || data.projectMeta?.masterLabour || [];
     } else {
       alert("Invalid project file format.");
       return;
     }
 
-    // Load active trial into memory
-    const currentTrial = trials[activeTrialIndex];
-    videoFileName = currentTrial.videoFileName || "";
-    videoFilePath = currentTrial.videoFilePath || "";
-    processStartTime = currentTrial.processStartTime || 0;
-    processEndTime = currentTrial.processEndTime || 0;
-    taktTime = currentTrial.taktTime || 60000;
+    // Load active video into memory
+    const currentVideo = videoQueue[activeQueueIndex];
+    videoFileName = currentVideo.videoFileName || "";
+    videoFilePath = currentVideo.videoFilePath || "";
+    processStartTime = currentVideo.processStartTime || 0;
+    processEndTime = currentVideo.processEndTime || 0;
+    taktTime = currentVideo.taktTime || 60000;
 
-    hourlyRate = currentTrial.costingConfig?.hourlyRate || 0;
-    shiftLength = currentTrial.costingConfig?.shiftLength || 480;
-    targetEfficiency = currentTrial.costingConfig?.targetEfficiency || 100;
-    unitsPerCycle = currentTrial.costingConfig?.unitsPerCycle || 1;
+    hourlyRate = currentVideo.costingConfig?.hourlyRate || 0;
+    shiftLength = currentVideo.costingConfig?.shiftLength || 480;
+    targetEfficiency = currentVideo.costingConfig?.targetEfficiency || 100;
+    unitsPerCycle = currentVideo.costingConfig?.unitsPerCycle || 1;
 
-    operations = currentTrial.appState?.operations || [];
+    operations = currentVideo.appState?.operations || [];
 
     if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
-    if (typeof renderTrialSelect === "function") renderTrialSelect();
+    if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 
     DOM.taskList.innerHTML = "";
 
@@ -393,7 +367,7 @@ const importFromJSON = (jsonText) => {
     if (typeof drawTable === "function") drawTable();
     if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
 
-    toConsole("Project imported successfully", `Loaded Trial: ${currentTrial.trialName}`, debuggin);
+    toConsole("Project imported successfully", `Loaded Video: ${currentVideo.videoName}`, debuggin);
     showToast("Project loaded successfully.", "success");
   } catch (e) {
     toConsole("Error importing JSON", e, debuggin);
@@ -461,16 +435,16 @@ const exportToCSV = async () => {
     return;
   }
 
-  const currentTrial = trials[activeTrialIndex] || {};
-  const trialNameVal = currentTrial.trialName || "";
+  const currentVideo = videoQueue[activeQueueIndex] || {};
+  const videoNameVal = currentVideo.videoName || "";
 
   let csvContent = "";
 
   // 1. Metadata Block
   // Row 1: Titles
-  csvContent += "Project Name,Project Trial Name,Process Start Time,Process End Time,Takt Time,Video File Name\n";
+  csvContent += "Project Name,Video Name,Process Start Time,Process End Time,Takt Time,Video File Name\n";
   // Row 2: Values
-  csvContent += `${escapeCSV(projectName)},${escapeCSV(trialNameVal)},${formatTimeToHHMMSSMS(processStartTime)},${formatTimeToHHMMSSMS(processEndTime)},${formatDurationForExport(taktTime)},${escapeCSV(videoFileName)}\n`;
+  csvContent += `${escapeCSV(projectName)},${escapeCSV(videoNameVal)},${formatTimeToHHMMSSMS(processStartTime)},${formatTimeToHHMMSSMS(processEndTime)},${formatDurationForExport(taktTime)},${escapeCSV(videoFileName)}\n`;
   // Row 3: Blank
   csvContent += "\n";
 
