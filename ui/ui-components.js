@@ -2,9 +2,31 @@ const ICONS = {
   trash: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
   jump: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
   capture: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  standard: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  jumpType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>`,
+  loopType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`,
 };
 
+const toggleTypeDropdown = (e, index) => {
+  e.stopPropagation();
+  const menus = document.querySelectorAll('[id^="type-menu-"]');
+  for (const menu of menus) {
+    if (menu.id !== `type-menu-${index}`) {
+      menu.classList.add("hidden");
+    }
+  }
+  const menu = document.getElementById(`type-menu-${index}`);
+  if (menu) {
+    menu.classList.toggle("hidden");
+  }
+};
 
+document.addEventListener("click", () => {
+  const menus = document.querySelectorAll('[id^="type-menu-"]');
+  for (const menu of menus) {
+    menu.classList.add("hidden");
+  }
+});
 
 const updateStickyOffsets = () => {
   const activeLoggingPanel = document.getElementById("activeLoggingPanel");
@@ -118,11 +140,25 @@ const updateMarkersList = () => {
                 </svg>
               </button>
               <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
-              <select onchange="updateMarkerType(${i}, this.value)" class="bg-transparent text-sm border-none focus:ring-0 cursor-pointer text-zinc-500 dark:text-zinc-400 pr-4">
-                <option value="standard" ${marker.type === "standard" ? "selected" : ""}>📍 Standard</option>
-                <option value="jump" ${marker.type === "jump" ? "selected" : ""}>⏩ Skip/Jump</option>
-                <option value="loop" ${marker.type === "loop" ? "selected" : ""}>🔁 Loop</option>
-              </select>
+              <div class="relative inline-block text-left marker-type-dropdown">
+                <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-all focus:outline-none cursor-pointer" id="type-btn-${i}">
+                  ${marker.type === "standard" ? `${ICONS.standard} <span>Standard</span>` : marker.type === "jump" ? `${ICONS.jumpType} <span>Jump</span>` : `${ICONS.loopType} <span>Loop</span>`}
+                  <svg class="h-3 w-3 text-zinc-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+                <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-28 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
+                  <div class="py-1">
+                    <button onclick="updateMarkerType(${i}, 'standard')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                      ${ICONS.standard} Standard
+                    </button>
+                    <button onclick="updateMarkerType(${i}, 'jump')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                      ${ICONS.jumpType} Jump
+                    </button>
+                    <button onclick="updateMarkerType(${i}, 'loop')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                      ${ICONS.loopType} Loop
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </td>
           <td class="text-center py-2">

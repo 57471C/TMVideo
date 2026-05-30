@@ -819,25 +819,14 @@ const initializePlayer = () => {
         toConsole("Forward 5s (Up Arrow)", player.currentTime, debuggin);
         break;
       case "Enter":
-      case "o":
+      case "m":
         e.preventDefault();
         if (!player.src) return;
         addMarker();
         break;
-      case "m":
+      case "l":
         e.preventDefault();
-        if (!player.src) return;
-        player.muted = !player.muted;
-        DOM.volumeOnIcon.classList.toggle("hidden", player.muted);
-        DOM.volumeOffIcon.classList.toggle("hidden", !player.muted);
-        toConsole("Mute toggled (M key)", player.muted, debuggin);
-        if (!player.muted && volumeLevel === 0) {
-          volumeLevel = 1;
-          player.volume = 1;
-          saveLocalState();
-        }
-        volumeSlider.value = player.muted ? 0 : volumeLevel;
-        DOM.volumeValue.textContent = player.muted ? "0" : Math.round(volumeLevel * 100);
+        if (loadVideoButton) loadVideoButton.click();
         break;
       case "=":
         e.preventDefault();
