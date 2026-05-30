@@ -1,0 +1,4 @@
+# Global Development Directives
+1. **Strict Linting Compliance:** ALL generated JavaScript, HTML, and CSS must strictly pass Biome 2.4 linting and formatting rules. Do not use legacy ESLint or Prettier formatting patterns.
+2. **Version Control & Documentation:** Whenever a version number is bumped (upreved) in the project files, you MUST automatically analyze the modifications and update `README.md` to document the latest changes.
+3. **Deployment Handoff:** After successfully modifying files, always conclude your response by outputting the exact `git add` and `git commit` terminal commands required to commit the changes to the `main` branch, utilizing conventional commit messaging.

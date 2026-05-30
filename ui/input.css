@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@layer utilities {
+  /* Modern sleek buttons (Mux inspired) */
+  .btn {
+    @apply px-3 py-1.5 text-sm font-medium transition-all duration-200 border border-slate-200/60 dark:border-white/5 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 active:scale-95 cursor-pointer backdrop-blur-sm;
+  }
+  .btn:disabled {
+    @apply opacity-50 cursor-default active:scale-100;
+  }
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs rounded;
+  }
+  .btn-primary {
+    @apply bg-blue-600/90 text-white hover:bg-blue-600 border-transparent dark:bg-blue-500/80 dark:hover:bg-blue-500;
+  }
+  .btn-outline-primary {
+    @apply bg-transparent border-blue-500/50 text-blue-600 hover:bg-blue-50 dark:border-blue-400/50 dark:text-blue-400 dark:hover:bg-blue-500/10;
+  }
+  .btn-danger {
+    @apply bg-rose-600/90 text-white hover:bg-rose-600 border-transparent dark:bg-rose-500/80 dark:hover:bg-rose-500;
+  }
+  .btn-outline-danger {
+    @apply bg-transparent border-rose-500/50 text-rose-600 hover:bg-rose-50 dark:border-rose-400/50 dark:text-rose-400 dark:hover:bg-rose-500/10;
+  }
+  .btn-secondary {
+    @apply bg-zinc-500/90 text-white hover:bg-zinc-500 border-transparent dark:bg-zinc-600/80 dark:hover:bg-zinc-600;
+  }
+  .btn-outline-secondary {
+    @apply bg-transparent border-zinc-400/50 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-500/50 dark:text-zinc-300 dark:hover:bg-zinc-700/50;
+  }
+  .btn-dark-gray {
+    @apply bg-zinc-700/90 text-white hover:bg-zinc-700 border-transparent dark:bg-zinc-700/80 dark:hover:bg-zinc-600;
+  }
+  .btn-yellow {
+    @apply bg-amber-500/90 text-white hover:bg-amber-500 border-transparent dark:bg-amber-500/80 dark:hover:bg-amber-500;
+  }
+  .btn-orange {
+    @apply bg-orange-500/90 text-white hover:bg-orange-500 border-transparent dark:bg-orange-500/80 dark:hover:bg-orange-500;
+  }
+  .btn-outline-orange {
+    @apply bg-transparent border-orange-500/50 text-orange-600 hover:bg-orange-50 dark:border-orange-400/50 dark:text-orange-400 dark:hover:bg-orange-500/10;
+  }
+  .btn-light-green {
+    @apply bg-emerald-600/90 text-white hover:bg-emerald-600 border-transparent dark:bg-emerald-500/80 dark:hover:bg-emerald-500;
+  }
+  .btn-lighter-green {
+    @apply bg-emerald-500/90 text-white hover:bg-emerald-500 border-transparent dark:bg-emerald-400/80 dark:hover:bg-emerald-400;
+  }
+
+  .form-control {
+    @apply px-3 py-1.5 border border-zinc-300 rounded bg-white dark:bg-zinc-800 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+  .form-label {
+    @apply block text-sm font-medium mb-1 text-zinc-700 dark:text-zinc-300;
+  }
+
+  /* Modern sleek sliders (Mux inspired) */
+  .form-range {
+    @apply w-full h-1.5 bg-zinc-200 dark:bg-zinc-700/80 rounded-full appearance-none cursor-pointer outline-none shadow-inner;
+  }
+  .form-range::-webkit-slider-thumb {
+    @apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
+  }
+  .form-range::-moz-range-thumb {
+    @apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
+  }
+
+  .slider-ticks {
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(10% - 1px),
+      rgba(0, 0, 0, 0.15) calc(10% - 1px),
+      rgba(0, 0, 0, 0.15) 10%
+    );
+  }
+  .dark .slider-ticks {
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(10% - 1px),
+      rgba(255, 255, 255, 0.15) calc(10% - 1px),
+      rgba(255, 255, 255, 0.15) 10%
+    );
+  }
+
+  .timeline-ticks {
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(var(--tick-interval, 100%) - 1px),
+      rgba(0, 0, 0, 0.15) calc(var(--tick-interval, 100%) - 1px),
+      rgba(0, 0, 0, 0.15) var(--tick-interval, 100%)
+    );
+  }
+  .dark .timeline-ticks {
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc(var(--tick-interval, 100%) - 1px),
+      rgba(255, 255, 255, 0.15) calc(var(--tick-interval, 100%) - 1px),
+      rgba(255, 255, 255, 0.15) var(--tick-interval, 100%)
+    );
+  }
+
+  .table {
+    @apply w-full text-left text-sm;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .table th,
+  .table td {
+    @apply p-2 border-b border-r border-zinc-200 dark:border-zinc-700;
+  }
+  .table tr:first-child th,
+  .table tr:first-child td {
+    @apply border-t border-zinc-200 dark:border-zinc-700;
+  }
+  .table th:first-child,
+  .table td:first-child {
+    @apply border-l border-zinc-200 dark:border-zinc-700;
+  }
+  .table thead th {
+    @apply bg-zinc-100 dark:bg-zinc-800 font-semibold;
+  }
+
+  /* Video Player Icons */
+  .btn-icon {
+    @apply text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
+  }
+  .btn-icon-highlight {
+    @apply text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
+  }
+
+  /* Project Name Input */
+  .project-name-input {
+    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-1 w-40 sm:w-64 transition-all;
+  }
+
+  /* Trial Select Dropdown */
+  .trial-select {
+    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white px-2 py-1 cursor-pointer transition-all w-32 sm:w-48 appearance-none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.25rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  /* Ghost Insert Row */
+  .insert-ghost-row {
+    height: 2px !important;
+    transition: all 0.2s ease-in-out;
+    background-color: transparent !important;
+    cursor: crosshair !important;
+  }
+  .insert-ghost-row:hover {
+    height: 24px !important;
+    background-color: rgba(59, 130, 246, 0.05) !important;
+  }
+  .dark .insert-ghost-row:hover {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+  }
+  .ghost-cell {
+    border: none !important;
+    padding: 0 !important;
+    font-size: 0px !important;
+    line-height: 0 !important;
+    text-align: center;
+    transition: all 0.2s ease-in-out;
+    color: #3b82f6;
+    font-weight: 600;
+  }
+  .insert-ghost-row:hover .ghost-cell {
+    font-size: 0.75rem !important;
+    line-height: 1.5 !important;
+    padding: 4px 0 !important;
+  }
+}
+

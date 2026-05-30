@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.log
+*.bak
+*.zip
+*.bat
+
+# don't upload FFMPEG binaries
+src-tauri/binaries/

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "checkJs": false
+  },
+  "exclude": [
+    "**/libs/*",
+    "**/*.min.js",
+    "node_modules"
+  ]
+}
