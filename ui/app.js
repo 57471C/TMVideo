@@ -381,8 +381,7 @@ const initializePlayer = () => {
     updateLoadButtonColor();
   });
 
-  addTaskButton = document.getElementById("addTaskButton");
-  addOpButton = document.getElementById("addOpButton");
+  addMarkerBtn = document.getElementById("addMarkerBtn");
   exportButton = document.getElementById("exportButton");
 
   projectExportButton = document.getElementById("projectExportButton");
