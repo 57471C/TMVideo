@@ -4,9 +4,6 @@ let addTaskButton;
 let addOpButton;
 let toggleFormatButton;
 let exportButton;
-let exportDropdown;
-let exportXlsxBtn;
-let exportCsvBtn;
 let projectExportButton;
 let projectSaveAsButton;
 let projectImportButton;
@@ -227,9 +224,7 @@ const initializePlayer = () => {
   }
 
   const isDarkMode = localStorage.getItem("darkMode") === "true";
-  if (typeof ApexCharts !== "undefined") {
-    updateChartThemes(isDarkMode);
-  }
+
   if (isDarkMode) {
     document.documentElement.classList.add("dark");
     DOM.sunIcon.classList.add("hidden");
@@ -247,9 +242,7 @@ const initializePlayer = () => {
     DOM.moonIcon.classList.toggle("hidden", !isDark);
     localStorage.setItem("darkMode", isDark);
     toConsole("Dark mode toggled", isDark ? "On" : "Off", debuggin);
-    if (typeof ApexCharts !== "undefined") {
-      updateChartThemes(isDark);
-    }
+
     updateTaskList();
     if (operations.length > 0) {
       drawTable();
@@ -267,12 +260,7 @@ const initializePlayer = () => {
   if (DOM.editTrialBtn) {
     DOM.editTrialBtn.addEventListener("click", editTrial);
   }
-  if (DOM.compareTrialsBtn) {
-    DOM.compareTrialsBtn.addEventListener("click", openCompareDashboard);
-  }
-  if (DOM.closeCompareBtn) {
-    DOM.closeCompareBtn.addEventListener("click", () => DOM.compareModal.close());
-  }
+
   if (DOM.projectNameInput) {
     DOM.projectNameInput.addEventListener("blur", (e) => {
       e.target.value = sanitizeFilename(e.target.value);
@@ -487,9 +475,7 @@ const initializePlayer = () => {
   addTaskButton = document.getElementById("addTaskButton");
   addOpButton = document.getElementById("addOpButton");
   exportButton = document.getElementById("exportButton");
-  exportDropdown = document.getElementById("exportDropdown");
-  exportXlsxBtn = document.getElementById("exportXlsxBtn");
-  exportCsvBtn = document.getElementById("exportCsvBtn");
+
   projectExportButton = document.getElementById("projectExportButton");
   projectSaveAsButton = document.getElementById("projectSaveAsButton");
   projectImportButton = document.getElementById("projectImportButton");
@@ -599,25 +585,8 @@ const initializePlayer = () => {
   addTaskButton.addEventListener("click", addTask, false);
   addOpButton.addEventListener("click", addOp, false);
   exportButton.addEventListener("click", (e) => {
-    e.stopPropagation();
-    exportDropdown.classList.toggle("hidden");
-  }, false);
-
-  exportCsvBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    exportDropdown.classList.add("hidden");
     exportToCSV();
   }, false);
-
-  exportXlsxBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    exportDropdown.classList.add("hidden");
-    exportToXLSX();
-  }, false);
-
-  document.addEventListener("click", () => {
-    exportDropdown.classList.add("hidden");
-  });
   projectExportButton.addEventListener("click", () => exportToJSON(false), false);
   if (projectSaveAsButton) {
     projectSaveAsButton.addEventListener("click", () => exportToJSON(true), false);

@@ -52,9 +52,7 @@ const DOM = {
   taskList: document.getElementById("taskList"),
   videoPlaceholder: document.getElementById("videoPlaceholder"),
   videoWrapper: document.getElementById("videoWrapper"),
-  chartContainer: document.getElementById("chartContainer"),
-  ganttChartContainer: document.getElementById("ganttChartContainer"),
-  pieChartContainer: document.getElementById("pieChartContainer"),
+
   taskTableFoot: null, // Initialize as null, set dynamically in updateTaskList
   darkModeToggle: document.getElementById("darkModeToggle"),
   sunIcon: document.getElementById("sunIcon"),
@@ -84,9 +82,7 @@ const DOM = {
   trialSelect: document.getElementById("trialSelect"),
   addTrialBtn: document.getElementById("addTrialBtn"),
   editTrialBtn: document.getElementById("editTrialBtn"),
-  compareTrialsBtn: document.getElementById("compareTrialsBtn"),
-  compareModal: document.getElementById("compareModal"),
-  closeCompareBtn: document.getElementById("closeCompareBtn"),
+
   projectCommentsInput: document.getElementById("projectCommentsInput"),
   openSettingsBtn: document.getElementById("openSettingsBtn"),
   settingsBackdrop: document.getElementById("settingsBackdrop"),
@@ -370,9 +366,6 @@ const importFromJSON = (jsonText) => {
     if (typeof renderTrialSelect === "function") renderTrialSelect();
 
     DOM.taskList.innerHTML = "";
-    DOM.pieChartContainer.innerHTML = "";
-    DOM.chartContainer.innerHTML = "";
-    DOM.ganttChartContainer.innerHTML = "";
 
     // Handle Video Relinking
     player.pause();
@@ -573,201 +566,3 @@ const exportToCSV = async () => {
   }
 };
 
-const exportToXLSX = async () => {
-  if (trials.length === 0) {
-    alert("No trials to export.");
-    return;
-  }
-
-  const workbook = new ExcelJS.Workbook();
-  const usedNames = new Set();
-
-  for (let tIdx = 0; tIdx < trials.length; tIdx += 1) {
-    const trial = trials[tIdx];
-
-    // Sanitize sheet name: max 31 chars, no invalid chars, unique
-    let sheetName = (trial.trialName || `Trial ${tIdx + 1}`).trim();
-    sheetName = sheetName.replace(/[*?:/\\[\]]/g, "");
-    if (sheetName.length > 31) {
-      sheetName = sheetName.substring(0, 31);
-    }
-    if (sheetName.length === 0) {
-      sheetName = `Trial ${tIdx + 1}`;
-    }
-    let finalName = sheetName;
-    let suffix = 1;
-    while (usedNames.has(finalName.toLowerCase())) {
-      const suffixStr = `_${suffix}`;
-      finalName = sheetName.substring(0, 31 - suffixStr.length) + suffixStr;
-      suffix += 1;
-    }
-    usedNames.add(finalName.toLowerCase());
-
-    const worksheet = workbook.addWorksheet(finalName);
-
-    const trialOps = trial.appState?.operations || [];
-    const trialStartTime = trial.processStartTime || 0;
-    const trialEndTime = trial.processEndTime || 0;
-    const trialTaktTime = trial.taktTime || 60000;
-    const trialVideoFileName = trial.videoFileName || "";
-    const trialVideoFilePath = trial.videoFilePath || "";
-
-    const addRow = (values, isBold = false) => {
-      const row = worksheet.addRow(values);
-      if (isBold) {
-        row.eachCell((cell) => {
-          cell.font = { bold: true };
-        });
-      }
-      return row;
-    };
-
-    // Video File Name link logic
-    const videoCellVal =
-      trialVideoFileName && trialVideoFilePath
-        ? {
-            text: trialVideoFileName,
-            hyperlink: trialVideoFilePath.startsWith("file://")
-              ? trialVideoFilePath
-              : `file:///${trialVideoFilePath.replace(/\\/g, "/")}`,
-          }
-        : trialVideoFileName;
-
-    // Metadata titles & values
-    addRow(
-      ["Project Name", "Project Trial Name", "Process Start Time", "Process End Time", "Takt Time", "Video File Name"],
-      true,
-    );
-    addRow([
-      projectName,
-      trial.trialName || "",
-      formatTimeToHHMMSSMS(trialStartTime),
-      formatTimeToHHMMSSMS(trialEndTime),
-      parseFloat(formatDurationForExport(trialTaktTime)) || 0,
-      videoCellVal,
-    ]);
-    addRow([]);
-
-    // Loop through operations
-    for (let i = 0; i < trialOps.length; i += 1) {
-      const op = trialOps[i];
-      const opTotalTime = op.tasks.reduce((sum, t) => sum + t.duration, 0);
-
-      // Operation Headers
-      addRow(
-        [
-          "Operation Name",
-          "Operation Part Qty",
-          "Operation Part Numbers",
-          "Operation Part Description",
-          "Operation Start Time",
-          "Operation Total Time",
-        ],
-        true,
-      );
-
-      // Operation Values
-      const partTags = op.partTags || [];
-      if (partTags.length === 0) {
-        addRow([
-          op.name,
-          "",
-          "",
-          "",
-          formatTimeToHHMMSSMS(op.startTime),
-          parseFloat(formatDecimalMinutes(opTotalTime)) || 0,
-        ]);
-      } else {
-        for (let pIdx = 0; pIdx < partTags.length; pIdx += 1) {
-          const { qty, partNumber, partDescription } = parsePartTag(partTags[pIdx]);
-          if (pIdx === 0) {
-            addRow([
-              op.name,
-              qty ? parseInt(qty, 10) : "",
-              partNumber,
-              partDescription,
-              formatTimeToHHMMSSMS(op.startTime),
-              parseFloat(formatDecimalMinutes(opTotalTime)) || 0,
-            ]);
-          } else {
-            addRow(["", qty ? parseInt(qty, 10) : "", partNumber, partDescription, "", ""]);
-          }
-        }
-      }
-
-      // Task Headers
-      addRow(["Task Name", "Task Labour Code", "Task Labour Description", "VA", "NVA", "W", "Total Task Time"], true);
-
-      // Task Values
-      for (let j = 0; j < op.tasks.length; j += 1) {
-        const task = op.tasks[j];
-        const status = task.status.toUpperCase();
-        const laborTags = task.labourTags || [];
-
-        const valVA = status === "VA" ? parseFloat(formatDecimalMinutes(task.duration)) : 0;
-        const valNVA = status === "NVA" ? parseFloat(formatDecimalMinutes(task.duration)) : 0;
-        const valW = status === "W" ? parseFloat(formatDecimalMinutes(task.duration)) : 0;
-        const valTotal = parseFloat(formatDecimalMinutes(task.duration));
-
-        if (laborTags.length === 0) {
-          addRow([task.name, "", "", valVA, valNVA, valW, valTotal]);
-        } else {
-          for (let lIdx = 0; lIdx < laborTags.length; lIdx += 1) {
-            const { code, description } = parseLabourTag(laborTags[lIdx]);
-            if (lIdx === 0) {
-              addRow([task.name, code, description, valVA, valNVA, valW, valTotal]);
-            } else {
-              addRow(["", code, description, "", "", "", ""]);
-            }
-          }
-        }
-      }
-
-      // Separating blank row
-      addRow([]);
-    }
-  }
-
-  let filename = "operation_task_durations.xlsx";
-  if (projectName) {
-    filename = `${sanitizeFilename(projectName)}.xlsx`;
-  }
-
-  const isTauri = window.__TAURI__ !== undefined;
-  if (isTauri) {
-    try {
-      const filePath = await window.__TAURI__.dialog.save({
-        filters: [{ name: "Excel Spreadsheet", extensions: ["xlsx"] }],
-        defaultPath: filename,
-      });
-      if (filePath) {
-        const actualPath = typeof filePath === "object" ? filePath.path : filePath;
-        const buffer = await workbook.xlsx.writeBuffer();
-        const uint8Array = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        await window.__TAURI__.fs.writeFile(actualPath, uint8Array);
-        showToast("Data exported to XLSX successfully.", "success");
-      }
-    } catch (e) {
-      toConsole("Error exporting XLSX via Tauri", e, debuggin);
-      showToast("Error exporting XLSX file.", "error");
-    }
-  } else {
-    try {
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", filename);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      showToast("Data exported to XLSX successfully.", "success");
-    } catch (e) {
-      toConsole("Error exporting XLSX via Browser", e, debuggin);
-      showToast("Error exporting XLSX file.", "error");
-    }
-  }
-};
