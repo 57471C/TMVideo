@@ -1049,33 +1049,27 @@ const seektimeupdate = () => {
 
     // Playhead Execution Logic: Jump & Loop
     if (markers && markers.length > 0) {
-      let currentMarkerIndex = -1;
+      const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+      const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined)
+        ? activeVideo.virtualEndTime
+        : (duration || player.duration || 0);
+
       for (let j = 0; j < markers.length; j += 1) {
-        if (markers[j].startTime <= currentTime) {
-          currentMarkerIndex = j;
-        } else {
-          break;
-        }
-      }
-
-      if (currentMarkerIndex !== -1) {
-        const currentMarker = markers[currentMarkerIndex];
-        const nextMarker = markers[currentMarkerIndex + 1];
-
-        const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
-        const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined)
-          ? activeVideo.virtualEndTime
-          : (duration || player.duration || 0);
-
+        const currentMarker = markers[j];
+        const nextMarker = markers[j + 1];
         const boundaryTime = nextMarker ? nextMarker.startTime : endLimit;
 
         if (currentMarker.type === "jump") {
-          player.currentTime = boundaryTime;
-          return;
-        }
-        if (currentMarker.type === "loop" && currentTime >= boundaryTime) {
-          player.currentTime = currentMarker.startTime;
-          return;
+          if (currentTime >= currentMarker.startTime && currentTime < boundaryTime) {
+            player.currentTime = boundaryTime;
+            return;
+          }
+        } else if (currentMarker.type === "loop") {
+          const threshold = Math.max(0.5, player.playbackRate * 0.3);
+          if (currentTime >= boundaryTime && currentTime - boundaryTime < threshold) {
+            player.currentTime = currentMarker.startTime;
+            return;
+          }
         }
       }
     }
