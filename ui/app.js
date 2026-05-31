@@ -1,4 +1,6 @@
-const appWindow = window.__TAURI__ ? window.__TAURI__.window.appWindow : null;
+const appWindow = window.__TAURI__
+  ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
+  : null;
 let isCinemaMode = false;
 let player;
 let loadVideoButton;
@@ -234,7 +236,9 @@ async function toggleCinemaMode() {
   document.body.classList.toggle("cinema-active", isCinemaMode);
 
   // 2. Handle Monitor Fullscreen
-  const appWindow = window.__TAURI__ ? window.__TAURI__.window.appWindow : null;
+  const appWindow = window.__TAURI__
+    ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
+    : null;
   if (appWindow) {
     try {
       await appWindow.setFullscreen(isCinemaMode);
