@@ -1848,7 +1848,7 @@ async function processBatchQueue(presetType) {
           const tempDir = await tempdir();
           tempFilePath = await join(tempDir, `ffmpeg_concat_batch_${video.videoId || index}.txt`);
         } else {
-          tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}concat_list.txt`;
+          tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
         }
         await writeTextFile(tempFilePath, listContent);
 
@@ -1915,10 +1915,13 @@ async function processBatchQueue(presetType) {
 
         ffmpegChild = await ffmpeg.spawn();
         try {
-          const output = await ffmpeg.execute();
-          if (output.code !== 0) {
-            throw new Error(`FFmpeg exited with code ${output.code}`);
-          }
+          await new Promise((resolve, reject) => {
+            ffmpeg.on('close', ({ code }) => {
+              if (code === 0) resolve();
+              else reject(new Error(`FFmpeg exited with code ${code}`));
+            });
+            ffmpeg.on('error', error => reject(error));
+          });
         } finally {
           if (tempFilePath && remove) {
             await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
