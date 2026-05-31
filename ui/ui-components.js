@@ -94,8 +94,8 @@ const updateMarkersList = () => {
              <th scope="col" class="text-left align-middle w-auto pl-1 sm:pl-2">
                Marker Name
              </th>
-             <th scope="col" class="text-center w-36 whitespace-nowrap px-1">Start Time</th>
-             <th scope="col" class="text-center w-36 whitespace-nowrap px-1">Duration</th>
+             <th scope="col" class="text-center w-40 whitespace-nowrap px-1">Start Time</th>
+             <th scope="col" class="text-center w-24 whitespace-nowrap px-1">Duration</th>
              <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">Actions</th>
            </tr>
          </thead>`,

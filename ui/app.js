@@ -587,7 +587,7 @@ const initializePlayer = () => {
   });
 
   newProjectButton.addEventListener("click", async () => {
-    if (operations.length > 0 || player.getAttribute("src")) {
+    if (markers.length > 0 || player.getAttribute("src")) {
       const proceed = await asyncConfirm(
         "Are you sure you want to start a new project? All unsaved data will be lost.",
         "New Project",
@@ -600,7 +600,7 @@ const initializePlayer = () => {
     player.removeAttribute("src");
     player.load();
 
-    operations = [];
+    markers = [];
     videoFileName = "";
 
     // Free memory by revoking old video blob URLs
@@ -626,7 +626,7 @@ const initializePlayer = () => {
         videoFilePath: "",
         processStartTime: 0,
         processEndTime: 0,
-        appState: { operations: [] },
+        appState: { markers: [] },
       },
     ];
     activeQueueIndex = 0;

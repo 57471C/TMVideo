@@ -128,6 +128,8 @@ const saveLocalState = () => {
 
 const loadLocalState = () => {
   const data = localStorage.getItem("timeStudyData");
+  let restored = false;
+
   if (data) {
     try {
       const state = JSON.parse(data);
@@ -135,9 +137,13 @@ const loadLocalState = () => {
       if (state.projectMeta) {
         masterParts = state.projectMeta.masterParts || [];
         masterLabour = state.projectMeta.masterLabour || [];
+        projectName = state.projectMeta.projectName || "";
+        projectComments = state.projectMeta.projectComments || "";
       } else {
         masterParts = state.masterParts || [];
         masterLabour = state.masterLabour || [];
+        projectName = "";
+        projectComments = "";
       }
 
       if (state.appConfig) {
@@ -148,30 +154,51 @@ const loadLocalState = () => {
         volumeLevel = state.volumeLevel !== undefined ? state.volumeLevel : 1;
       }
 
+      if (state.videoQueue && state.videoQueue.length > 0) {
+        videoQueue = state.videoQueue;
+        activeQueueIndex = state.activeQueueIndex || 0;
+      } else {
+        videoQueue = [
+          {
+            videoId: 1,
+            videoName: "Video 1",
+            videoFileName: "",
+            videoFilePath: "",
+            processStartTime: 0,
+            processEndTime: 0,
+            appState: { markers: [] },
+          },
+        ];
+        activeQueueIndex = 0;
+      }
+
+      projectFilePath = localStorage.getItem("projectFilePath") || "";
+      restored = true;
       toConsole("Global settings and master data restored", "Success", debuggin);
     } catch (e) {
       toConsole("Error parsing local state", e, debuggin);
     }
   }
 
-  // Always initialize a blank video queue item for a fresh project
-  projectFilePath = "";
-  projectName = "";
-  projectComments = "";
-  videoQueue = [
-    {
-      videoId: 1,
-      videoName: "Video 1",
-      videoFileName: "",
-      videoFilePath: "",
-      processStartTime: 0,
-      processEndTime: 0,
-      appState: { markers: [] },
-    },
-  ];
-  activeQueueIndex = 0;
+  if (!restored) {
+    projectFilePath = "";
+    projectName = "";
+    projectComments = "";
+    videoQueue = [
+      {
+        videoId: 1,
+        videoName: "Video 1",
+        videoFileName: "",
+        videoFilePath: "",
+        processStartTime: 0,
+        processEndTime: 0,
+        appState: { markers: [] },
+      },
+    ];
+    activeQueueIndex = 0;
+  }
 
-  // Hydrate memory with the active video data (the blank one)
+  // Hydrate memory with the active video data
   const currentVideo = videoQueue[activeQueueIndex];
   videoFileName = currentVideo.videoFileName || "";
   videoFilePath = currentVideo.videoFilePath || "";
