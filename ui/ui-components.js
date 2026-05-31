@@ -5,6 +5,8 @@ const ICONS = {
   standard: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
   jumpType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><circle cx="6" cy="18" r="2" fill="currentColor"/><circle cx="18" cy="18" r="2" fill="currentColor"/><path d="M6 14C6 8 18 8 18 14"/><path d="M15 11l3 3 3-3"/></svg>`,
   loopType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`,
+  inType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M5 4h4v16H5zM19 12l-6-6v12z"/></svg>`,
+  outType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M15 4h4v16h-4zM5 12l6 6V6z"/></svg>`,
 };
 
 const toggleTypeDropdown = (e, index) => {
@@ -142,9 +144,9 @@ const updateMarkersList = () => {
               <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
               <div class="relative inline-block text-left marker-type-dropdown">
                 <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center justify-center p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer" id="type-btn-${i}">
-                  ${marker.type === "standard" ? ICONS.standard : marker.type === "jump" ? ICONS.jumpType : ICONS.loopType}
+                  ${marker.type === "standard" ? ICONS.standard : marker.type === "jump" ? ICONS.jumpType : marker.type === "loop" ? ICONS.loopType : marker.type === "in" ? ICONS.inType : ICONS.outType}
                 </button>
-                <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-28 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
+                <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-36 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
                   <div class="py-1">
                     <button onclick="updateMarkerType(${i}, 'standard')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
                       ${ICONS.standard} Standard
@@ -154,6 +156,12 @@ const updateMarkersList = () => {
                     </button>
                     <button onclick="updateMarkerType(${i}, 'loop')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
                       ${ICONS.loopType} Loop
+                    </button>
+                    <button onclick="updateMarkerType(${i}, 'in')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                      ${ICONS.inType} Set Video Start
+                    </button>
+                    <button onclick="updateMarkerType(${i}, 'out')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                      ${ICONS.outType} Set Video End
                     </button>
                   </div>
                 </div>
@@ -231,16 +239,19 @@ const updateVideoTimeSummary = () => {
 
     const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
 
-    const startTime = markers.length > 0 ? markers[0].startTime : 0;
-    
-    let endTime = 0;
-    if (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined) {
-      endTime = activeVideo.virtualEndTime;
+    const startMarker = markers.find((m) => m.type === "in" || m.type === "start");
+    processStartTime = startMarker ? startMarker.startTime : 0;
+
+    const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
+    if (endMarker) {
+      processEndTime = endMarker.startTime;
     } else if (typeof player !== "undefined" && player && player.duration) {
-      endTime = player.duration;
+      processEndTime = player.duration;
+    } else {
+      processEndTime = 0;
     }
 
-    let duration = endTime - startTime;
+    let duration = processEndTime - processStartTime;
     if (duration < 0) duration = 0;
 
     if (markers.length > 0) {
@@ -250,7 +261,7 @@ const updateVideoTimeSummary = () => {
           if (i < markers.length - 1) {
             markerDur = markers[i + 1].startTime - markers[i].startTime;
           } else {
-            markerDur = endTime - markers[i].startTime;
+            markerDur = processEndTime - markers[i].startTime;
           }
           if (markerDur > 0) {
             duration -= markerDur;

@@ -439,55 +439,7 @@ const initializePlayer = () => {
     updateMarkersList();
   }
 
-  // Setup Context Menu for Current Time
-  DOM.currentTime.addEventListener("click", (e) => {
-    if (!player.duration) return;
-    e.preventDefault();
-    const rect = e.target.getBoundingClientRect();
-    DOM.timeContextMenu.style.left = `${rect.left}px`;
-    DOM.timeContextMenu.style.top = `${rect.bottom + 5}px`;
-    DOM.timeContextMenu.classList.remove("hidden");
-  });
 
-  document.addEventListener("click", (e) => {
-    if (!DOM.timeContextMenu.contains(e.target) && e.target !== DOM.currentTime) {
-      DOM.timeContextMenu.classList.add("hidden");
-    }
-  });
-
-  DOM.setStartBtn.addEventListener("click", () => {
-    processStartTime = player.currentTime;
-    DOM.timeContextMenu.classList.add("hidden");
-
-    const invalidMarkers = markers.filter((m) => m.startTime < processStartTime);
-    if (invalidMarkers.length > 0) {
-      invalidMarkers.forEach((m) => {
-        showToast(`Marker "${m.name}" starts before Process Start Time.`, "error");
-      });
-    }
-
-    if (typeof updateVideoTimeSummary === "function") updateVideoTimeSummary();
-    saveLocalState();
-    updateSliderTicks();
-    if (typeof updateMarkersList === "function") updateMarkersList();
-  });
-
-  DOM.setEndBtn.addEventListener("click", () => {
-    processEndTime = player.currentTime;
-    DOM.timeContextMenu.classList.add("hidden");
-
-    const invalidMarkers = markers.filter((m) => m.startTime > processEndTime);
-    if (invalidMarkers.length > 0) {
-      invalidMarkers.forEach((m) => {
-        showToast(`Marker "${m.name}" starts after Process End Time.`, "error");
-      });
-    }
-
-    if (typeof updateVideoTimeSummary === "function") updateVideoTimeSummary();
-    saveLocalState();
-    updateSliderTicks();
-    if (typeof updateMarkersList === "function") updateMarkersList();
-  });
 
   const urlParams = new URLSearchParams(window.location.search);
   const videoUrl = urlParams.get("v");

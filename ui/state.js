@@ -87,9 +87,6 @@ const DOM = {
   closeMasterDataBtn: document.getElementById("closeMasterDataBtn"),
   closeMasterDataBtnX: document.getElementById("closeMasterDataBtnX"),
   statusModal: document.getElementById("statusModal"),
-  timeContextMenu: document.getElementById("timeContextMenu"),
-  setStartBtn: document.getElementById("setStartBtn"),
-  setEndBtn: document.getElementById("setEndBtn"),
 };
 
 const saveLocalState = () => {
