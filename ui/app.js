@@ -5,6 +5,7 @@ const Command = window.__TAURI__ ? window.__TAURI__.shell.Command : null;
 const writeTextFile = window.__TAURI__ && window.__TAURI__.fs ? window.__TAURI__.fs.writeTextFile : null;
 const tempdir = window.__TAURI__ && window.__TAURI__.os ? window.__TAURI__.os.tempdir : null;
 const join = window.__TAURI__ && window.__TAURI__.path ? window.__TAURI__.path.join : null;
+const openDialog = window.__TAURI__ && window.__TAURI__.dialog ? window.__TAURI__.dialog.open : null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
@@ -35,7 +36,7 @@ const renderVideoQueueSelect = () => {
   for (const [index, video] of videoQueue.entries()) {
     const option = document.createElement("option");
     option.value = index;
-    option.textContent = video.videoName;
+    option.textContent = video.videoFileName || "Unknown File";
     option.className = "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white";
     if (index === activeQueueIndex) {
       option.selected = true;
@@ -120,6 +121,41 @@ const addVideoToQueue = async () => {
       };
 
   videoQueue.push(newVideo);
+  await switchVideoInQueue(videoQueue.length - 1);
+};
+
+const addNewVideoToQueue = async () => {
+  if (!openDialog) {
+    alert("Loading local files requires the desktop app.");
+    return;
+  }
+
+  const selected = await openDialog({
+    multiple: false,
+    filters: [{ name: "Video Files", extensions: ["mp4", "mkv", "avi", "webm"] }],
+  });
+
+  if (!selected) return;
+
+  const filePath = typeof selected === "object" ? selected.path : selected;
+  if (!filePath) return;
+
+  const extractedFileName = filePath.split(/[/\\]/).pop();
+
+  const newItem = {
+    videoId: Date.now(),
+    videoName: extractedFileName,
+    videoFileName: extractedFileName,
+    videoFilePath: filePath,
+    processStartTime: 0,
+    processEndTime: 0,
+    appState: { markers: [] },
+  };
+
+  saveLocalState();
+  videoQueue.push(newItem);
+
+  renderVideoQueueSelect();
   await switchVideoInQueue(videoQueue.length - 1);
 };
 
@@ -341,7 +377,7 @@ const initializePlayer = () => {
     });
   }
   if (DOM.addVideoQueueBtn) {
-    DOM.addVideoQueueBtn.addEventListener("click", addVideoToQueue);
+    DOM.addVideoQueueBtn.addEventListener("click", addNewVideoToQueue);
   }
   if (DOM.editVideoQueueBtn) {
     DOM.editVideoQueueBtn.addEventListener("click", editVideoInQueue);
