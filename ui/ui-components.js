@@ -257,9 +257,9 @@ const updateVideoTimeSummary = () => {
     const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
     if (endMarker) {
       processEndTime = endMarker.startTime;
-    } else if (typeof player !== "undefined" && player && player.duration) {
+    } else if (typeof player !== "undefined" && player && player.duration && !preserveProcessTimes) {
       processEndTime = player.duration;
-    } else {
+    } else if (!preserveProcessTimes) {
       processEndTime = 0;
     }
 
