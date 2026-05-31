@@ -1,5 +1,5 @@
 const appWindow = window.__TAURI__?.window?.appWindow || window.__TAURI__?.window?.getCurrentWindow?.() || null;
-const Command = window.__TAURI__?.shell?.Command || null;
+const Command = window.__TAURI__?.shell?.Command || window.__TAURI__?.pluginShell?.Command || null;
 const writeTextFile = window.__TAURI__?.fs?.writeTextFile || null;
 const tempdir = window.__TAURI__?.os?.tempdir || null;
 const join = window.__TAURI__?.path?.join || null;
@@ -1455,6 +1455,21 @@ const syncMarkerToPlayhead = (markerIndex) => {
   updateMarkersList();
 };
 
+function parseFFmpegTime(line, totalSeconds, progressBar) {
+  if (!line) return;
+  const match = line.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+  if (match) {
+    const hours = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    const seconds = Number.parseFloat(match[3]);
+    const currentSeconds = hours * 3600 + minutes * 60 + seconds;
+    if (totalSeconds > 0 && progressBar) {
+      const pct = Math.floor((currentSeconds / totalSeconds) * 100);
+      progressBar.value = Math.min(100, Math.max(0, pct));
+    }
+  }
+}
+
 // Video Trimming & Compression Feature
 const initializeTrimFeature = () => {
   const isTauri = window.__TAURI__ !== undefined;
@@ -1493,6 +1508,14 @@ const initializeTrimFeature = () => {
     const spinner = document.getElementById("trimProgressSpinner");
     if (spinner) spinner.classList.add("hidden");
 
+    const batchExportToggle = document.getElementById("batchExportToggle");
+    const batchExportList = document.getElementById("batch-export-list");
+    if (batchExportToggle) batchExportToggle.checked = false;
+    if (batchExportList) {
+      batchExportList.classList.add("hidden");
+      batchExportList.innerHTML = "";
+    }
+
     if (typeof window.cleanupTetris === "function") {
       window.cleanupTetris();
     }
@@ -1507,6 +1530,41 @@ const initializeTrimFeature = () => {
     if (normalFooter) normalFooter.classList.remove("hidden");
   };
   window.resetTrimModalUI = resetTrimModalUI;
+
+  const batchExportToggle = document.getElementById("batchExportToggle");
+  const batchExportList = document.getElementById("batch-export-list");
+  if (batchExportToggle) {
+    batchExportToggle.addEventListener("change", () => {
+      if (batchExportToggle.checked) {
+        batchExportList.classList.remove("hidden");
+        renderBatchExportList();
+      } else {
+        batchExportList.classList.add("hidden");
+      }
+    });
+  }
+
+  const renderBatchExportList = () => {
+    if (!batchExportList) return;
+    batchExportList.innerHTML = "";
+    videoQueue.forEach((video, index) => {
+      const row = document.createElement("div");
+      row.className = "flex items-center justify-between gap-3 p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
+      row.innerHTML = `
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <input type="checkbox" data-index="${index}" checked class="batch-video-checkbox rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
+          <span class="font-medium truncate dark:text-zinc-300" title="${video.videoFileName || 'Unknown Video'}">${video.videoFileName || 'Unknown Video'}</span>
+        </div>
+        <div class="flex items-center gap-3 w-40 justify-end">
+          <progress id="batch-progress-${index}" value="0" max="100" class="w-24 h-1.5 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-700 accent-blue-600"></progress>
+          <div id="batch-status-${index}" class="w-5 h-5 flex items-center justify-center text-zinc-400">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>
+          </div>
+        </div>
+      `;
+      batchExportList.appendChild(row);
+    });
+  };
 
   const handleCancelClick = async () => {
     if (activeFFmpegChild) {
@@ -1667,7 +1725,305 @@ const getExportSegments = () => {
   return segmentsToKeep;
 };
 
+async function processBatchQueue(presetType) {
+  const isTauri = window.__TAURI__ !== undefined;
+  if (!isTauri) {
+    alert("Tauri desktop API is required for batch exporting.");
+    return;
+  }
+
+  const checkboxes = document.querySelectorAll(".batch-video-checkbox");
+  const checkedIndices = [];
+  checkboxes.forEach((cb) => {
+    if (cb.checked) {
+      checkedIndices.push(Number.parseInt(cb.getAttribute("data-index"), 10));
+    }
+  });
+
+  if (checkedIndices.length === 0) {
+    alert("Please select at least one video to export.");
+    return;
+  }
+
+  let outputDir = null;
+  try {
+    outputDir = await window.__TAURI__?.dialog?.open?.({
+      directory: true,
+      title: "Select Output Directory for Batch Export",
+    });
+  } catch (err) {
+    toConsole("Tauri dialog open error", err, debuggin);
+  }
+
+  if (!outputDir) {
+    toConsole("Tauri dialog cancelled by user", null, debuggin);
+    return;
+  }
+
+  const actualOutputDir = typeof outputDir === "object" ? outputDir.path : outputDir;
+
+  const trimOnlyBtn = document.getElementById("trimOnlyBtn");
+  const trimCompressBtn = document.getElementById("trimCompressBtn");
+  const cancelTrimBtn = document.getElementById("cancelTrimBtn");
+
+  if (trimOnlyBtn) trimOnlyBtn.disabled = true;
+  if (trimCompressBtn) trimCompressBtn.disabled = true;
+  if (cancelTrimBtn) {
+    cancelTrimBtn.disabled = false;
+    cancelTrimBtn.className = "btn btn-danger";
+    cancelTrimBtn.textContent = "Abort Batch";
+  }
+
+  const originalMarkers = [...markers];
+  const originalVideoFileName = videoFileName;
+  const originalVideoFilePath = videoFilePath;
+
+  isAborted = false;
+
+  try {
+    for (const index of checkedIndices) {
+      if (isAborted) break;
+
+      const video = videoQueue[index];
+      if (!video) continue;
+
+      const rowContainer = document.getElementById(`batch-status-${index}`)?.parentElement?.parentElement;
+      if (rowContainer) {
+        rowContainer.classList.add("border-blue-500", "bg-blue-50/10");
+      }
+      
+      const statusIconContainer = document.getElementById(`batch-status-${index}`);
+      if (statusIconContainer) {
+        statusIconContainer.innerHTML = `
+          <svg class="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        `;
+      }
+
+      const specificProgressBar = document.getElementById(`batch-progress-${index}`);
+      if (specificProgressBar) {
+        specificProgressBar.value = 0;
+      }
+
+      const cleanFileName = video.videoFileName || `video_${index + 1}.mp4`;
+      const defaultPath = `trimmed_${cleanFileName}`;
+      let actualOutputPath = defaultPath;
+      if (join) {
+        actualOutputPath = await join(actualOutputDir, defaultPath);
+      } else {
+        actualOutputPath = `${actualOutputDir}/${defaultPath}`;
+      }
+
+      let tempFilePath = null;
+
+      try {
+        markers = video.appState?.markers || [];
+        markers.forEach((m) => { if (!m.type) m.type = "standard"; });
+        markers.sort((a, b) => a.startTime - b.startTime);
+
+        videoFileName = video.videoFileName || "";
+        videoFilePath = video.videoFilePath || "";
+
+        const inMarker = markers.find((m) => m.type === "in");
+        const outMarker = markers.find((m) => m.type === "out");
+        const inTime = inMarker ? inMarker.startTime : 0;
+        const outTime = outMarker ? outMarker.startTime : (video.processEndTime || 0);
+
+        const segments = [];
+        let keeping = true;
+        let currentStart = inTime;
+
+        for (let i = 0; i < markers.length; i += 1) {
+          const marker = markers[i];
+          if (marker.startTime <= inTime || marker.startTime >= outTime) {
+            continue;
+          }
+          if (keeping && marker.type === "jump") {
+            segments.push({ start: currentStart, end: marker.startTime });
+            keeping = false;
+          } else if (!keeping && marker.type !== "jump") {
+            keeping = true;
+            currentStart = marker.startTime;
+          }
+        }
+        if (keeping && outTime > currentStart) {
+          segments.push({ start: currentStart, end: outTime });
+        }
+
+        if (segments.length === 0) {
+          throw new Error("No segments to export.");
+        }
+
+        const exportDuration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+
+        const safePath = video.videoFilePath.replace(/\\/g, "/");
+        let listContent = "";
+        for (const seg of segments) {
+          listContent += `file '${safePath}'\n`;
+          listContent += `inpoint ${seg.start}\n`;
+          listContent += `outpoint ${seg.end}\n`;
+        }
+
+        if (tempdir && join) {
+          const tempDir = await tempdir();
+          tempFilePath = await join(tempDir, `ffmpeg_concat_batch_${video.videoId || index}.txt`);
+        } else {
+          tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}concat_list.txt`;
+        }
+        await writeTextFile(tempFilePath, listContent);
+
+        const isCompression = presetType !== "copy";
+        const args = [
+          "-y",
+          "-nostdin",
+          "-nostats",
+          "-f",
+          "concat",
+          "-safe",
+          "0",
+          "-i",
+          tempFilePath,
+          "-progress",
+          "pipe:2",
+        ];
+
+        if (!isCompression) {
+          args.push("-c", "copy");
+        } else {
+          const targetHeight = presetType === "low" ? 720 : 1080;
+          args.push(
+            "-vf",
+            `scale=-2:${targetHeight}`,
+            "-c:v",
+            "libx264",
+            "-crf",
+            presetType === "low" ? "32" : presetType === "high" ? "18" : "26",
+            "-preset",
+            presetType === "low" ? "veryfast" : presetType === "high" ? "medium" : "fast",
+            "-threads",
+            "4",
+          );
+          args.push("-c:a", "copy", "-max_muxing_queue_size", "4096");
+        }
+        args.push(actualOutputPath);
+
+        toConsole("Spawning FFmpeg sidecar for batch item", { args }, debuggin);
+
+        if (!Command) {
+          throw new Error("Tauri Command API is not loaded.");
+        }
+
+        const ffmpeg = Command.sidecar("binaries/ffmpeg", args);
+        let ffmpegChild = null;
+
+        activeFFmpegChild = {
+          kill: async () => {
+            isAborted = true;
+            if (ffmpegChild) {
+              await ffmpegChild.kill();
+            }
+          }
+        };
+
+        const onLine = (line) => {
+          parseFFmpegTime(line, exportDuration, specificProgressBar);
+        };
+        ffmpeg.on('line', onLine);
+        if (ffmpeg.stderr) {
+          ffmpeg.stderr.on('data', onLine);
+        }
+
+        ffmpegChild = await ffmpeg.spawn();
+        const output = await ffmpeg.execute();
+        if (output.code !== 0) {
+          throw new Error(`FFmpeg exited with code ${output.code}`);
+        }
+
+        if (specificProgressBar) {
+          specificProgressBar.value = 100;
+          specificProgressBar.classList.add("opacity-50");
+        }
+
+        if (statusIconContainer) {
+          statusIconContainer.innerHTML = `
+            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          `;
+        }
+
+        const remapTime = (t, segs) => {
+          let newTime = 0;
+          for (let i = 0; i < segs.length; i++) {
+            const seg = segs[i];
+            if (t < seg.start) {
+              break;
+            }
+            if (t >= seg.start && t <= seg.end) {
+              newTime += (t - seg.start);
+              break;
+            }
+            newTime += (seg.end - seg.start);
+          }
+          return newTime;
+        };
+
+        const currentMarkers = video.appState?.markers || [];
+        const remappedMarkers = [];
+        for (const m of currentMarkers) {
+          if (m.type === "in" || m.type === "out" || m.type === "jump") continue;
+          const newStart = remapTime(m.startTime, segments);
+          remappedMarkers.push({
+            ...m,
+            startTime: newStart,
+          });
+        }
+
+        video.appState.markers = remappedMarkers;
+        video.processStartTime = 0;
+        video.processEndTime = exportDuration;
+        
+      } catch (fileErr) {
+        toConsole("Batch item processing failed", fileErr, debuggin);
+        if (statusIconContainer) {
+          statusIconContainer.innerHTML = `
+            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          `;
+        }
+      } finally {
+        if (rowContainer) {
+          rowContainer.classList.remove("border-blue-500", "bg-blue-50/10");
+        }
+      }
+    }
+
+    saveLocalState();
+    markers = videoQueue[activeQueueIndex]?.appState?.markers || [];
+    updateMarkersList();
+
+    if (isAborted) {
+      showToast("Batch processing aborted.", "warning");
+    } else {
+      showToast("Batch export completed!", "success");
+    }
+
+  } finally {
+    markers = originalMarkers;
+    videoFileName = originalVideoFileName;
+    videoFilePath = originalVideoFilePath;
+    resetTrimModalUI();
+  }
+}
+
 async function executeExport(presetType) {
+  const batchExportToggle = document.getElementById("batchExportToggle");
+  const batchMode = batchExportToggle ? batchExportToggle.checked : false;
+
+  if (batchMode) {
+    await processBatchQueue(presetType);
+    return;
+  }
+
   if (!videoFilePath) {
     alert("Please load a video file first.");
     return;
