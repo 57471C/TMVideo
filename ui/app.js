@@ -1190,7 +1190,17 @@ const seektimeupdate = () => {
 };
 
 const updateSliderTicks = () => {
-  if (!player?.duration || !DOM.startTick || !DOM.endTick) return;
+  if (!DOM.startTick || !DOM.endTick) return;
+
+  if (DOM.markerTicksContainer) {
+    DOM.markerTicksContainer.innerHTML = "";
+  }
+  DOM.startTick.classList.add("hidden");
+  if (DOM.startGreyOut) DOM.startGreyOut.classList.add("hidden");
+  DOM.endTick.classList.add("hidden");
+  if (DOM.endGreyOut) DOM.endGreyOut.classList.add("hidden");
+
+  if (!player?.duration) return;
 
   if (processStartTime > 0) {
     const startPct = (processStartTime / player.duration) * 100;
@@ -1200,9 +1210,6 @@ const updateSliderTicks = () => {
       DOM.startGreyOut.style.width = `${startPct}%`;
       DOM.startGreyOut.classList.remove("hidden");
     }
-  } else {
-    DOM.startTick.classList.add("hidden");
-    if (DOM.startGreyOut) DOM.startGreyOut.classList.add("hidden");
   }
 
   if (processEndTime > 0 && processEndTime < player.duration) {
