@@ -1,6 +1,4 @@
-const appWindow = window.__TAURI__
-  ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
-  : null;
+const appWindow = window.__TAURI__ ? window.__TAURI__.window.appWindow : null;
 let isCinemaMode = false;
 let player;
 let loadVideoButton;
@@ -231,13 +229,6 @@ const takeSnapshot = () => {
 
 const toggleCinemaMode = async () => {
   isCinemaMode = !isCinemaMode;
-  if (appWindow) {
-    try {
-      await appWindow.setFullscreen(isCinemaMode);
-    } catch (e) {
-      toConsole("Error setting fullscreen via Tauri", e, debuggin);
-    }
-  }
 
   const grid = document.getElementById("mainLayoutGrid");
   const rightPanel = document.getElementById("rightPanel");
@@ -252,6 +243,16 @@ const toggleCinemaMode = async () => {
       grid.classList.add("lg:grid-cols-2");
       grid.classList.remove("lg:grid-cols-1");
     }
+  }
+
+  if (appWindow) {
+    try {
+      await appWindow.setFullscreen(isCinemaMode);
+    } catch (e) {
+      toConsole("Error setting fullscreen via Tauri", e, debuggin);
+    }
+  } else {
+    console.log("Standard browser detected: Skipping OS fullscreen. CSS layout applied.");
   }
   toConsole("Cinema mode toggled", isCinemaMode, debuggin);
 };
