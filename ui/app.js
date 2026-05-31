@@ -96,6 +96,80 @@ const switchVideoInQueue = async (index) => {
   updateSliderTicks();
 };
 
+const removeCurrentVideo = async () => {
+  if (videoQueue.length === 0) return;
+
+  const confirmRemove = await asyncConfirm(
+    "Are you sure you want to remove this video from the project?",
+    "Remove Video"
+  );
+  if (!confirmRemove) return;
+
+  videoQueue.splice(activeQueueIndex, 1);
+
+  if (videoQueue.length === 0) {
+    activeQueueIndex = 0;
+    videoFileName = "";
+    videoFilePath = "";
+    processStartTime = 0;
+    processEndTime = 0;
+    markers = [];
+    
+    player.src = "";
+    player.removeAttribute("src");
+    toggleVideoPlaceholder(true);
+    DOM.videoPlaceholder.textContent = "Load a video to get started";
+    
+    renderVideoQueueSelect();
+    updateMarkersList();
+    updateSliderTicks();
+    saveLocalState();
+    showToast("Video removed from queue.", "info");
+  } else {
+    if (activeQueueIndex >= videoQueue.length) {
+      activeQueueIndex = videoQueue.length - 1;
+    }
+    
+    const currentVideo = videoQueue[activeQueueIndex];
+    videoFileName = currentVideo.videoFileName || "";
+    videoFilePath = currentVideo.videoFilePath || "";
+    processStartTime = currentVideo.processStartTime || 0;
+    processEndTime = currentVideo.processEndTime || 0;
+    markers = currentVideo.appState?.markers || [];
+    for (const m of markers) {
+      if (!m.type) m.type = "standard";
+    }
+
+    renderVideoQueueSelect();
+    updateMarkersList();
+    
+    player.pause();
+    const isTauri = window.__TAURI__ !== undefined;
+    if (isTauri && videoFilePath) {
+      const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+      player.src = tauriAssetUrl;
+      player.preload = "auto";
+      toggleVideoPlaceholder(false);
+    } else if (videoFileName && videoBlobCache[videoFileName]) {
+      player.src = videoBlobCache[videoFileName];
+      player.preload = "metadata";
+      toggleVideoPlaceholder(false);
+    } else {
+      player.src = "";
+      player.removeAttribute("src");
+      DOM.videoPlaceholder.textContent = videoFileName
+        ? `Video switched. Click here to locate video: ${videoFileName}`
+        : "Load a video to get started";
+      toggleVideoPlaceholder(true);
+    }
+    updateLoadButtonColor();
+    updateSliderTicks();
+    saveLocalState();
+    showToast(`Switched to: ${currentVideo.videoName}`, "success");
+  }
+};
+window.removeCurrentVideo = removeCurrentVideo;
+
 const addVideoToQueue = async () => {
   const videoName = await asyncPrompt("Enter a name for the new video:", `Video ${videoQueue.length + 1}`, "New Video");
   if (!videoName) return;
