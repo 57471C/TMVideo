@@ -2,6 +2,9 @@ const appWindow = window.__TAURI__
   ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
   : null;
 const Command = window.__TAURI__ ? window.__TAURI__.shell.Command : null;
+const writeTextFile = window.__TAURI__ ? window.__TAURI__.fs.writeTextFile : null;
+const tempdir = window.__TAURI__ ? window.__TAURI__.os.tempdir : null;
+const join = window.__TAURI__ ? window.__TAURI__.path.join : null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
@@ -1577,13 +1580,48 @@ const initializeTrimFeature = () => {
   }
 };
 
-const getExportBoundaries = () => {
+const getExportSegments = () => {
+  // 1. Sort all markers by startTime
+  markers.sort((a, b) => a.startTime - b.startTime);
+
+  // 2. Find the global inTime and outTime
   const inMarker = markers.find((m) => m.type === "in");
   const outMarker = markers.find((m) => m.type === "out");
-  const startTime = inMarker ? inMarker.startTime : 0;
-  const endTime = outMarker ? outMarker.startTime : (player && player.duration ? player.duration : 0);
-  const duration = Math.max(0, endTime - startTime);
-  return { startTime, duration };
+  const inTime = inMarker ? inMarker.startTime : 0;
+  const outTime = outMarker ? outMarker.startTime : (player && player.duration ? player.duration : 0);
+
+  // 3. Initialize segmentsToKeep
+  const segmentsToKeep = [];
+
+  // 4. Initialize state
+  let keeping = true;
+  let currentStart = inTime;
+
+  // 5. Iterate through markers strictly between inTime and outTime
+  for (let i = 0; i < markers.length; i += 1) {
+    const marker = markers[i];
+    if (marker.startTime <= inTime || marker.startTime >= outTime) {
+      continue;
+    }
+
+    // 6. If keeping is true AND marker type is 'jump': Push segment, set keeping = false
+    if (keeping && marker.type === "jump") {
+      segmentsToKeep.push({ start: currentStart, end: marker.startTime });
+      keeping = false;
+    } else if (!keeping && marker.type !== "jump") {
+      // 7. If keeping is false AND marker type is NOT 'jump': Set keeping = true, set currentStart
+      keeping = true;
+      currentStart = marker.startTime;
+    }
+  }
+
+  // 8. After the loop, if keeping is true, push the final segment
+  if (keeping) {
+    segmentsToKeep.push({ start: currentStart, end: outTime });
+  }
+
+  // 9. Return segmentsToKeep
+  return segmentsToKeep;
 };
 
 async function executeExport(presetType) {
@@ -1591,10 +1629,6 @@ async function executeExport(presetType) {
     alert("Please load a video file first.");
     return;
   }
-
-  const { startTime, duration } = getExportBoundaries();
-  const endTime = startTime + duration;
-  const isCompression = presetType !== "copy";
 
   const trimOnlyBtn = document.getElementById("trimOnlyBtn");
   const trimCompressBtn = document.getElementById("trimCompressBtn");
@@ -1610,179 +1644,158 @@ async function executeExport(presetType) {
     trimCompressBtn.disabled = true;
   }
 
-  try {
-    // Delegate to the robust processVideo function which runs the sidecar through Rust run_ffmpeg wrapper
-    await processVideo(startTime, endTime, presetType, isCompression);
-  } catch (error) {
-    toConsole("Export failed", error, debuggin);
-    // processVideo already alerts on error except user cancel/abort
-  } finally {
-    if (trimOnlyBtn) {
-      trimOnlyBtn.textContent = originalTrimOnlyText;
-      trimOnlyBtn.disabled = false;
-    }
-    if (trimCompressBtn) {
-      trimCompressBtn.textContent = originalTrimCompressText;
-      trimCompressBtn.disabled = false;
-    }
-  }
-}
-
-const processVideo = async (start, end, qualityMode, isCompression) => {
   isAborted = false;
-  if (!videoFilePath) {
-    toConsole("processVideo abort: No active video file path found", null, debuggin);
-    alert("No active video file path found.");
-    return;
-  }
-
-  const defaultPath = `trimmed_${videoFileName || "video.mp4"}`;
-  toConsole("Opening Tauri save dialog...", { defaultPath }, debuggin);
-  
-  let outputPath;
-  try {
-    outputPath = await window.__TAURI__.dialog.save({
-      filters: [{ name: "Video", extensions: ["mp4", "webm", "mov", "avi"] }],
-      defaultPath: defaultPath,
-    });
-  } catch (err) {
-    toConsole("Tauri save dialog error", err, debuggin);
-    throw err;
-  }
-
-  if (!outputPath) {
-    toConsole("Tauri save dialog cancelled by user", null, debuggin);
-    throw new Error("Save location was not specified.");
-  }
-
-  const actualOutputPath = typeof outputPath === "object" ? outputPath.path : outputPath;
-  toConsole("Save path selected", actualOutputPath, debuggin);
-
-  if (videoFilePath && actualOutputPath && videoFilePath.toLowerCase() === actualOutputPath.toLowerCase()) {
-    toConsole("processVideo abort: Input and output paths are identical", actualOutputPath, debuggin);
-    throw new Error("Input and output paths are identical.");
-  }
-
-  // Build FFmpeg args.
-  //
-  // Key insight: The Tauri plugin-shell Rust backend reads stderr via BufReader::lines()
-  // which only yields data events on \n. FFmpeg's human-readable stats use \r (no \n)
-  // so they NEVER trigger data events — they accumulate in Tokio's buffer silently.
-  //
-  // Fix: -nostats suppresses the \r-only stats entirely.
-  //       -progress pipe:2 writes \n-terminated key=value progress to stderr fd 2.
-  //       These lines ARE delivered by BufReader::lines() as reliable data events.
-  //
-  // -ss AFTER -i performs sequential seeking, which is 100% reliable and avoids
-  //   startup hangs on files with broken index structures.
-  // -t specifies duration, which is more robust and standard than -to when seeking.
-  const args = [
-    "-y",
-    "-nostdin",
-    "-nostats",
-    "-i", videoFilePath,
-    "-ss", start.toString(),
-    "-t", (end - start).toString(),
-    "-progress", "pipe:2"
-  ];
-
-  if (!isCompression) {
-    args.push("-c", "copy");
-  } else {
-    const inputHeight = player.videoHeight || 0;
-    let targetHeight = 1080;
-    if (qualityMode === "low") {
-      targetHeight = 720;
-    }
-    // Avoid upscaling: if input height is smaller, use it
-    if (inputHeight > 0 && inputHeight < targetHeight) {
-      targetHeight = inputHeight;
-    }
-
-    // Limit CPU threads to 4 to prevent thread/CPU starvation of the Tauri host IPC.
-    // Use -max_muxing_queue_size 4096 and -c:a copy to prevent audio/video muxing deadlocks.
-    if (qualityMode === "low") {
-      args.push(
-        "-vf", `scale=-2:${targetHeight}`,
-        "-c:v", "libx264",
-        "-crf", "32",
-        "-preset", "veryfast",
-        "-threads", "4"
-      );
-    } else if (qualityMode === "high") {
-      args.push(
-        "-vf", `scale=-2:${targetHeight}`,
-        "-c:v", "libx264",
-        "-crf", "18",
-        "-preset", "medium",
-        "-threads", "4"
-      );
-    } else {
-      args.push(
-        "-vf", `scale=-2:${targetHeight}`,
-        "-c:v", "libx264",
-        "-crf", "26",
-        "-preset", "fast",
-        "-threads", "4"
-      );
-    }
-    args.push("-c:a", "copy", "-max_muxing_queue_size", "4096");
-  }
-
-  args.push(actualOutputPath);
-  toConsole("Spawning FFmpeg with args", args, debuggin);
-
-  const trimModal = document.getElementById("trimModal");
-  const progressContainer = document.getElementById("trimProgressContainer");
-  const progressBar = document.getElementById("trimProgressBar");
-  const progressText = document.getElementById("trimProgressText");
-  const spinner = document.getElementById("trimProgressSpinner");
-
-  progressContainer.classList.remove("hidden");
-  if (spinner) spinner.classList.remove("hidden");
-  progressBar.style.width = "0%";
-  progressText.textContent = "0%";
-
-  const duration = end - start;
-  const stderrLogs = [];
-  let lastPct = -1;
-
   let watchdogTimer = null;
-  const WATCHDOG_MS = 30_000;
-  const resetWatchdog = () => {
-    clearTimeout(watchdogTimer);
-    watchdogTimer = setTimeout(async () => {
-      toConsole("FFmpeg watchdog: no progress for 30s — aborting", null, debuggin);
-      isAborted = true;
-      try {
-        await window.__TAURI__.core.invoke("abort_ffmpeg");
-        toConsole("FFmpeg watchdog kill: success", null, debuggin);
-      } catch (killErr) {
-        toConsole("FFmpeg watchdog kill: failed", killErr, debuggin);
-      }
-    }, WATCHDOG_MS);
-  };
-
-  // Start watchdog immediately
-  resetWatchdog();
-
-  // Create activeFFmpegChild wrapper compatibility layer
-  activeFFmpegChild = {
-    kill: async () => {
-      try {
-        await window.__TAURI__.core.invoke("abort_ffmpeg");
-      } catch (e) {
-        toConsole("Error aborting ffmpeg via invoke", e, debuggin);
-      }
-    },
-  };
-
   let unlistenStderr = null;
+  const stderrLogs = [];
+
   try {
-    // Listen for progress events emitted from the Rust backend
+    const segments = getExportSegments();
+    if (segments.length === 0) {
+      throw new Error("No segments to export.");
+    }
+
+    const defaultPath = `trimmed_${videoFileName || "video.mp4"}`;
+    toConsole("Opening Tauri save dialog...", { defaultPath }, debuggin);
+
+    let outputPath;
+    try {
+      outputPath = await window.__TAURI__.dialog.save({
+        filters: [{ name: "Video", extensions: ["mp4", "webm", "mov", "avi"] }],
+        defaultPath: defaultPath,
+      });
+    } catch (err) {
+      toConsole("Tauri save dialog error", err, debuggin);
+      throw err;
+    }
+
+    if (!outputPath) {
+      toConsole("Tauri save dialog cancelled by user", null, debuggin);
+      throw new Error("Save location was not specified.");
+    }
+
+    const actualOutputPath = typeof outputPath === "object" ? outputPath.path : outputPath;
+    toConsole("Save path selected", actualOutputPath, debuggin);
+
+    if (videoFilePath && actualOutputPath && videoFilePath.toLowerCase() === actualOutputPath.toLowerCase()) {
+      toConsole("executeExport abort: Input and output paths are identical", actualOutputPath, debuggin);
+      throw new Error("Input and output paths are identical.");
+    }
+
+    // Map input video path to use forward slashes (FFmpeg concat demuxer preference)
+    const safePath = videoFilePath.replace(/\\/g, "/");
+
+    // Build the demuxer list string
+    let listContent = "";
+    for (const seg of segments) {
+      listContent += `file '${safePath}'\n`;
+      listContent += `inpoint ${seg.start}\n`;
+      listContent += `outpoint ${seg.end}\n`;
+    }
+
+    // Write the list file to tempdir
+    const tempDir = await tempdir();
+    const tempFilePath = await join(tempDir, "ffmpeg_concat_list.txt");
+    await writeTextFile(tempFilePath, listContent);
+
+    // Build FFmpeg args
+    const isCompression = presetType !== "copy";
+    const args = [
+      "-y",
+      "-nostdin",
+      "-nostats",
+      "-f", "concat",
+      "-safe", "0",
+      "-i", tempFilePath,
+      "-progress", "pipe:2"
+    ];
+
+    if (!isCompression) {
+      args.push("-c", "copy");
+    } else {
+      const inputHeight = player.videoHeight || 0;
+      let targetHeight = 1080;
+      if (presetType === "low") {
+        targetHeight = 720;
+      }
+      if (inputHeight > 0 && inputHeight < targetHeight) {
+        targetHeight = inputHeight;
+      }
+
+      if (presetType === "low") {
+        args.push(
+          "-vf", `scale=-2:${targetHeight}`,
+          "-c:v", "libx264",
+          "-crf", "32",
+          "-preset", "veryfast",
+          "-threads", "4"
+        );
+      } else if (presetType === "high") {
+        args.push(
+          "-vf", `scale=-2:${targetHeight}`,
+          "-c:v", "libx264",
+          "-crf", "18",
+          "-preset", "medium",
+          "-threads", "4"
+        );
+      } else {
+        args.push(
+          "-vf", `scale=-2:${targetHeight}`,
+          "-c:v", "libx264",
+          "-crf", "26",
+          "-preset", "fast",
+          "-threads", "4"
+        );
+      }
+      args.push("-c:a", "copy", "-max_muxing_queue_size", "4096");
+    }
+
+    args.push(actualOutputPath);
+    toConsole("Spawning FFmpeg with args", args, debuggin);
+
+    const trimModal = document.getElementById("trimModal");
+    const progressContainer = document.getElementById("trimProgressContainer");
+    const progressBar = document.getElementById("trimProgressBar");
+    const progressText = document.getElementById("trimProgressText");
+    const spinner = document.getElementById("trimProgressSpinner");
+
+    progressContainer.classList.remove("hidden");
+    if (spinner) spinner.classList.remove("hidden");
+    progressBar.style.width = "0%";
+    progressText.textContent = "0%";
+
+    const duration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+    let lastPct = -1;
+
+    const WATCHDOG_MS = 30_000;
+    const resetWatchdog = () => {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = setTimeout(async () => {
+        toConsole("FFmpeg watchdog: no progress for 30s — aborting", null, debuggin);
+        isAborted = true;
+        try {
+          await window.__TAURI__.core.invoke("abort_ffmpeg");
+          toConsole("FFmpeg watchdog kill: success", null, debuggin);
+        } catch (killErr) {
+          toConsole("FFmpeg watchdog kill: failed", killErr, debuggin);
+        }
+      }, WATCHDOG_MS);
+    };
+
+    resetWatchdog();
+
+    activeFFmpegChild = {
+      kill: async () => {
+        try {
+          await window.__TAURI__.core.invoke("abort_ffmpeg");
+        } catch (e) {
+          toConsole("Error aborting ffmpeg via invoke", e, debuggin);
+        }
+      },
+    };
+
     unlistenStderr = await window.__TAURI__.event.listen("ffmpeg-stderr", (event) => {
       const line = event.payload || "";
-      // Filter out progress key=value spam from console logging to prevent IPC backpressure/deadlock.
       const isProgressSpam =
         line.includes("=") &&
         (line.startsWith("frame=") ||
@@ -1804,10 +1817,9 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
         stderrLogs.shift();
       }
 
-      // Match out_time_us (standard FFmpeg microsecond progress) anywhere in the chunk.
       const match = line.match(/out_time_us=(\d+)/);
       if (match) {
-        resetWatchdog(); // reset 30s timer on every progress tick
+        resetWatchdog();
         const val = Number.parseInt(match[1], 10);
         const currentSeconds = val / 1_000_000;
         if (duration > 0) {
@@ -1828,22 +1840,44 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
     toConsole("Spawning FFmpeg sidecar process via Rust backend...", null, debuggin);
     await window.__TAURI__.core.invoke("run_ffmpeg", { args });
 
-    // Ensure progress shows 100% on success
     progressBar.style.width = "100%";
     progressText.textContent = "100%";
 
-    // Hide spinner immediately so it stops spinning
     if (spinner) spinner.classList.add("hidden");
 
-    for (let i = 0; i < markers.length; i += 1) {
-      markers[i].startTime = markers[i].startTime - start;
-      if (markers[i].endTime) {
-        markers[i].endTime = markers[i].endTime - start;
+    // Remap remaining bookmark/marker timestamps to account for physically removed segments
+    const remapTime = (t, segs) => {
+      let newTime = 0;
+      for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        if (t < seg.start) {
+          return newTime;
+        }
+        if (t >= seg.start && t <= seg.end) {
+          return newTime + (t - seg.start);
+        }
+        newTime += (seg.end - seg.start);
       }
+      return newTime;
+    };
+
+    const updatedMarkers = [];
+    for (let i = 0; i < markers.length; i += 1) {
+      const marker = markers[i];
+      if (marker.type === "jump") {
+        continue;
+      }
+      marker.startTime = remapTime(marker.startTime, segments);
+      if (marker.endTime) {
+        marker.endTime = remapTime(marker.endTime, segments);
+      }
+      updatedMarkers.push(marker);
     }
+    markers.length = 0;
+    markers.push(...updatedMarkers);
 
     processStartTime = 0;
-    processEndTime = end - start;
+    processEndTime = duration;
 
     videoFilePath = actualOutputPath;
     videoFileName = actualOutputPath.replace(/^.*[\\\/]/, "");
@@ -1863,13 +1897,9 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
       tetrisCont &&
       !tetrisCont.classList.contains("hidden")
     ) {
-      // In Tetris mode, we can show the toast immediately since the game is visible, 
-      // but wait, it might still be behind the backdrop if the dialog top layer is active.
-      // We will show it anyway.
       showToast("Video completed.", "success");
       window.onVideoProcessingFinished();
     } else {
-      // Close the modal first
       trimModal.classList.remove("opacity-100", "scale-100");
       trimModal.classList.add("opacity-0", "scale-95");
       await new Promise((r) => setTimeout(r, 300));
@@ -1878,10 +1908,8 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
         window.resetTrimModalUI();
       }
 
-      // Show toast after the modal is closed and backdrop is gone
       showToast("Video completed.", "success");
 
-      // Show confirm prompt after modal is completely gone
       const saveConfirm = await asyncConfirm("Timestamps shifted. Save project changes now?", "Save Project");
       if (saveConfirm) {
         await exportToJSON(false);
@@ -1890,17 +1918,24 @@ const processVideo = async (start, end, qualityMode, isCompression) => {
   } catch (err) {
     toConsole("FFmpeg process failed or aborted", err, debuggin);
     if (isAborted) {
-      throw new Error("Aborted by user");
+      alert("Export aborted by user.");
+    } else {
+      const fullErrLogs = stderrLogs ? stderrLogs.join("\n") : "";
+      alert(`Export failed: ${err.message || err}\n\nFFmpeg Logs:\n${fullErrLogs || "(no stderr output)"}`);
     }
-    const fullErrLogs = stderrLogs.join("\n");
-    throw new Error(
-      `${err.message || err}\n\nFFmpeg Logs:\n${fullErrLogs || "(no stderr output)"}`
-    );
   } finally {
     clearTimeout(watchdogTimer);
     activeFFmpegChild = null;
     if (unlistenStderr) {
       unlistenStderr();
     }
+    if (trimOnlyBtn) {
+      trimOnlyBtn.textContent = originalTrimOnlyText;
+      trimOnlyBtn.disabled = false;
+    }
+    if (trimCompressBtn) {
+      trimCompressBtn.textContent = originalTrimCompressText;
+      trimCompressBtn.disabled = false;
+    }
   }
-};
+}
