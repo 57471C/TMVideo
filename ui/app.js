@@ -2,9 +2,9 @@ const appWindow = window.__TAURI__
   ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
   : null;
 const Command = window.__TAURI__ ? window.__TAURI__.shell.Command : null;
-const writeTextFile = window.__TAURI__ ? window.__TAURI__.fs.writeTextFile : null;
-const tempdir = window.__TAURI__ ? window.__TAURI__.os.tempdir : null;
-const join = window.__TAURI__ ? window.__TAURI__.path.join : null;
+const writeTextFile = window.__TAURI__ && window.__TAURI__.fs ? window.__TAURI__.fs.writeTextFile : null;
+const tempdir = window.__TAURI__ && window.__TAURI__.os ? window.__TAURI__.os.tempdir : null;
+const join = window.__TAURI__ && window.__TAURI__.path ? window.__TAURI__.path.join : null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
@@ -1647,6 +1647,7 @@ async function executeExport(presetType) {
   isAborted = false;
   let watchdogTimer = null;
   let unlistenStderr = null;
+  let tempFilePath = null;
   const stderrLogs = [];
 
   try {
@@ -1693,9 +1694,13 @@ async function executeExport(presetType) {
       listContent += `outpoint ${seg.end}\n`;
     }
 
-    // Write the list file to tempdir
-    const tempDir = await tempdir();
-    const tempFilePath = await join(tempDir, "ffmpeg_concat_list.txt");
+    // Write the list file to tempdir (or fallback to output dir if os/path plugins are not loaded)
+    if (tempdir && join) {
+      const tempDir = await tempdir();
+      tempFilePath = await join(tempDir, "ffmpeg_concat_list.txt");
+    } else {
+      tempFilePath = actualOutputPath.substring(0, actualOutputPath.lastIndexOf(".")) + "_concat_list.txt";
+    }
     await writeTextFile(tempFilePath, listContent);
 
     // Build FFmpeg args
@@ -1928,6 +1933,17 @@ async function executeExport(presetType) {
     activeFFmpegChild = null;
     if (unlistenStderr) {
       unlistenStderr();
+    }
+    if (tempFilePath && window.__TAURI__ && window.__TAURI__.fs) {
+      try {
+        if (typeof window.__TAURI__.fs.remove === "function") {
+          await window.__TAURI__.fs.remove(tempFilePath);
+        } else if (typeof window.__TAURI__.fs.removeFile === "function") {
+          await window.__TAURI__.fs.removeFile(tempFilePath);
+        }
+      } catch (e) {
+        toConsole("Failed to remove temp file", e, debuggin);
+      }
     }
     if (trimOnlyBtn) {
       trimOnlyBtn.textContent = originalTrimOnlyText;
