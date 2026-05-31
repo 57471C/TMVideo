@@ -1306,6 +1306,26 @@ const jumpToMarkerTime = (markerIndexOrTime, type) => {
   }
 };
 
+const playFromMarkerTime = (markerIndexOrTime, type) => {
+  if (!player.src) {
+    alert("Please load a video first.");
+    return;
+  }
+  let time;
+  if (type === undefined) {
+    time = Number.parseFloat(markerIndexOrTime);
+  } else {
+    const marker = markers[markerIndexOrTime];
+    if (!marker) return;
+    time = type === "start" ? marker.startTime : marker.endTime;
+  }
+  if (time !== undefined && time !== null) {
+    player.currentTime = time;
+    player.play();
+    toConsole("Playing from marker time", time, debuggin);
+  }
+};
+
 const syncMarkerToPlayhead = (markerIndex) => {
   if (!player.src) {
     alert("Please load a video first.");
