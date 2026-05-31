@@ -70,6 +70,7 @@ const DOM = {
   zoomOut: document.getElementById("zoomOut"),
   resetZoom: document.getElementById("resetZoom"),
   takeSnapshotBtn: document.getElementById("takeSnapshotBtn"),
+  toggleCinemaBtn: document.getElementById("toggleCinemaBtn"),
   projectNameInput: document.getElementById("projectNameInput"),
   videoQueueSelect: document.getElementById("videoQueueSelect"),
   addVideoQueueBtn: document.getElementById("addVideoQueueBtn"),

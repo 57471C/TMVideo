@@ -1,3 +1,7 @@
+const appWindow = window.__TAURI__
+  ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
+  : null;
+let isCinemaMode = false;
 let player;
 let loadVideoButton;
 let addMarkerBtn;
@@ -223,6 +227,33 @@ const takeSnapshot = () => {
     toConsole("Failed to take snapshot", error, debuggin);
     showToast("Error taking snapshot.", "error");
   }
+};
+
+const toggleCinemaMode = async () => {
+  isCinemaMode = !isCinemaMode;
+  if (appWindow) {
+    try {
+      await appWindow.setFullscreen(isCinemaMode);
+    } catch (e) {
+      toConsole("Error setting fullscreen via Tauri", e, debuggin);
+    }
+  }
+
+  const grid = document.getElementById("mainLayoutGrid");
+  const rightPanel = document.getElementById("rightPanel");
+
+  if (grid && rightPanel) {
+    if (isCinemaMode) {
+      rightPanel.classList.add("hidden");
+      grid.classList.remove("lg:grid-cols-2");
+      grid.classList.add("lg:grid-cols-1");
+    } else {
+      rightPanel.classList.remove("hidden");
+      grid.classList.add("lg:grid-cols-2");
+      grid.classList.remove("lg:grid-cols-1");
+    }
+  }
+  toConsole("Cinema mode toggled", isCinemaMode, debuggin);
 };
 
 const initializePlayer = () => {
@@ -739,6 +770,9 @@ const initializePlayer = () => {
   if (DOM.takeSnapshotBtn) {
     DOM.takeSnapshotBtn.addEventListener("click", takeSnapshot);
   }
+  if (DOM.toggleCinemaBtn) {
+    DOM.toggleCinemaBtn.addEventListener("click", toggleCinemaMode);
+  }
 
   marqueeOverlay.addEventListener("mousedown", startMarquee);
   marqueeOverlay.addEventListener("mousemove", drawMarquee);
@@ -767,6 +801,10 @@ const initializePlayer = () => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
 
     switch (e.key) {
+      case "\\":
+        e.preventDefault();
+        toggleCinemaMode();
+        break;
       case " ":
         e.preventDefault();
         if (!player.src) return;
