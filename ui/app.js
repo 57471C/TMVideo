@@ -1587,43 +1587,14 @@ const getExportBoundaries = () => {
 };
 
 async function executeExport(presetType) {
-  if (!Command) {
-    alert("Exporting requires the native desktop application.");
-    return;
-  }
   if (!videoFilePath) {
     alert("Please load a video file first.");
     return;
   }
 
   const { startTime, duration } = getExportBoundaries();
-  
-  const dotIdx = videoFilePath.lastIndexOf(".");
-  const outputFilePath = dotIdx !== -1 
-    ? `${videoFilePath.substring(0, dotIdx)}_export.mp4` 
-    : `${videoFilePath}_export.mp4`;
-
-  const args = [
-    "-ss", startTime.toString(),
-    "-i", videoFilePath,
-    "-t", duration.toString()
-  ];
-
-  if (presetType === "copy") {
-    args.push("-c", "copy");
-  } else {
-    const targetHeight = presetType === "low" ? 720 : 1080;
-    args.push(
-      "-vf", `scale=-2:${targetHeight}`,
-      "-c:v", "libx264",
-      "-crf", presetType === "low" ? "32" : presetType === "high" ? "18" : "26",
-      "-preset", presetType === "low" ? "veryfast" : presetType === "high" ? "medium" : "fast",
-      "-threads", "4",
-      "-c:a", "copy",
-      "-max_muxing_queue_size", "4096"
-    );
-  }
-  args.push(outputFilePath);
+  const endTime = startTime + duration;
+  const isCompression = presetType !== "copy";
 
   const trimOnlyBtn = document.getElementById("trimOnlyBtn");
   const trimCompressBtn = document.getElementById("trimCompressBtn");
@@ -1640,29 +1611,11 @@ async function executeExport(presetType) {
   }
 
   try {
-    toConsole("Spawning FFmpeg sidecar via JS Command API", { args }, debuggin);
-    const ffmpeg = Command.sidecar("binaries/ffmpeg", args);
-    const output = await ffmpeg.execute();
-
-    if (output.code === 0) {
-      showToast("Export completed successfully.", "success");
-      // Close the modal
-      const trimModal = document.getElementById("trimModal");
-      if (trimModal) {
-        trimModal.classList.remove("opacity-100", "scale-100");
-        trimModal.classList.add("opacity-0", "scale-95");
-        await new Promise((r) => setTimeout(r, 300));
-        trimModal.close();
-      }
-      if (typeof window.resetTrimModalUI === "function") {
-        window.resetTrimModalUI();
-      }
-    } else {
-      throw new Error(`FFmpeg process exited with code ${output.code}`);
-    }
+    // Delegate to the robust processVideo function which runs the sidecar through Rust run_ffmpeg wrapper
+    await processVideo(startTime, endTime, presetType, isCompression);
   } catch (error) {
     toConsole("Export failed", error, debuggin);
-    alert(`Export failed: ${error.message || error}`);
+    // processVideo already alerts on error except user cancel/abort
   } finally {
     if (trimOnlyBtn) {
       trimOnlyBtn.textContent = originalTrimOnlyText;

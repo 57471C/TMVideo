@@ -238,7 +238,8 @@ const updateMarkersList = () => {
 
 const updateVideoTimeSummary = () => {
   try {
-    if (!DOM.markersTableFoot) {
+    const footer = document.getElementById("markersTableFoot");
+    if (!footer) {
       toConsole("updateVideoTimeSummary skipped", "markersTableFoot is null", debuggin);
       return;
     }
@@ -277,11 +278,11 @@ const updateVideoTimeSummary = () => {
     }
     if (duration < 0) duration = 0;
 
-    const formattedStartTime = formatTimeToHHMMSSMS(startTime);
-    const formattedEndTime = formatTimeToHHMMSSMS(endTime);
+    const formattedStartTime = formatTimeToHHMMSSMS(processStartTime);
+    const formattedEndTime = formatTimeToHHMMSSMS(processEndTime);
     const formattedDuration = formatTimeToHHMMSSMS(duration);
 
-    DOM.markersTableFoot.innerHTML = `
+    footer.innerHTML = `
       <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 w-full py-1 text-sm font-medium">
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
           <span>Video Start Time:</span>
