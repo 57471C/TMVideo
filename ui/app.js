@@ -1,11 +1,9 @@
-const appWindow = window.__TAURI__
-  ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
-  : null;
-const Command = window.__TAURI__ ? window.__TAURI__.shell.Command : null;
-const writeTextFile = window.__TAURI__ && window.__TAURI__.fs ? window.__TAURI__.fs.writeTextFile : null;
-const tempdir = window.__TAURI__ && window.__TAURI__.os ? window.__TAURI__.os.tempdir : null;
-const join = window.__TAURI__ && window.__TAURI__.path ? window.__TAURI__.path.join : null;
-const openDialog = window.__TAURI__ && window.__TAURI__.dialog ? window.__TAURI__.dialog.open : null;
+const appWindow = window.__TAURI__?.window?.appWindow || window.__TAURI__?.window?.getCurrentWindow?.() || null;
+const Command = window.__TAURI__?.shell?.Command || null;
+const writeTextFile = window.__TAURI__?.fs?.writeTextFile || null;
+const tempdir = window.__TAURI__?.os?.tempdir || null;
+const join = window.__TAURI__?.path?.join || null;
+const openDialog = window.__TAURI__?.dialog?.open || null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
@@ -278,7 +276,8 @@ async function toggleCinemaMode() {
 
   // 2. Handle Monitor Fullscreen
   const appWindow = window.__TAURI__
-    ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
+    ? window.__TAURI__.window?.appWindow ||
+      (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null)
     : null;
   if (appWindow) {
     try {
@@ -541,8 +540,6 @@ const initializePlayer = () => {
 
   updateMarkersList();
 
-
-
   const urlParams = new URLSearchParams(window.location.search);
   const videoUrl = urlParams.get("v");
   if (videoUrl) {
@@ -554,7 +551,7 @@ const initializePlayer = () => {
   }
 
   addMarkerBtn.addEventListener("click", addMarker, false);
-  exportButton.addEventListener("click", (e) => {
+  exportButton.addEventListener("click", () => {
     exportToCSV();
   }, false);
   projectExportButton.addEventListener("click", () => exportToJSON(false), false);
@@ -1150,9 +1147,10 @@ const seektimeupdate = () => {
     // Playhead Execution Logic: Jump & Loop
     if (markers && markers.length > 0) {
       const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
-      const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined)
-        ? activeVideo.virtualEndTime
-        : (duration || player.duration || 0);
+      const endLimit =
+        activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined
+          ? activeVideo.virtualEndTime
+          : duration || player.duration || 0;
 
       for (let j = 0; j < markers.length; j += 1) {
         const currentMarker = markers[j];
@@ -1558,10 +1556,10 @@ const initializeTrimFeature = () => {
 
     const qualityMode = document.querySelector('input[name="trimQuality"]:checked').value;
     toConsole("Trim parameters validation success", { startVal, endVal, qualityMode }, debuggin);
-    
+
     trimOnlyBtn.disabled = true;
     trimCompressBtn.disabled = true;
-    
+
     // Style Cancel button as red Abort button
     cancelTrimBtn.disabled = false;
     cancelTrimBtn.className = "btn btn-danger";
@@ -1571,7 +1569,7 @@ const initializeTrimFeature = () => {
       await processVideo(startVal, endVal, qualityMode, isCompression);
     } catch (err) {
       toConsole("Error processing video", err, debuggin);
-      
+
       // Quietly handle user cancellation
       if (err.message === "Save location was not specified.") {
         trimOnlyBtn.disabled = false;
@@ -1579,19 +1577,21 @@ const initializeTrimFeature = () => {
         cancelTrimBtn.disabled = false;
         return;
       }
-      
+
       // Quietly handle user abort
       if (err.message === "Aborted by user") {
         resetTrimModalUI();
         return;
       }
-      
+
       // Handle same path selection
       if (err.message === "Input and output paths are identical.") {
         trimOnlyBtn.disabled = false;
         trimCompressBtn.disabled = false;
         cancelTrimBtn.disabled = false;
-        alert("Error: The output file path cannot be the same as the input video path. Please choose a different name or location.");
+        alert(
+          "Error: The output file path cannot be the same as the input video path. Please choose a different name or location.",
+        );
         return;
       }
 
@@ -1624,7 +1624,7 @@ const getExportSegments = () => {
   const inMarker = markers.find((m) => m.type === "in");
   const outMarker = markers.find((m) => m.type === "out");
   const inTime = inMarker ? inMarker.startTime : 0;
-  const outTime = outMarker ? outMarker.startTime : (player && player.duration ? player.duration : 0);
+  const outTime = outMarker ? outMarker.startTime : player && player.duration ? player.duration : 0;
 
   // 3. Initialize segmentsToKeep
   const segmentsToKeep = [];
@@ -1697,7 +1697,7 @@ async function executeExport(presetType) {
 
     let outputPath;
     try {
-      outputPath = await window.__TAURI__.dialog.save({
+      outputPath = await window.__TAURI__?.dialog?.save?.({
         filters: [{ name: "Video", extensions: ["mp4", "webm", "mov", "avi"] }],
         defaultPath: defaultPath,
       });
@@ -1735,7 +1735,7 @@ async function executeExport(presetType) {
       const tempDir = await tempdir();
       tempFilePath = await join(tempDir, "ffmpeg_concat_list.txt");
     } else {
-      tempFilePath = actualOutputPath.substring(0, actualOutputPath.lastIndexOf(".")) + "_concat_list.txt";
+      tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
     }
     await writeTextFile(tempFilePath, listContent);
 
@@ -1745,10 +1745,14 @@ async function executeExport(presetType) {
       "-y",
       "-nostdin",
       "-nostats",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", tempFilePath,
-      "-progress", "pipe:2"
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      tempFilePath,
+      "-progress",
+      "pipe:2",
     ];
 
     if (!isCompression) {
@@ -1765,27 +1769,42 @@ async function executeExport(presetType) {
 
       if (presetType === "low") {
         args.push(
-          "-vf", `scale=-2:${targetHeight}`,
-          "-c:v", "libx264",
-          "-crf", "32",
-          "-preset", "veryfast",
-          "-threads", "4"
+          "-vf",
+          `scale=-2:${targetHeight}`,
+          "-c:v",
+          "libx264",
+          "-crf",
+          "32",
+          "-preset",
+          "veryfast",
+          "-threads",
+          "4",
         );
       } else if (presetType === "high") {
         args.push(
-          "-vf", `scale=-2:${targetHeight}`,
-          "-c:v", "libx264",
-          "-crf", "18",
-          "-preset", "medium",
-          "-threads", "4"
+          "-vf",
+          `scale=-2:${targetHeight}`,
+          "-c:v",
+          "libx264",
+          "-crf",
+          "18",
+          "-preset",
+          "medium",
+          "-threads",
+          "4",
         );
       } else {
         args.push(
-          "-vf", `scale=-2:${targetHeight}`,
-          "-c:v", "libx264",
-          "-crf", "26",
-          "-preset", "fast",
-          "-threads", "4"
+          "-vf",
+          `scale=-2:${targetHeight}`,
+          "-c:v",
+          "libx264",
+          "-crf",
+          "26",
+          "-preset",
+          "fast",
+          "-threads",
+          "4",
         );
       }
       args.push("-c:a", "copy", "-max_muxing_queue_size", "4096");
@@ -1815,7 +1834,7 @@ async function executeExport(presetType) {
         toConsole("FFmpeg watchdog: no progress for 30s — aborting", null, debuggin);
         isAborted = true;
         try {
-          await window.__TAURI__.core.invoke("abort_ffmpeg");
+          await window.__TAURI__?.core?.invoke?.("abort_ffmpeg");
           toConsole("FFmpeg watchdog kill: success", null, debuggin);
         } catch (killErr) {
           toConsole("FFmpeg watchdog kill: failed", killErr, debuggin);
@@ -1828,14 +1847,14 @@ async function executeExport(presetType) {
     activeFFmpegChild = {
       kill: async () => {
         try {
-          await window.__TAURI__.core.invoke("abort_ffmpeg");
+          await window.__TAURI__?.core?.invoke?.("abort_ffmpeg");
         } catch (e) {
           toConsole("Error aborting ffmpeg via invoke", e, debuggin);
         }
       },
     };
 
-    unlistenStderr = await window.__TAURI__.event.listen("ffmpeg-stderr", (event) => {
+    unlistenStderr = await window.__TAURI__?.event?.listen?.("ffmpeg-stderr", (event) => {
       const line = event.payload || "";
       const isProgressSpam =
         line.includes("=") &&
@@ -1879,7 +1898,7 @@ async function executeExport(presetType) {
     });
 
     toConsole("Spawning FFmpeg sidecar process via Rust backend...", null, debuggin);
-    await window.__TAURI__.core.invoke("run_ffmpeg", { args });
+    await window.__TAURI__?.core?.invoke?.("run_ffmpeg", { args });
 
     progressBar.style.width = "100%";
     progressText.textContent = "100%";
@@ -1897,7 +1916,7 @@ async function executeExport(presetType) {
         if (t >= seg.start && t <= seg.end) {
           return newTime + (t - seg.start);
         }
-        newTime += (seg.end - seg.start);
+        newTime += seg.end - seg.start;
       }
       return newTime;
     };
@@ -1921,9 +1940,9 @@ async function executeExport(presetType) {
     processEndTime = duration;
 
     videoFilePath = actualOutputPath;
-    videoFileName = actualOutputPath.replace(/^.*[\\\/]/, "");
+    videoFileName = actualOutputPath.replace(/^.*[\\/]/, "");
 
-    const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+    const tauriAssetUrl = window.__TAURI__?.core?.convertFileSrc?.(videoFilePath);
     player.src = tauriAssetUrl;
     player.preload = "auto";
     player.load();
@@ -1970,12 +1989,12 @@ async function executeExport(presetType) {
     if (unlistenStderr) {
       unlistenStderr();
     }
-    if (tempFilePath && window.__TAURI__ && window.__TAURI__.fs) {
+    if (tempFilePath && window.__TAURI__?.fs) {
       try {
-        if (typeof window.__TAURI__.fs.remove === "function") {
-          await window.__TAURI__.fs.remove(tempFilePath);
-        } else if (typeof window.__TAURI__.fs.removeFile === "function") {
-          await window.__TAURI__.fs.removeFile(tempFilePath);
+        if (typeof window.__TAURI__?.fs?.remove === "function") {
+          await window.__TAURI__?.fs?.remove?.(tempFilePath);
+        } else if (typeof window.__TAURI__?.fs?.removeFile === "function") {
+          await window.__TAURI__?.fs?.removeFile?.(tempFilePath);
         }
       } catch (e) {
         toConsole("Failed to remove temp file", e, debuggin);
