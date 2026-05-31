@@ -197,8 +197,37 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
   updateLoadButtonColor();
 };
 
+const takeSnapshot = () => {
+  if (!player || !player.src) {
+    showToast("No video loaded.", "error");
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = player.videoWidth;
+  canvas.height = player.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.drawImage(player, 0, 0, canvas.width, canvas.height);
+
+  try {
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    const link = document.createElement("a");
+    const currentTimeStr = player.currentTime.toFixed(2).replace(".", "_");
+    link.download = `snapshot_${currentTimeStr}.jpg`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Snapshot saved.", "success");
+  } catch (error) {
+    toConsole("Failed to take snapshot", error, debuggin);
+    showToast("Error taking snapshot.", "error");
+  }
+};
+
 const initializePlayer = () => {
   player = DOM.video;
+  player.preservesPitch = true;
   playerReady = true;
   toConsole("Video element initialized", "Success", debuggin);
   toConsole("App Version", APP_VERSION, debuggin);
@@ -757,6 +786,9 @@ const initializePlayer = () => {
     translateY = 0;
     updateZoom();
   });
+  if (DOM.takeSnapshotBtn) {
+    DOM.takeSnapshotBtn.addEventListener("click", takeSnapshot);
+  }
 
   marqueeOverlay.addEventListener("mousedown", startMarquee);
   marqueeOverlay.addEventListener("mousemove", drawMarquee);
@@ -817,6 +849,12 @@ const initializePlayer = () => {
         if (!player.src) return;
         player.currentTime = Math.min(player.duration, player.currentTime + 5);
         toConsole("Forward 5s (Up Arrow)", player.currentTime, debuggin);
+        break;
+      case "s":
+      case "S":
+        e.preventDefault();
+        if (!player.src) return;
+        takeSnapshot();
         break;
       case "Enter":
       case "m":
