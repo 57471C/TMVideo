@@ -199,10 +199,10 @@ const updateMarkersList = () => {
     if (!table) throw new Error("Markers table element not found");
     if (markers.length > 0) {
       table.style.display = "table";
-      updateVideoTimeSummary();
     } else {
       table.style.display = "none";
     }
+    updateVideoTimeSummary();
 
     // Attach listeners for manual input typing in start times
     for (let i = 0; i < markers.length; i += 1) {

@@ -435,9 +435,7 @@ const initializePlayer = () => {
 
   loadLocalState();
 
-  if (markers.length > 0) {
-    updateMarkersList();
-  }
+  updateMarkersList();
 
 
 
