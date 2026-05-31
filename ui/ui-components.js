@@ -146,7 +146,7 @@ const updateMarkersList = () => {
                 <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center justify-center p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer" id="type-btn-${i}">
                   ${marker.type === "standard" ? ICONS.standard : marker.type === "jump" ? ICONS.jumpType : marker.type === "loop" ? ICONS.loopType : marker.type === "in" ? ICONS.inType : ICONS.outType}
                 </button>
-                <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-36 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
+                <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-40 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
                   <div class="py-1">
                     <button onclick="updateMarkerType(${i}, 'standard')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
                       ${ICONS.standard} Standard
