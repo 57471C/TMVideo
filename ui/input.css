@@ -222,7 +222,7 @@
     position: absolute !important;
     bottom: 24px !important;
     left: 50% !important;
-    transform: translateX(-50%) !important;
+    transform: translate(-50%, 0) !important;
     width: 90% !important;
     max-width: 850px !important;
     z-index: 50 !important;
@@ -231,8 +231,15 @@
     border: 1px solid rgba(255, 255, 255, 0.15) !important;
     border-radius: 12px !important;
     box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.7) !important;
-    transition: opacity 0.3s ease, transform 0.3s ease !important;
+    transition: opacity 0.3s ease, transform 0.3s ease, bottom 0.3s ease !important;
     padding: 12px 16px !important;
+  }
+
+  /* Support slide-down transition overriding absolute center transform */
+  #mediaControlsContainer.translate-y-full {
+    transform: translate(-50%, 150%) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   /* Text color adjustments for control elements inside floating overlay */

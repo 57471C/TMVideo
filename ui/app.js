@@ -2,6 +2,7 @@ const appWindow = window.__TAURI__
   ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
   : null;
 let isCinemaMode = false;
+let cinemaIdleTimer = null;
 let player;
 let loadVideoButton;
 let addMarkerBtn;
@@ -252,7 +253,40 @@ async function toggleCinemaMode() {
       await document.exitFullscreen();
     }
   }
+
+  // 3. Handle timer initialization or cleanup
+  if (isCinemaMode) {
+    resetCinemaIdleTimer();
+  } else {
+    if (cinemaIdleTimer) {
+      clearTimeout(cinemaIdleTimer);
+      cinemaIdleTimer = null;
+    }
+    const controlBar = document.getElementById("mediaControlsContainer");
+    if (controlBar) {
+      controlBar.classList.remove("translate-y-full", "opacity-0");
+    }
+  }
+
   toConsole("Cinema mode toggled", isCinemaMode, debuggin);
+}
+
+function resetCinemaIdleTimer() {
+  if (!isCinemaMode) return; // Only run in Cinema Mode
+
+  const controlBar = document.getElementById("mediaControlsContainer");
+  if (!controlBar) return;
+
+  // 1. Mouse moved: Show the controls instantly
+  controlBar.classList.remove("translate-y-full", "opacity-0");
+
+  // 2. Clear the existing timer
+  if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
+
+  // 3. Set a new 5-second timer to hide the controls
+  cinemaIdleTimer = setTimeout(() => {
+    controlBar.classList.add("translate-y-full", "opacity-0");
+  }, 5000);
 }
 
 const initializePlayer = () => {
@@ -772,6 +806,7 @@ const initializePlayer = () => {
   if (DOM.toggleCinemaBtn) {
     DOM.toggleCinemaBtn.addEventListener("click", toggleCinemaMode);
   }
+  document.addEventListener("mousemove", resetCinemaIdleTimer);
 
   marqueeOverlay.addEventListener("mousedown", startMarquee);
   marqueeOverlay.addEventListener("mousemove", drawMarquee);
