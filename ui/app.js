@@ -1,6 +1,7 @@
 const appWindow = window.__TAURI__
   ? (window.__TAURI__.window?.appWindow || (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null))
   : null;
+const Command = window.__TAURI__ ? window.__TAURI__.shell.Command : null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
@@ -1565,9 +1566,114 @@ const initializeTrimFeature = () => {
     }
   };
 
-  if (trimOnlyBtn) trimOnlyBtn.addEventListener("click", () => handleTrimAction(false));
-  if (trimCompressBtn) trimCompressBtn.addEventListener("click", () => handleTrimAction(true));
+  if (trimOnlyBtn) {
+    trimOnlyBtn.addEventListener("click", () => executeExport("copy"));
+  }
+  if (trimCompressBtn) {
+    trimCompressBtn.addEventListener("click", () => {
+      const preset = document.querySelector('input[name="trimQuality"]:checked').value;
+      executeExport(preset);
+    });
+  }
 };
+
+const getExportBoundaries = () => {
+  const inMarker = markers.find((m) => m.type === "in");
+  const outMarker = markers.find((m) => m.type === "out");
+  const startTime = inMarker ? inMarker.startTime : 0;
+  const endTime = outMarker ? outMarker.startTime : (player && player.duration ? player.duration : 0);
+  const duration = Math.max(0, endTime - startTime);
+  return { startTime, duration };
+};
+
+async function executeExport(presetType) {
+  if (!Command) {
+    alert("Exporting requires the native desktop application.");
+    return;
+  }
+  if (!videoFilePath) {
+    alert("Please load a video file first.");
+    return;
+  }
+
+  const { startTime, duration } = getExportBoundaries();
+  
+  const dotIdx = videoFilePath.lastIndexOf(".");
+  const outputFilePath = dotIdx !== -1 
+    ? `${videoFilePath.substring(0, dotIdx)}_export.mp4` 
+    : `${videoFilePath}_export.mp4`;
+
+  const args = [
+    "-ss", startTime.toString(),
+    "-i", videoFilePath,
+    "-t", duration.toString()
+  ];
+
+  if (presetType === "copy") {
+    args.push("-c", "copy");
+  } else {
+    const targetHeight = presetType === "low" ? 720 : 1080;
+    args.push(
+      "-vf", `scale=-2:${targetHeight}`,
+      "-c:v", "libx264",
+      "-crf", presetType === "low" ? "32" : presetType === "high" ? "18" : "26",
+      "-preset", presetType === "low" ? "veryfast" : presetType === "high" ? "medium" : "fast",
+      "-threads", "4",
+      "-c:a", "copy",
+      "-max_muxing_queue_size", "4096"
+    );
+  }
+  args.push(outputFilePath);
+
+  const trimOnlyBtn = document.getElementById("trimOnlyBtn");
+  const trimCompressBtn = document.getElementById("trimCompressBtn");
+  const originalTrimOnlyText = trimOnlyBtn ? trimOnlyBtn.textContent : "Trim Only (Copy)";
+  const originalTrimCompressText = trimCompressBtn ? trimCompressBtn.textContent : "Trim & Compress";
+
+  if (trimOnlyBtn) {
+    trimOnlyBtn.textContent = "Exporting...";
+    trimOnlyBtn.disabled = true;
+  }
+  if (trimCompressBtn) {
+    trimCompressBtn.textContent = "Exporting...";
+    trimCompressBtn.disabled = true;
+  }
+
+  try {
+    toConsole("Spawning FFmpeg sidecar via JS Command API", { args }, debuggin);
+    const ffmpeg = Command.sidecar("binaries/ffmpeg", args);
+    const output = await ffmpeg.execute();
+
+    if (output.code === 0) {
+      showToast("Export completed successfully.", "success");
+      // Close the modal
+      const trimModal = document.getElementById("trimModal");
+      if (trimModal) {
+        trimModal.classList.remove("opacity-100", "scale-100");
+        trimModal.classList.add("opacity-0", "scale-95");
+        await new Promise((r) => setTimeout(r, 300));
+        trimModal.close();
+      }
+      if (typeof window.resetTrimModalUI === "function") {
+        window.resetTrimModalUI();
+      }
+    } else {
+      throw new Error(`FFmpeg process exited with code ${output.code}`);
+    }
+  } catch (error) {
+    toConsole("Export failed", error, debuggin);
+    alert(`Export failed: ${error.message || error}`);
+  } finally {
+    if (trimOnlyBtn) {
+      trimOnlyBtn.textContent = originalTrimOnlyText;
+      trimOnlyBtn.disabled = false;
+    }
+    if (trimCompressBtn) {
+      trimCompressBtn.textContent = originalTrimCompressText;
+      trimCompressBtn.disabled = false;
+    }
+  }
+}
 
 const processVideo = async (start, end, qualityMode, isCompression) => {
   isAborted = false;
