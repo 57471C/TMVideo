@@ -29,7 +29,7 @@ let volumeLevel = 1;
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let groupingMode = "lean";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let isDrawing = false;
@@ -37,8 +37,6 @@ let startX;
 let startY;
 let marqueeOverlay;
 let marqueeRect;
-
-
 
 const DOM = {
   markersList: document.getElementById("markersList"),
@@ -488,4 +486,3 @@ const exportToCSV = async () => {
     showToast("Data exported to CSV successfully.", "success");
   }
 };
-
