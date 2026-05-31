@@ -66,7 +66,7 @@ const updateStickyOffsets = () => {
   const fullStackHeight = tableHeader.offsetHeight + markerRowHeight + footerHeight;
   let shift = 0;
   if (tableBottom < headerTop + fullStackHeight) {
-    shift = (headerTop + fullStackHeight) - tableBottom;
+    shift = headerTop + fullStackHeight - tableBottom;
   }
 
   tableHeader.style.top = `${headerTop - shift}px`;
@@ -94,7 +94,7 @@ const updateMarkersList = () => {
              <th scope="col" class="text-left align-middle w-auto pl-1 sm:pl-2">
                Marker Name
              </th>
-             <th scope="col" class="text-center w-40 whitespace-nowrap px-1">Start Time</th>
+             <th scope="col" class="text-center w-[155px] whitespace-nowrap px-1">Start Time</th>
              <th scope="col" class="text-center w-24 whitespace-nowrap px-1">Duration</th>
              <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">Actions</th>
            </tr>
@@ -107,7 +107,8 @@ const updateMarkersList = () => {
       const safeMarkerName = escapeHTML(marker.name);
 
       const isNegative = marker.startTime < 0;
-      const isInvalid = isNegative || marker.startTime < processStartTime || (processEndTime > 0 && marker.startTime > processEndTime);
+      const isInvalid =
+        isNegative || marker.startTime < processStartTime || (processEndTime > 0 && marker.startTime > processEndTime);
       const inputClass = isInvalid ? "text-red-500 dark:text-red-400" : "";
       const rowBgClass = isNegative
         ? "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
@@ -119,7 +120,10 @@ const updateMarkersList = () => {
         duration = markers[i + 1].startTime - marker.startTime;
       } else if (typeof player !== "undefined" && player) {
         const activeVideo = videoQueue[activeQueueIndex] || {};
-        const endLimit = (activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined) ? activeVideo.virtualEndTime : player.duration;
+        const endLimit =
+          activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined
+            ? activeVideo.virtualEndTime
+            : player.duration;
         duration = endLimit - marker.startTime;
       }
       if (duration < 0) duration = 0;
@@ -128,9 +132,10 @@ const updateMarkersList = () => {
       const hrs = Math.floor(absDur / 3600);
       const mins = Math.floor((absDur % 3600) / 60);
       const secs = absDur % 60;
-      const formattedDuration = hrs > 0
-        ? `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-        : `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      const formattedDuration =
+        hrs > 0
+          ? `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+          : `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
       rows.push(`
         <tr class="marker-row ${rowBgClass} border-b border-zinc-200 dark:border-zinc-700">

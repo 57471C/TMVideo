@@ -146,7 +146,7 @@
 
   /* Video Queue Select Dropdown */
   .video-queue-select {
-    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white px-2 py-1 cursor-pointer transition-all w-32 sm:w-48 appearance-none;
+    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white px-2 py-1 cursor-pointer transition-all w-auto max-w-[180px] sm:max-w-[320px] md:max-w-[480px] appearance-none;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
     background-position: right 0.25rem center;
     background-repeat: no-repeat;
