@@ -611,7 +611,7 @@
         },
       },
       {
-        text: "Quit to TimeStudy",
+        text: "Quit to TMVideo",
         action: () => {
           saveHighScore();
           // Clean up keyboard events

@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "TimeStudy",
+  "productName": "TMVideo",
   "version": "0.1.0",
-  "identifier": "com.timestudy.desktop",
+  "identifier": "com.tmvideo.desktop",
   "build": {
     "devUrl": null,
     "frontendDist": "../ui",
