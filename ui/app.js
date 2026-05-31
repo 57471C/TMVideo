@@ -227,24 +227,14 @@ const takeSnapshot = () => {
   }
 };
 
-const toggleCinemaMode = async () => {
+async function toggleCinemaMode() {
   isCinemaMode = !isCinemaMode;
 
-  const grid = document.getElementById("mainLayoutGrid");
-  const rightPanel = document.getElementById("rightPanel");
+  // 1. Toggle DOM classes for layout shift
+  document.body.classList.toggle("cinema-active", isCinemaMode);
 
-  if (grid && rightPanel) {
-    if (isCinemaMode) {
-      rightPanel.classList.add("hidden");
-      grid.classList.remove("lg:grid-cols-2");
-      grid.classList.add("lg:grid-cols-1");
-    } else {
-      rightPanel.classList.remove("hidden");
-      grid.classList.add("lg:grid-cols-2");
-      grid.classList.remove("lg:grid-cols-1");
-    }
-  }
-
+  // 2. Handle Monitor Fullscreen
+  const appWindow = window.__TAURI__ ? window.__TAURI__.window.appWindow : null;
   if (appWindow) {
     try {
       await appWindow.setFullscreen(isCinemaMode);
@@ -252,10 +242,14 @@ const toggleCinemaMode = async () => {
       toConsole("Error setting fullscreen via Tauri", e, debuggin);
     }
   } else {
-    console.log("Standard browser detected: Skipping OS fullscreen. CSS layout applied.");
+    if (isCinemaMode && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen().catch((e) => console.warn(e));
+    } else if (document.exitFullscreen) {
+      await document.exitFullscreen();
+    }
   }
   toConsole("Cinema mode toggled", isCinemaMode, debuggin);
-};
+}
 
 const initializePlayer = () => {
   player = DOM.video;
