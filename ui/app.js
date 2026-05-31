@@ -1,6 +1,7 @@
 const appWindow = window.__TAURI__?.window?.appWindow || window.__TAURI__?.window?.getCurrentWindow?.() || null;
 const Command = window.__TAURI__?.shell?.Command || window.__TAURI__?.pluginShell?.Command || null;
 const writeTextFile = window.__TAURI__?.fs?.writeTextFile || null;
+const remove = window.__TAURI__?.fs?.remove || null;
 const tempdir = window.__TAURI__?.os?.tempdir || null;
 const join = window.__TAURI__?.path?.join || null;
 const openDialog = window.__TAURI__?.dialog?.open || null;
@@ -1681,47 +1682,48 @@ const initializeTrimFeature = () => {
   }
 };
 
-const getExportSegments = () => {
-  // 1. Sort all markers by startTime
-  markers.sort((a, b) => a.startTime - b.startTime);
+const getExportSegments = (markersList, videoDuration) => {
+  const sortedMarkers = [...markersList].sort((a, b) => a.startTime - b.startTime);
 
-  // 2. Find the global inTime and outTime
-  const inMarker = markers.find((m) => m.type === "in");
-  const outMarker = markers.find((m) => m.type === "out");
-  const inTime = inMarker ? inMarker.startTime : 0;
-  const outTime = outMarker ? outMarker.startTime : player && player.duration ? player.duration : 0;
+  let inTime = 0;
+  let outTime = videoDuration || 0;
 
-  // 3. Initialize segmentsToKeep
+  const inMarker = sortedMarkers.find((m) => m.type === "in");
+  if (inMarker) {
+    inTime = inMarker.startTime;
+  }
+
+  const outMarker = sortedMarkers.find((m) => m.type === "out");
+  if (outMarker) {
+    outTime = outMarker.startTime;
+  }
+
   const segmentsToKeep = [];
-
-  // 4. Initialize state
   let keeping = true;
   let currentStart = inTime;
 
-  // 5. Iterate through markers strictly between inTime and outTime
-  for (let i = 0; i < markers.length; i += 1) {
-    const marker = markers[i];
+  for (let i = 0; i < sortedMarkers.length; i += 1) {
+    const marker = sortedMarkers[i];
+    if (marker.type === "loop") {
+      continue;
+    }
     if (marker.startTime <= inTime || marker.startTime >= outTime) {
       continue;
     }
 
-    // 6. If keeping is true AND marker type is 'jump': Push segment, set keeping = false
     if (keeping && marker.type === "jump") {
       segmentsToKeep.push({ start: currentStart, end: marker.startTime });
       keeping = false;
     } else if (!keeping && marker.type !== "jump") {
-      // 7. If keeping is false AND marker type is NOT 'jump': Set keeping = true, set currentStart
       keeping = true;
       currentStart = marker.startTime;
     }
   }
 
-  // 8. After the loop, if keeping is true, push the final segment
-  if (keeping) {
+  if (keeping && outTime > currentStart) {
     segmentsToKeep.push({ start: currentStart, end: outTime });
   }
 
-  // 9. Return segmentsToKeep
   return segmentsToKeep;
 };
 
@@ -1745,22 +1747,18 @@ async function processBatchQueue(presetType) {
     return;
   }
 
-  let outputDir = null;
-  try {
-    outputDir = await window.__TAURI__?.dialog?.open?.({
-      directory: true,
-      title: "Select Output Directory for Batch Export",
-    });
-  } catch (err) {
-    toConsole("Tauri dialog open error", err, debuggin);
+  const openDialog = window.__TAURI__ ? window.__TAURI__.dialog.open : null;
+  if (!openDialog) {
+    alert("Tauri dialog API not available.");
+    return;
   }
-
-  if (!outputDir) {
-    toConsole("Tauri dialog cancelled by user", null, debuggin);
+  const targetDir = await openDialog({ directory: true, multiple: false, title: "Select Output Folder for Batch" });
+  if (!targetDir) {
+    console.log("Batch cancelled.");
     return;
   }
 
-  const actualOutputDir = typeof outputDir === "object" ? outputDir.path : outputDir;
+  const actualOutputDir = typeof targetDir === "object" ? targetDir.path : targetDir;
 
   const trimOnlyBtn = document.getElementById("trimOnlyBtn");
   const trimCompressBtn = document.getElementById("trimCompressBtn");
@@ -1807,13 +1805,18 @@ async function processBatchQueue(presetType) {
         specificProgressBar.value = 0;
       }
 
-      const cleanFileName = video.videoFileName || `video_${index + 1}.mp4`;
-      const defaultPath = `trimmed_${cleanFileName}`;
-      let actualOutputPath = defaultPath;
+      let baseName = video.videoFileName || `video_${index + 1}`;
+      const lastDot = baseName.lastIndexOf(".");
+      if (lastDot !== -1) {
+        baseName = baseName.substring(0, lastDot);
+      }
+      const exportName = `${baseName}_export.mp4`;
+
+      let actualOutputPath = exportName;
       if (join) {
-        actualOutputPath = await join(actualOutputDir, defaultPath);
+        actualOutputPath = await join(actualOutputDir, exportName);
       } else {
-        actualOutputPath = `${actualOutputDir}/${defaultPath}`;
+        actualOutputPath = `${actualOutputDir}/${exportName}`;
       }
 
       let tempFilePath = null;
@@ -1821,36 +1824,11 @@ async function processBatchQueue(presetType) {
       try {
         markers = video.appState?.markers || [];
         markers.forEach((m) => { if (!m.type) m.type = "standard"; });
-        markers.sort((a, b) => a.startTime - b.startTime);
 
         videoFileName = video.videoFileName || "";
         videoFilePath = video.videoFilePath || "";
 
-        const inMarker = markers.find((m) => m.type === "in");
-        const outMarker = markers.find((m) => m.type === "out");
-        const inTime = inMarker ? inMarker.startTime : 0;
-        const outTime = outMarker ? outMarker.startTime : (video.processEndTime || 0);
-
-        const segments = [];
-        let keeping = true;
-        let currentStart = inTime;
-
-        for (let i = 0; i < markers.length; i += 1) {
-          const marker = markers[i];
-          if (marker.startTime <= inTime || marker.startTime >= outTime) {
-            continue;
-          }
-          if (keeping && marker.type === "jump") {
-            segments.push({ start: currentStart, end: marker.startTime });
-            keeping = false;
-          } else if (!keeping && marker.type !== "jump") {
-            keeping = true;
-            currentStart = marker.startTime;
-          }
-        }
-        if (keeping && outTime > currentStart) {
-          segments.push({ start: currentStart, end: outTime });
-        }
+        const segments = getExportSegments(markers, video.processEndTime || 0);
 
         if (segments.length === 0) {
           throw new Error("No segments to export.");
@@ -1936,9 +1914,15 @@ async function processBatchQueue(presetType) {
         }
 
         ffmpegChild = await ffmpeg.spawn();
-        const output = await ffmpeg.execute();
-        if (output.code !== 0) {
-          throw new Error(`FFmpeg exited with code ${output.code}`);
+        try {
+          const output = await ffmpeg.execute();
+          if (output.code !== 0) {
+            throw new Error(`FFmpeg exited with code ${output.code}`);
+          }
+        } finally {
+          if (tempFilePath && remove) {
+            await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
+          }
         }
 
         if (specificProgressBar) {
@@ -2050,7 +2034,7 @@ async function executeExport(presetType) {
   const stderrLogs = [];
 
   try {
-    const segments = getExportSegments();
+    const segments = getExportSegments(markers, player && player.duration ? player.duration : 0);
     if (segments.length === 0) {
       throw new Error("No segments to export.");
     }
@@ -2261,7 +2245,13 @@ async function executeExport(presetType) {
     });
 
     toConsole("Spawning FFmpeg sidecar process via Rust backend...", null, debuggin);
-    await window.__TAURI__?.core?.invoke?.("run_ffmpeg", { args });
+    try {
+      await window.__TAURI__?.core?.invoke?.("run_ffmpeg", { args });
+    } finally {
+      if (tempFilePath && remove) {
+        await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
+      }
+    }
 
     progressBar.style.width = "100%";
     progressText.textContent = "100%";
@@ -2352,16 +2342,8 @@ async function executeExport(presetType) {
     if (unlistenStderr) {
       unlistenStderr();
     }
-    if (tempFilePath && window.__TAURI__?.fs) {
-      try {
-        if (typeof window.__TAURI__?.fs?.remove === "function") {
-          await window.__TAURI__?.fs?.remove?.(tempFilePath);
-        } else if (typeof window.__TAURI__?.fs?.removeFile === "function") {
-          await window.__TAURI__?.fs?.removeFile?.(tempFilePath);
-        }
-      } catch (e) {
-        toConsole("Failed to remove temp file", e, debuggin);
-      }
+    if (tempFilePath && remove) {
+      await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
     }
     if (trimOnlyBtn) {
       trimOnlyBtn.textContent = originalTrimOnlyText;
