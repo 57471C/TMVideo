@@ -924,6 +924,40 @@ const initializePlayer = () => {
   marqueeOverlay.addEventListener("mousemove", drawMarquee);
   marqueeOverlay.addEventListener("mouseup", endMarquee);
 
+const jumpToPreviousMarker = () => {
+  const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+  const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
+  if (currentMarkers.length === 0) return;
+
+  const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
+  const currentTime = player.currentTime;
+
+  const target = [...sorted].reverse().find((m) => m.startTime < currentTime - 0.1);
+  if (target) {
+    player.currentTime = target.startTime;
+  } else {
+    player.currentTime = 0;
+  }
+  player.pause();
+};
+
+const jumpToNextMarker = () => {
+  const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+  const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
+  if (currentMarkers.length === 0) return;
+
+  const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
+  const currentTime = player.currentTime;
+
+  const target = sorted.find((m) => m.startTime > currentTime + 0.1);
+  if (target) {
+    player.currentTime = target.startTime;
+  } else {
+    player.currentTime = player.duration;
+  }
+  player.pause();
+};
+
   document.addEventListener("keydown", (e) => {
     // Disable shortcuts while Tetris is active to prevent key conflicts (e.g. arrows/spacebar seeking video)
     const tetrisCont = document.getElementById("tetrisContainer");
@@ -947,6 +981,16 @@ const initializePlayer = () => {
     if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
 
     switch (e.key) {
+      case ",":
+        e.preventDefault();
+        if (!player.src) return;
+        jumpToPreviousMarker();
+        break;
+      case ".":
+        e.preventDefault();
+        if (!player.src) return;
+        jumpToNextMarker();
+        break;
       case "\\":
         e.preventDefault();
         toggleCinemaMode();
