@@ -37,11 +37,9 @@ const renderVideoQueueSelect = () => {
     option.value = index;
     option.textContent = video.videoFileName || "Unknown File";
     option.className = "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white";
-    if (index === activeQueueIndex) {
-      option.selected = true;
-    }
     DOM.videoQueueSelect.appendChild(option);
   }
+  DOM.videoQueueSelect.selectedIndex = activeQueueIndex;
 };
 
 const switchVideoInQueue = async (index) => {
@@ -310,13 +308,14 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 
   DOM.videoPlaceholder.textContent = "Load a video to get started";
   saveLocalState();
+  renderVideoQueueSelect();
   updateSliderTicks();
 
   updateLoadButtonColor();
 };
 
 const takeSnapshot = () => {
-  if (!player || !player.src) {
+  if (!player?.src) {
     showToast("No video loaded.", "error");
     return;
   }
@@ -626,13 +625,6 @@ const initializePlayer = () => {
   }
 
   addMarkerBtn.addEventListener("click", addMarker, false);
-  exportButton.addEventListener("click", () => {
-    exportToCSV();
-  }, false);
-  projectExportButton.addEventListener("click", () => exportToJSON(false), false);
-  if (projectSaveAsButton) {
-    projectSaveAsButton.addEventListener("click", () => exportToJSON(true), false);
-  }
 
   projectImportButton.addEventListener("click", async () => {
     const isTauri = window.__TAURI__ !== undefined;
@@ -756,19 +748,6 @@ const initializePlayer = () => {
     }
   });
 
-  toggleFormatButton.addEventListener("click", () => {
-    if (durationMode === "hhmmssms") {
-      durationMode = "ms";
-    } else if (durationMode === "ms") {
-      durationMode = "decimalMinutes";
-    } else {
-      durationMode = "hhmmssms";
-    }
-    toggleFormatButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span>Format (${
-      durationMode === "hhmmssms" ? "HH:MM:SS.MS" : durationMode === "ms" ? "ms" : "min"
-    })</span>`;
-    updateMarkersList();
-  });
   playPauseButton.addEventListener("click", () => {
     if (player.paused) {
       player.play();
@@ -2155,7 +2134,7 @@ async function executeExport(presetType) {
   const stderrLogs = [];
 
   try {
-    const segments = getExportSegments(markers, player && player.duration ? player.duration : 0);
+    const segments = getExportSegments(markers, player?.duration ? player.duration : 0);
     if (segments.length === 0) {
       throw new Error("No segments to export.");
     }

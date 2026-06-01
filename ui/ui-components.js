@@ -190,7 +190,7 @@ const updateMarkersList = () => {
           </td>
           <td class="text-center py-2 pr-1 sm:pr-2">
             <div class="flex gap-1.5 justify-center">
-              <button onclick="jumpToMarkerTime(${marker.startTime})" class="btn btn-outline-secondary p-1 flex items-center justify-center" title="Jump to Marker">${ICONS.jump}</button>
+              
               <button onclick="deleteMarker(${i})" class="btn btn-outline-danger p-1 flex items-center justify-center" title="Delete Marker">${ICONS.trash}</button>
             </div>
           </td>
