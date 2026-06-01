@@ -17,3 +17,7 @@ Thumbs.db
 
 # don't upload FFMPEG binaries
 src-tauri/binaries/
+
+# ignore gemini folder/file
+.gemini/
+AI_CONTEXT.md

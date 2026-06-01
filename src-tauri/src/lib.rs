@@ -17,6 +17,18 @@ fn get_startup_file() -> Option<String> {
 }
 
 #[tauri::command]
+fn get_launch_argument() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        let arg = &args[1];
+        if !arg.starts_with("--") {
+            return Some(arg.trim_matches('"').to_string());
+        }
+    }
+    None
+}
+
+#[tauri::command]
 async fn run_ffmpeg(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, FfmpegState>,
@@ -138,7 +150,7 @@ pub fn run() {
       Ok(())
     })
      // Add this line to register your new commands:
-    .invoke_handler(tauri::generate_handler![get_startup_file, run_ffmpeg, abort_ffmpeg]) 
+    .invoke_handler(tauri::generate_handler![get_startup_file, get_launch_argument, run_ffmpeg, abort_ffmpeg]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

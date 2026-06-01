@@ -1081,31 +1081,118 @@ window.onload = () => {
   document.documentElement.style.overflowX = "hidden";
   document.body.style.overflowX = "hidden";
 
-  initializePlayer();
+  if (!playerReady) {
+    initializePlayer();
+  }
   toggleVideoPlaceholder(true);
+
+  initializeTrimFeature();
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (!playerReady) {
+    initializePlayer();
+  }
 
   const isTauri = window.__TAURI__ !== undefined;
   if (isTauri) {
     window.__TAURI__.core
-      .invoke("get_startup_file")
-      .then(async (startupFile) => {
-        if (startupFile) {
-          try {
-            projectFilePath = startupFile;
-            localStorage.setItem("projectFilePath", projectFilePath);
-            const jsonText = await window.__TAURI__.fs.readTextFile(startupFile);
-            importFromJSON(jsonText);
-            toConsole("Auto-loaded project from file association", startupFile, debuggin);
-          } catch (e) {
-            toConsole("Error auto-loading startup file", e, debuggin);
-            showToast("Failed to auto-load project.", "error");
+      .invoke("get_launch_argument")
+      .then(async (filePath) => {
+        if (filePath) {
+          const lower = filePath.toLowerCase();
+          if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
+            try {
+              projectFilePath = filePath;
+              localStorage.setItem("projectFilePath", projectFilePath);
+              const jsonText = await window.__TAURI__.fs.readTextFile(filePath);
+              importFromJSON(jsonText);
+              toConsole("Auto-loaded project from launch argument", filePath, debuggin);
+            } catch (e) {
+              toConsole("Error auto-loading project file", e, debuggin);
+              showToast("Failed to auto-load project.", "error");
+            }
+          } else if (
+            lower.endsWith(".mp4") ||
+            lower.endsWith(".mkv") ||
+            lower.endsWith(".avi") ||
+            lower.endsWith(".mov") ||
+            lower.endsWith(".mpg") ||
+            lower.endsWith(".mpeg")
+          ) {
+            try {
+              // Initialize blank project state
+              player.pause();
+              player.src = "";
+              player.removeAttribute("src");
+              player.load();
+
+              markers = [];
+              videoFileName = "";
+
+              // Free memory by revoking old video blob URLs
+              for (const key in videoBlobCache) {
+                URL.revokeObjectURL(videoBlobCache[key]);
+                delete videoBlobCache[key];
+              }
+              videoFilePath = "";
+              projectFilePath = "";
+              localStorage.removeItem("projectFilePath");
+              projectName = "";
+              projectComments = "";
+              masterParts = [];
+              masterLabour = [];
+              processStartTime = 0;
+              processEndTime = 0;
+
+              videoQueue = [
+                {
+                  videoId: 1,
+                  videoName: "Video 1",
+                  videoFileName: "",
+                  videoFilePath: "",
+                  processStartTime: 0,
+                  processEndTime: 0,
+                  appState: { markers: [] },
+                },
+              ];
+              activeQueueIndex = 0;
+
+              if (DOM.projectNameInput) DOM.projectNameInput.value = "";
+
+              // Load media file
+              const extractedFileName = filePath.split(/[/\\]/).pop();
+              videoFileName = extractedFileName;
+              videoFilePath = filePath;
+
+              videoQueue[0].videoFileName = videoFileName;
+              videoQueue[0].videoFilePath = videoFilePath;
+              videoQueue[0].videoName = videoFileName;
+
+              const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+              player.src = tauriAssetUrl;
+              player.preload = "auto";
+              player.load();
+              toggleVideoPlaceholder(false);
+
+              renderVideoQueueSelect();
+              updateLoadButtonColor();
+              updateMarkersList();
+              saveLocalState();
+              updateSliderTicks();
+
+              toConsole("Auto-loaded video from launch argument", filePath, debuggin);
+              showToast("Video loaded.", "success");
+            } catch (e) {
+              toConsole("Error auto-loading video file", e, debuggin);
+              showToast("Failed to load video file.", "error");
+            }
           }
         }
       })
-      .catch((e) => toConsole("Failed to check startup file", e, debuggin));
+      .catch((e) => toConsole("Failed to check launch argument", e, debuggin));
   }
-  initializeTrimFeature();
-};
+});
 
 const startMarquee = (e) => {
   if (e.target.closest(".zoom-controls")) return;

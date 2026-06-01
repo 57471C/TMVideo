@@ -1,6 +1,6 @@
 # TMVideo
 
-[![Version](https://img.shields.io/badge/version-0.2.1-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.2-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
 
 ## Overview
 
@@ -28,6 +28,12 @@
    ```
 
 ## Changelog
+
+### v0.2.2
+* Added: Native OS file association for direct launching of `.mp4`, `.mkv`, `.avi`, `.mov`, and `.mpg` files via double-click.
+* Added: Background Rust command `get_launch_argument` to catch and parse OS-level file arguments on startup.
+* Added: Automatic initialization of blank project states when raw media files are passed from the OS.
+* Updated: Installer payload now silently registers TMVideo into the Windows "Open With..." registry for `.tmv` and `.tmvz` project files.
 
 ### v0.1.0
 * Initial migration to TMVideo, downgrading version from 0.6.2 to 0.1.0 to reflect the new direction as a media player and annotation tool.
