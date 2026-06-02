@@ -29,10 +29,6 @@ let muteButton;
 let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
-let generateCaptionsBtn;
-let generateCaptionsSpinner;
-let generateCaptionsIcon;
-let generateCaptionsText;
 
 window.loadSubtitleTrack = async (filePath) => {
   let ccTrack = document.getElementById("ccTrack");
@@ -48,10 +44,6 @@ window.loadSubtitleTrack = async (filePath) => {
     }
   }
   ccTrack.src = "";
-  const generateBtn = document.getElementById("generateCaptionsBtn");
-  if (generateBtn) {
-    generateBtn.classList.add("hidden");
-  }
 
   const isTauri = window.__TAURI__ !== undefined;
   if (!isTauri || !filePath) return;
@@ -648,45 +640,9 @@ const initializePlayer = () => {
   forward5sButton = document.getElementById("forward5sButton");
   muteButton = document.getElementById("muteButton");
   volumeSlider = document.getElementById("volumeSlider");
-  generateCaptionsBtn = document.getElementById("generateCaptionsBtn");
-  generateCaptionsSpinner = document.getElementById("generateCaptionsSpinner");
-  generateCaptionsIcon = document.getElementById("generateCaptionsIcon");
-  generateCaptionsText = document.getElementById("generateCaptionsText");
 
   loadLocalState();
 
-  generateCaptionsBtn?.addEventListener("click", async () => {
-    if (!videoFilePath) {
-      showToast("No video file loaded.", "error");
-      return;
-    }
-
-    generateCaptionsBtn.disabled = true;
-    generateCaptionsSpinner.classList.remove("hidden");
-    generateCaptionsIcon.classList.add("hidden");
-    generateCaptionsText.textContent = "Transcribing...";
-
-    try {
-      const vttPath = await window.__TAURI__.core.invoke("generate_auto_captions", { videoPath: videoFilePath });
-      if (vttPath) {
-        const ccTrack = document.getElementById("ccTrack");
-        if (ccTrack) {
-          ccTrack.src = window.__TAURI__.core.convertFileSrc(vttPath);
-          toConsole("Loaded auto-generated subtitle track", vttPath, debuggin);
-          showToast("Auto-captions generated successfully.", "success");
-          generateCaptionsBtn.classList.add("hidden");
-        }
-      }
-    } catch (err) {
-      toConsole("Error generating auto-captions", err, debuggin);
-      showToast(`Auto-captioning failed: ${err}`, "error");
-    } finally {
-      generateCaptionsBtn.disabled = false;
-      generateCaptionsSpinner.classList.add("hidden");
-      generateCaptionsIcon.classList.remove("hidden");
-      generateCaptionsText.textContent = "Auto-Caption";
-    }
-  });
   updateMarkersList();
 
   // Wire up Save / Save As / Package buttons

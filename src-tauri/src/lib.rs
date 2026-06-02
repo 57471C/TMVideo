@@ -133,92 +133,6 @@ async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String
 // Triggering a recompile to pick up new icons
 
 #[tauri::command]
-async fn generate_auto_captions(app_handle: tauri::AppHandle, video_path: String) -> Result<String, String> {
-    // Clone the handles for the blocking task
-    let app_handle_clone = app_handle.clone();
-    let video_path_clone = video_path.clone();
-
-    tokio::task::spawn_blocking(move || {
-        use std::path::Path;
-        use std::env;
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // --- Path Setup ---
-        let video_p = Path::new(&video_path_clone);
-        let base_dir = video_p.parent().ok_or_else(|| "Failed to get video parent directory".to_string())?;
-        let file_stem = video_p.file_stem().and_then(|s| s.to_str()).ok_or_else(|| "Failed to get video file stem".to_string())?;
-        
-        let unique_id = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
-        let temp_wav_filename = format!("{}_{}.wav", file_stem, unique_id);
-        let temp_wav_path = env::temp_dir().join(&temp_wav_filename);
-        let temp_wav_str = temp_wav_path.to_str().ok_or_else(|| "Invalid temp WAV path".to_string())?;
-
-        let final_vtt_path = base_dir.join(format!("{}.vtt", file_stem));
-        let final_vtt_str = final_vtt_path.to_str().ok_or_else(|| "Invalid final VTT path".to_string())?.to_string();
-
-        // --- Model Path Resolution ---
-        let model_path = app_handle_clone
-            .path()
-            .resolve("models/ggml-base.en.bin", tauri::path::BaseDirectory::Resource)
-            .map_err(|e| format!("Failed to resolve model path: {}", e))?;
-        let model_path_str = model_path.to_str().ok_or_else(|| "Invalid model path string".to_string())?;
-
-        // ADD THIS: Resolve the binaries folder containing the DLLs
-        let binaries_path = app_handle_clone
-            .path()
-            .resolve("binaries", tauri::path::BaseDirectory::Resource)
-            .map_err(|e| format!("Failed to resolve binaries path: {}", e))?;
-
-        // --- Step 1: Extract WAV with FFmpeg ---
-        let ffmpeg_sidecar = app_handle_clone.shell().sidecar("ffmpeg")
-            .map_err(|e| e.to_string())?
-            .args(["-y", "-i", &video_path_clone, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", temp_wav_str]);
-
-        // Safely block on the async output future inside this spawn_blocking thread
-        let ffmpeg_output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
-            .map_err(|e| format!("FFmpeg execution failed: {}", e))?;
-
-        if !ffmpeg_output.status.success() {
-            let stderr = String::from_utf8_lossy(&ffmpeg_output.stderr);
-            let _ = std::fs::remove_file(&temp_wav_path);
-            return Err(format!("FFmpeg failed to extract audio: {}", stderr));
-        }
-
-        // --- Step 2: Transcribe with Whisper ---
-        let whisper_sidecar = app_handle_clone.shell().sidecar("whisper")
-            .map_err(|e| e.to_string())?
-            .current_dir(binaries_path)
-            .args(["-m", model_path_str, "-f", temp_wav_str, "-ovtt", "-nt"]); // -nt for no timestamps in console
-
-        // Safely block on the async output future inside this spawn_blocking thread
-        let whisper_output = tauri::async_runtime::block_on(whisper_sidecar.output())
-            .map_err(|e| format!("Whisper execution failed: {}", e))?;
-
-        let whisper_vtt_output_path = env::temp_dir().join(format!("{}.vtt", temp_wav_filename));
-        let _ = std::fs::remove_file(&temp_wav_path);
-
-        if !whisper_output.status.success() {
-            let stderr = String::from_utf8_lossy(&whisper_output.stderr);
-            let stdout = String::from_utf8_lossy(&whisper_output.stdout);
-            
-            // Clean up both temp files to prevent storage leaks on failure
-            let _ = std::fs::remove_file(&whisper_vtt_output_path);
-            let _ = std::fs::remove_file(&temp_wav_path); 
-            
-            return Err(format!("STDOUT: {} | STDERR: {}", stdout, stderr));
-        }
-
-        //std::fs::rename(&whisper_vtt_output_path, &final_vtt_path).map_err(|e| format!("Failed to move VTT file: {}", e))?;
-        std::fs::copy(&whisper_vtt_output_path, &final_vtt_path).map_err(|e| format!("Failed to copy VTT file: {}", e))?;
-let _ = std::fs::remove_file(&whisper_vtt_output_path); // Clean up the temp file
-
-        Ok(final_vtt_str)
-    })
-    .await
-    .map_err(|e| format!("Task panicked: {}", e))?
-}
-
-#[tauri::command]
 async fn resolve_subtitles(app_handle: tauri::AppHandle, video_path: String) -> Result<Option<String>, String> {
     use std::path::Path;
 
@@ -531,8 +445,7 @@ pub fn run() {
         run_ffmpeg, abort_ffmpeg,
         save_tspz_bundle,
         load_tspz_bundle,
-        resolve_subtitles,
-        generate_auto_captions
+        resolve_subtitles
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

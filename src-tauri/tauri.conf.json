@@ -49,12 +49,7 @@
       }
     ],
     "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/whisper"
-    ],
-    "resources": [
-      "models/ggml-base.en.bin",
-      "binaries/*.dll"
+      "binaries/ffmpeg"
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
