@@ -1,0 +1,13 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:03.500
+Hello! This is the first caption block.
+
+2
+00:00:04.000 --> 00:00:07.000
+We are testing the HTML5 track element injection...
+
+3
+00:00:07.500 --> 00:00:10.000
+...to ensure the subtitles render correctly.
