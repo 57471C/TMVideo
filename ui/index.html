@@ -84,25 +84,30 @@
           <div class="w-full h-125 relative group">
             <div id="videoPlaceholder" class="w-full h-full min-h-125 bg-zinc-900 text-zinc-400 flex items-center justify-center text-lg p-5 absolute top-0 left-0 z-10 cursor-pointer border border-transparent dark:border-zinc-700 transition-colors duration-200">Load a video to get started</div>
             <div id="videoWrapper" class="w-full h-full absolute top-0 left-0 overflow-hidden bg-black z-10" style="display: none;">
+              <button id="expandToEditorBtn" class="absolute top-2.5 left-2.5 z-20 btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 hidden" style="padding: 0 !important;" title="Expand to Editor">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                </svg>
+              </button>
               <div id="marqueeOverlay" class="absolute inset-0 z-12 cursor-crosshair">
                 <div id="marqueeRect" class="absolute border-2 border-dashed border-blue-600 bg-blue-600/10 pointer-events-none hidden"></div>
               </div>
-              <video id="my_video" class="max-h-full w-auto h-full block object-contain origin-top-left transition-transform duration-300 ease-in-out z-1">
+              <video id="my_video" crossorigin="anonymous" class="max-h-full w-auto h-full block object-contain origin-top-left transition-transform duration-300 ease-in-out z-1">
                 <track kind="captions" />
                 Your browser does not support the video tag.
               </video>
-              <div class="absolute top-2.5 right-2.5 z-15 hidden group-hover:block flex gap-1">
-                <button id="zoomIn" class="btn btn-sm btn-dark-gray">+</button>
-                <button id="zoomOut" class="btn btn-sm btn-dark-gray">-</button>
-                <button id="resetZoom" class="btn btn-sm btn-dark-gray">Reset</button>
-                <button id="takeSnapshotBtn" class="btn btn-sm btn-dark-gray" title="Take Snapshot (S)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <div id="videoOverlayControls" class="absolute top-2.5 right-2.5 z-15 flex items-center gap-1.5">
+                <button id="zoomIn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom In">+</button>
+                <button id="zoomOut" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom Out">-</button>
+                <button id="resetZoom" class="btn btn-sm btn-dark-gray flex items-center justify-center h-7 px-2.5" title="Reset Zoom">Reset</button>
+                <button id="takeSnapshotBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Take Snapshot (S)">
+                  <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                     <circle cx="12" cy="13" r="4"/>
                   </svg>
                 </button>
-                <button id="toggleCinemaBtn" class="btn btn-sm btn-dark-gray" title="Toggle Cinema Mode (\)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button id="toggleCinemaBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Toggle Cinema Mode (\)">
+                  <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
                   </svg>
                 </button>
@@ -125,6 +130,12 @@
               </div>
               <div class="w-full flex items-center justify-center flex-wrap mt-2.5 gap-1.5 sm:gap-2">
                 <span id="tetrisHighScoreDisplay" class="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono select-none mr-2 hidden">HS:00000</span>
+                <button id="toggleMiniPlayerBtn" class="btn-icon mr-8 inline-flex items-center justify-center align-middle" title="Toggle Mini Player Mode">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="align-middle">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <rect x="12" y="11" width="8" height="5" rx="1" />
+                  </svg>
+                </button>
                 <button id="loadVideoButton" class="btn-icon-highlight mr-8" title="Load Video">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path>

@@ -349,10 +349,6 @@ async function toggleCinemaMode() {
   document.body.classList.toggle("cinema-active", isCinemaMode);
 
   // 2. Handle Monitor Fullscreen
-  const appWindow = window.__TAURI__
-    ? window.__TAURI__.window?.appWindow ||
-      (window.__TAURI__.window?.getCurrentWindow ? window.__TAURI__.window.getCurrentWindow() : null)
-    : null;
   if (appWindow) {
     try {
       await appWindow.setFullscreen(isCinemaMode);
@@ -454,6 +450,16 @@ const initializePlayer = () => {
   }
   if (DOM.editVideoQueueBtn) {
     DOM.editVideoQueueBtn.addEventListener("click", editVideoInQueue);
+  }
+  const toggleMiniPlayerBtn = document.getElementById("toggleMiniPlayerBtn");
+  if (toggleMiniPlayerBtn) {
+    toggleMiniPlayerBtn.addEventListener("click", () => {
+      if (document.body.classList.contains("mini-player")) {
+        disableMiniPlayerMode();
+      } else {
+        enableMiniPlayerMode();
+      }
+    });
   }
 
   if (DOM.projectNameInput) {
@@ -840,19 +846,14 @@ const initializePlayer = () => {
   }
 
   if (seekBar) {
-    seekBar.addEventListener(
-      "input",
-      debounce((event) => {
-        let time = Number.parseFloat(event.target.value);
-        if (!Number.isNaN(time)) {
-          if (processStartTime > 0 && time < processStartTime) time = processStartTime;
-          if (processEndTime > 0 && time > processEndTime) time = processEndTime;
-          player.currentTime = time;
-          toConsole("Seek bar input event fired", time, debuggin);
-          toConsole("Video seeked to", time, debuggin);
-        }
-      }, 100),
-    );
+    seekBar.addEventListener("input", (event) => {
+      let time = Number.parseFloat(event.target.value);
+      if (!Number.isNaN(time)) {
+        if (processStartTime > 0 && time < processStartTime) time = processStartTime;
+        if (processEndTime > 0 && time > processEndTime) time = processEndTime;
+        player.currentTime = time;
+      }
+    });
     seekBar.addEventListener("mouseup", (e) => e.target.blur());
     seekBar.addEventListener("touchend", (e) => e.target.blur());
   }
@@ -884,7 +885,7 @@ const initializePlayer = () => {
     updateZoom();
   });
   DOM.zoomOut.addEventListener("click", () => {
-    zoomLevel = Math.max(0.1, zoomLevel - 0.1);
+    zoomLevel = Math.max(0.1, zoomLevel - 0.2);
     updateZoom();
   });
   DOM.resetZoom.addEventListener("click", () => {
@@ -1032,7 +1033,7 @@ const jumpToNextMarker = () => {
         break;
       case "-":
         e.preventDefault();
-        zoomLevel = Math.max(0.1, zoomLevel - 0.1);
+        zoomLevel = Math.max(0.1, zoomLevel - 0.2);
         updateZoom();
         break;
       case "Backspace":
@@ -1089,9 +1090,44 @@ window.onload = () => {
   initializeTrimFeature();
 };
 
+const enableMiniPlayerMode = async () => {
+  if (appWindow) {
+    try {
+      await appWindow.unmaximize();
+      const size = new window.__TAURI__.window.LogicalSize(800, 600);
+      await appWindow.setSize(size);
+      await appWindow.center();
+    } catch (e) {
+      console.error("Error enabling mini player mode", e);
+    }
+  }
+  document.body.classList.add("mini-player");
+  const expandBtn = document.getElementById("expandToEditorBtn");
+  if (expandBtn) expandBtn.classList.remove("hidden");
+};
+
+const disableMiniPlayerMode = async () => {
+  document.body.classList.remove("mini-player");
+  const expandBtn = document.getElementById("expandToEditorBtn");
+  if (expandBtn) expandBtn.classList.add("hidden");
+
+  if (appWindow) {
+    try {
+      await appWindow.maximize();
+    } catch (e) {
+      console.error("Error disabling mini player mode", e);
+    }
+  }
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   if (!playerReady) {
     initializePlayer();
+  }
+
+  const expandBtn = document.getElementById("expandToEditorBtn");
+  if (expandBtn) {
+    expandBtn.addEventListener("click", disableMiniPlayerMode);
   }
 
   const isTauri = window.__TAURI__ !== undefined;
@@ -1129,6 +1165,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
               markers = [];
               videoFileName = "";
+              preserveProcessTimes = false;
 
               // Free memory by revoking old video blob URLs
               for (const key in videoBlobCache) {
@@ -1180,6 +1217,8 @@ document.addEventListener("DOMContentLoaded", () => {
               updateMarkersList();
               saveLocalState();
               updateSliderTicks();
+
+              await enableMiniPlayerMode();
 
               toConsole("Auto-loaded video from launch argument", filePath, debuggin);
               showToast("Video loaded.", "success");
