@@ -163,11 +163,19 @@ async fn generate_auto_captions(app_handle: tauri::AppHandle, video_path: String
             .map_err(|e| format!("Failed to resolve model path: {}", e))?;
         let model_path_str = model_path.to_str().ok_or_else(|| "Invalid model path string".to_string())?;
 
+        // ADD THIS: Resolve the binaries folder containing the DLLs
+        let binaries_path = app_handle_clone
+            .path()
+            .resolve("binaries", tauri::path::BaseDirectory::Resource)
+            .map_err(|e| format!("Failed to resolve binaries path: {}", e))?;
+
         // --- Step 1: Extract WAV with FFmpeg ---
-        let ffmpeg_sidecar = app_handle_clone.shell().sidecar("ffmpeg").map_err(|e| e.to_string())?;
-        let ffmpeg_output = std::process::Command::new(ffmpeg_sidecar.path())
-            .args(["-y", "-i", &video_path_clone, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", temp_wav_str])
-            .output()
+        let ffmpeg_sidecar = app_handle_clone.shell().sidecar("ffmpeg")
+            .map_err(|e| e.to_string())?
+            .args(["-y", "-i", &video_path_clone, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", temp_wav_str]);
+
+        // Safely block on the async output future inside this spawn_blocking thread
+        let ffmpeg_output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
             .map_err(|e| format!("FFmpeg execution failed: {}", e))?;
 
         if !ffmpeg_output.status.success() {
@@ -177,10 +185,13 @@ async fn generate_auto_captions(app_handle: tauri::AppHandle, video_path: String
         }
 
         // --- Step 2: Transcribe with Whisper ---
-        let whisper_sidecar = app_handle_clone.shell().sidecar("whisper").map_err(|e| e.to_string())?;
-        let whisper_output = std::process::Command::new(whisper_sidecar.path())
-            .args(["-m", model_path_str, "-f", temp_wav_str, "-ovtt", "-nt"]) // -nt for no timestamps in console
-            .output()
+        let whisper_sidecar = app_handle_clone.shell().sidecar("whisper")
+            .map_err(|e| e.to_string())?
+            .current_dir(binaries_path)
+            .args(["-m", model_path_str, "-f", temp_wav_str, "-ovtt", "-nt"]); // -nt for no timestamps in console
+
+        // Safely block on the async output future inside this spawn_blocking thread
+        let whisper_output = tauri::async_runtime::block_on(whisper_sidecar.output())
             .map_err(|e| format!("Whisper execution failed: {}", e))?;
 
         let whisper_vtt_output_path = env::temp_dir().join(format!("{}.vtt", temp_wav_filename));
@@ -188,11 +199,18 @@ async fn generate_auto_captions(app_handle: tauri::AppHandle, video_path: String
 
         if !whisper_output.status.success() {
             let stderr = String::from_utf8_lossy(&whisper_output.stderr);
+            let stdout = String::from_utf8_lossy(&whisper_output.stdout);
+            
+            // Clean up both temp files to prevent storage leaks on failure
             let _ = std::fs::remove_file(&whisper_vtt_output_path);
-            return Err(format!("Whisper transcription failed: {}", stderr));
+            let _ = std::fs::remove_file(&temp_wav_path); 
+            
+            return Err(format!("STDOUT: {} | STDERR: {}", stdout, stderr));
         }
 
-        std::fs::rename(&whisper_vtt_output_path, &final_vtt_path).map_err(|e| format!("Failed to move VTT file: {}", e))?;
+        //std::fs::rename(&whisper_vtt_output_path, &final_vtt_path).map_err(|e| format!("Failed to move VTT file: {}", e))?;
+        std::fs::copy(&whisper_vtt_output_path, &final_vtt_path).map_err(|e| format!("Failed to copy VTT file: {}", e))?;
+let _ = std::fs::remove_file(&whisper_vtt_output_path); // Clean up the temp file
 
         Ok(final_vtt_str)
     })
@@ -513,7 +531,8 @@ pub fn run() {
         run_ffmpeg, abort_ffmpeg,
         save_tspz_bundle,
         load_tspz_bundle,
-        resolve_subtitles
+        resolve_subtitles,
+        generate_auto_captions
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
