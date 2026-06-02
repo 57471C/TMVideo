@@ -132,6 +132,253 @@ async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String
 
 // Triggering a recompile to pick up new icons
 
+// ---------------------------------------------------------------------------
+// Bundle commands — save / load .tmvz project packages
+// ---------------------------------------------------------------------------
+
+/// Payload emitted to JS on the "package-progress" event.
+#[derive(Clone, serde::Serialize)]
+struct PackageProgressPayload {
+    step: String,
+    percent: u32,
+    message: String,
+    current: u32,
+    total: u32,
+}
+
+/// Save the current project state and all referenced video files into a single
+/// .tmvz archive (ZIP under the hood).
+///
+/// Heavy zip/IO work is offloaded to Tokio's blocking thread pool so the Tauri
+/// executor is never stalled. Progress events are emitted on "package-progress".
+///
+/// * `project_json` — the full serialised project state
+/// * `video_paths`  — absolute paths to every video file to bundle
+/// * `output_path`  — destination path for the .tmvz archive
+#[tauri::command]
+async fn save_tspz_bundle(
+    app_handle: tauri::AppHandle,
+    project_json: String,
+    video_paths: Vec<String>,
+    output_path: String,
+) -> Result<(), String> {
+    let app = app_handle.clone();
+
+    let emit = move |step: &str, percent: u32, message: &str, current: u32, total: u32| {
+        let _ = app.emit("package-progress", PackageProgressPayload {
+            step: step.to_string(),
+            percent,
+            message: message.to_string(),
+            current,
+            total,
+        });
+    };
+
+    emit("start", 0, "Creating archive…", 0, 0);
+
+    let app2 = app_handle.clone();
+    let total = video_paths.len() as u32;
+
+    tokio::task::spawn_blocking(move || {
+        use std::fs::File;
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let emit_b = |step: &str, percent: u32, message: &str, current: u32, total: u32| {
+            let _ = app2.emit("package-progress", PackageProgressPayload {
+                step: step.to_string(),
+                percent,
+                message: message.to_string(),
+                current,
+                total,
+            });
+        };
+
+        let dest = File::create(&output_path)
+            .map_err(|e| format!("Cannot create archive: {e}"))?;
+        let mut zip = zip::ZipWriter::new(dest);
+        let opts = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o644);
+
+        // --- project JSON ---
+        emit_b("project", 5, "Writing project data…", 0, total);
+        zip.start_file("project.tmv", opts)
+            .map_err(|e| format!("Cannot start project.tmv: {e}"))?;
+        zip.write_all(project_json.as_bytes())
+            .map_err(|e| format!("Cannot write project JSON: {e}"))?;
+
+        // --- video files ---
+        for (i, path_str) in video_paths.iter().enumerate() {
+            let current = (i + 1) as u32;
+            let src_path = std::path::Path::new(path_str);
+            let entry_name = src_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("video.mp4")
+                .to_string();
+
+            // Scale progress: videos occupy 10%–95% of the bar
+            let pct = 10 + ((i as f64 / total.max(1) as f64) * 85.0) as u32;
+            emit_b(
+                "video",
+                pct,
+                &format!("Packing {} ({}/{})", entry_name, current, total),
+                current,
+                total,
+            );
+
+            let mut src_file = File::open(src_path)
+                .map_err(|e| format!("Cannot open '{}': {e}", path_str))?;
+            zip.start_file(&entry_name, opts)
+                .map_err(|e| format!("Cannot start entry '{}': {e}", entry_name))?;
+            std::io::copy(&mut src_file, &mut zip)
+                .map_err(|e| format!("Cannot copy '{}' into archive: {e}", entry_name))?;
+        }
+
+        emit_b("finalising", 97, "Finalising archive…", total, total);
+        zip.finish()
+            .map_err(|e| format!("Cannot finalise archive: {e}"))?;
+        emit_b("done", 100, "Package complete!", total, total);
+
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Blocking task panicked: {e}"))??;
+
+    Ok(())
+}
+
+/// Result returned to the JavaScript caller after extracting a bundle.
+#[derive(serde::Serialize)]
+pub struct LoadBundleResult {
+    pub project_json: String,
+    pub video_paths: Vec<String>,
+}
+
+/// Open a .tmvz archive, extract its contents to the OS temp directory, and
+/// return the project JSON plus absolute paths of any extracted video files.
+///
+/// Extraction is offloaded to Tokio's blocking thread pool. Progress events
+/// are emitted on "package-progress".
+#[tauri::command]
+async fn load_tspz_bundle(
+    app_handle: tauri::AppHandle,
+    bundle_path: String,
+) -> Result<LoadBundleResult, String> {
+    let app = app_handle.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use std::fs::File;
+        use std::io::Read;
+
+        let emit = |step: &str, percent: u32, message: &str, current: u32, total: u32| {
+            let _ = app.emit("package-progress", PackageProgressPayload {
+                step: step.to_string(),
+                percent,
+                message: message.to_string(),
+                current,
+                total,
+            });
+        };
+
+        emit("start", 0, "Opening archive…", 0, 0);
+
+        let file = File::open(&bundle_path)
+            .map_err(|e| format!("Cannot open bundle '{}': {e}", bundle_path))?;
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| format!("Cannot read ZIP: {e}"))?;
+
+        let total = archive.len() as u32;
+
+        // Unique extraction directory
+        let extract_dir = std::env::temp_dir().join(format!(
+            "tmvideo_bundle_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&extract_dir)
+            .map_err(|e| format!("Cannot create temp dir: {e}"))?;
+
+        let mut project_json = String::new();
+        let mut video_paths: Vec<String> = Vec::new();
+
+        const VIDEO_EXTS: &[&str] =
+            &["mp4", "mkv", "avi", "mov", "webm", "mpg", "mpeg", "m4v", "flv"];
+
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| format!("Cannot read entry {i}: {e}"))?;
+
+            let name = entry.name().to_string();
+            let out_path = extract_dir.join(&name);
+            let current = (i + 1) as u32;
+            let pct = ((i as f64 / total.max(1) as f64) * 95.0) as u32;
+
+            emit(
+                "extract",
+                pct,
+                &format!("Extracting {} ({}/{})", name, current, total),
+                current,
+                total,
+            );
+
+            if entry.is_dir() {
+                std::fs::create_dir_all(&out_path)
+                    .map_err(|e| format!("Cannot create dir '{name}': {e}"))?;
+                continue;
+            }
+
+            let mut buf = Vec::new();
+            entry
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("Cannot read entry '{name}': {e}"))?;
+
+            if let Some(parent) = out_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Cannot create parent dir: {e}"))?;
+            }
+            std::fs::write(&out_path, &buf)
+                .map_err(|e| format!("Cannot write '{name}': {e}"))?;
+
+            let lower = name.to_lowercase();
+            if lower == "project.tmv" {
+                project_json = String::from_utf8(buf)
+                    .map_err(|e| format!("project.tmv is not valid UTF-8: {e}"))?;
+            } else {
+                let ext = std::path::Path::new(&lower)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("");
+                if VIDEO_EXTS.contains(&ext) {
+                    video_paths.push(
+                        out_path
+                            .to_str()
+                            .map(|s| s.to_string())
+                            .ok_or_else(|| format!("Non-UTF-8 path for '{name}'"))?,
+                    );
+                }
+            }
+        }
+
+        if project_json.is_empty() {
+            return Err("Archive does not contain a project.tmv file.".to_string());
+        }
+
+        emit("done", 100, "Extraction complete!", total, total);
+
+        Ok::<LoadBundleResult, String>(LoadBundleResult {
+            project_json,
+            video_paths,
+        })
+    })
+    .await
+    .map_err(|e| format!("Blocking task panicked: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -150,7 +397,13 @@ pub fn run() {
       Ok(())
     })
      // Add this line to register your new commands:
-    .invoke_handler(tauri::generate_handler![get_startup_file, get_launch_argument, run_ffmpeg, abort_ffmpeg]) 
+    .invoke_handler(tauri::generate_handler![
+        get_startup_file, 
+        get_launch_argument, 
+        run_ffmpeg, abort_ffmpeg,
+        save_tspz_bundle,
+        load_tspz_bundle
+        ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

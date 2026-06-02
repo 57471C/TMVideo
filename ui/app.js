@@ -16,6 +16,7 @@ let projectExportButton;
 let projectSaveAsButton;
 let projectImportButton;
 let newProjectButton;
+let packageBtn;
 let speedSlider;
 let seekBar;
 let playPauseButton;
@@ -603,6 +604,7 @@ const initializePlayer = () => {
   projectSaveAsButton = document.getElementById("projectSaveAsButton");
   projectImportButton = document.getElementById("projectImportButton");
   newProjectButton = document.getElementById("newProjectButton");
+  packageBtn = document.getElementById("packageBtn");
   loadVideoButton = document.getElementById("loadVideoButton");
   toggleFormatButton = document.getElementById("toggleFormatButton");
   speedSlider = document.getElementById("speedSlider");
@@ -620,6 +622,112 @@ const initializePlayer = () => {
 
   updateMarkersList();
 
+  // Wire up Save / Save As / Package buttons
+  projectExportButton?.addEventListener('click', () => exportToJSON(false));
+  projectSaveAsButton?.addEventListener('click', () => exportToJSON(true));
+  packageBtn?.addEventListener('click', async () => {
+    const isTauri = window.__TAURI__ !== undefined;
+    if (!isTauri) {
+      showToast('Packaging requires the desktop app.', 'error');
+      return;
+    }
+
+    // --- helpers to drive the progress modal ---
+    const modal        = document.getElementById('packageProgressModal');
+    const pkgTitle     = document.getElementById('pkgModalTitle');
+    const pkgStatus    = document.getElementById('pkgStatusMessage');
+    const pkgBar       = document.getElementById('pkgProgressBar');
+    const pkgPct       = document.getElementById('pkgPercent');
+    const pkgCounter   = document.getElementById('pkgFileCounter');
+    const pkgSpinner   = document.getElementById('pkgSpinner');
+    const pkgDoneIcon  = document.getElementById('pkgDoneIcon');
+    const pkgDoneFooter = document.getElementById('pkgDoneFooter');
+    const pkgCloseBtn  = document.getElementById('pkgCloseBtn');
+
+    const resetModal = () => {
+      pkgTitle.textContent  = 'Packaging Project…';
+      pkgStatus.textContent = 'Preparing…';
+      pkgBar.style.width    = '0%';
+      pkgPct.textContent    = '0%';
+      pkgCounter.textContent = '';
+      pkgSpinner.classList.remove('hidden');
+      pkgDoneIcon.classList.add('hidden');
+      pkgDoneFooter.classList.add('hidden');
+    };
+
+    const updateModal = ({ step, percent, message, current, total }) => {
+      pkgBar.style.width  = `${percent}%`;
+      pkgPct.textContent  = `${percent}%`;
+      pkgStatus.textContent = message;
+      if (total > 0 && (step === 'video' || step === 'extract')) {
+        pkgCounter.textContent = `File ${current} of ${total}`;
+      }
+      if (step === 'done') {
+        pkgTitle.textContent = 'Package Complete';
+        pkgSpinner.classList.add('hidden');
+        pkgDoneIcon.classList.remove('hidden');
+        pkgDoneFooter.classList.remove('hidden');
+        pkgBar.classList.replace('bg-blue-600', 'bg-green-500');
+      }
+    };
+
+    try {
+      // Sync state to localStorage first
+      saveLocalState();
+      const projectJson = localStorage.getItem('timeStudyData') || '{}';
+      const videoPaths = (videoQueue || [])
+        .map(v => v.videoFilePath || '')
+        .filter(p => p.length > 0);
+
+      const defaultName = projectName ? `${sanitizeFilename(projectName)}.tmvz` : 'project.tmvz';
+      const filePath = await window.__TAURI__.dialog.save({
+        filters: [{ name: 'TMVideo Package', extensions: ['tmvz'] }],
+        defaultPath: defaultName,
+      });
+      if (!filePath) return;
+
+      const actualPath = typeof filePath === 'object' ? filePath.path : filePath;
+
+      // Open modal and subscribe to progress events
+      resetModal();
+      modal.showModal();
+
+      let unlisten = null;
+      unlisten = await window.__TAURI__.event.listen('package-progress', (event) => {
+        updateModal(event.payload);
+        if (event.payload.step === 'done') {
+          // Unlisten after a tick so the final update renders first
+          setTimeout(() => { if (unlisten) { unlisten(); unlisten = null; } }, 200);
+        }
+      });
+
+      // Wire the close button
+      const onClose = () => {
+        modal.close();
+        pkgBar.classList.replace('bg-green-500', 'bg-blue-600');
+      };
+      pkgCloseBtn?.addEventListener('click', onClose, { once: true });
+
+      try {
+        await window.__TAURI__.core.invoke('save_tspz_bundle', {
+          projectJson,
+          videoPaths,
+          outputPath: actualPath,
+        });
+      } catch (invokeErr) {
+        // Clean up listener and modal on Rust-side error
+        if (unlisten) { unlisten(); unlisten = null; }
+        modal.close();
+        pkgBar.classList.replace('bg-green-500', 'bg-blue-600');
+        throw invokeErr;
+      }
+    } catch (e) {
+      toConsole('Error packaging project', e, debuggin);
+      showToast(`Error packaging project: ${e?.message || e}`, 'error');
+    }
+  });
+
+
   const urlParams = new URLSearchParams(window.location.search);
   const videoUrl = urlParams.get("v");
   if (videoUrl) {
@@ -630,22 +738,69 @@ const initializePlayer = () => {
     saveLocalState();
   }
 
-  addMarkerBtn.addEventListener("click", addMarker, false);
+  addMarkerBtn?.addEventListener("click", addMarker, false);
 
-  projectImportButton.addEventListener("click", async () => {
+  projectImportButton?.addEventListener("click", async () => {
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri) {
       try {
         const selected = await window.__TAURI__.dialog.open({
           multiple: false,
-          filters: [{ name: "TMVideo Project", extensions: ["tmv"] }],
+          filters: [{ name: "TMVideo Project / Package", extensions: ["tmv", "tmvz"] }],
         });
-        if (selected) {
-          projectFilePath = typeof selected === "object" ? selected.path : selected;
+        if (!selected) return;
+
+        const selectedPath = typeof selected === "object" ? selected.path : selected;
+        const lower = selectedPath.toLowerCase();
+
+        if (lower.endsWith(".tmvz")) {
+          // --- Bundle load path ---
+          toConsole("Loading .tmvz bundle", selectedPath, debuggin);
+          showToast("Extracting bundle…", "info");
+
+          try {
+            const result = await window.__TAURI__.core.invoke("load_tspz_bundle", {
+              bundlePath: selectedPath,
+            });
+
+            // Populate project from the extracted JSON
+            importFromJSON(result.project_json);
+
+            // Re-link each video using the extracted temp paths
+            if (result.video_paths && result.video_paths.length > 0) {
+              result.video_paths.forEach((tempPath, i) => {
+                if (videoQueue[i]) {
+                  videoQueue[i].videoFilePath = tempPath;
+                  videoQueue[i].videoFileName = tempPath.replace(/^.*[\\/]/, "");
+                }
+              });
+              // Reload the active video with the temp path
+              const active = videoQueue[activeQueueIndex];
+              if (active && active.videoFilePath) {
+                const url = window.__TAURI__.core.convertFileSrc(active.videoFilePath);
+                player.src = url;
+                player.preload = "auto";
+                player.load();
+                toggleVideoPlaceholder(false);
+              }
+              saveLocalState();
+              renderVideoQueueSelect();
+            }
+
+            showToast("Bundle loaded successfully.", "success");
+          } catch (bundleErr) {
+            toConsole("Error loading .tmvz bundle", bundleErr, debuggin);
+            showToast(`Error loading bundle: ${bundleErr?.message || bundleErr}`, "error");
+          }
+
+        } else {
+          // --- Standard .tmv load path ---
+          projectFilePath = selectedPath;
           localStorage.setItem("projectFilePath", projectFilePath);
           const jsonText = await window.__TAURI__.fs.readTextFile(projectFilePath);
           importFromJSON(jsonText);
         }
+
       } catch (e) {
         toConsole("Error loading project via Tauri", e, debuggin);
         alert(`Tauri Error (Project Load): ${e.message || JSON.stringify(e)}`);
@@ -656,7 +811,8 @@ const initializePlayer = () => {
     }
   });
 
-  newProjectButton.addEventListener("click", async () => {
+
+  newProjectButton?.addEventListener("click", async () => {
     if (markers.length > 0 || player.getAttribute("src")) {
       const proceed = await asyncConfirm(
         "Are you sure you want to start a new project? All unsaved data will be lost.",
@@ -713,7 +869,7 @@ const initializePlayer = () => {
 
     showToast("New project started.", "success");
   });
-  loadVideoButton.addEventListener("click", async () => {
+  loadVideoButton?.addEventListener("click", async () => {
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri) {
       try {

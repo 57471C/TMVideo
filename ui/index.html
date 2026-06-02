@@ -54,6 +54,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.5l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             <span class="hidden md:inline">Save As</span>
           </button>
+          <button id="packageBtn" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Package Project (.tmvz)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+            <span class="hidden md:inline">Package</span>
+          </button>
         <input type="file" id="projectFileInput" accept=".tmv" style="display: none" />
         </div>
 
@@ -285,6 +289,44 @@
         </div>
       </div>
     </div>
+
+    <!-- Package Progress Modal -->
+    <dialog id="packageProgressModal" class="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 p-0 backdrop:bg-black/60 backdrop:backdrop-blur-sm w-full max-w-md fixed inset-0 m-auto">
+      <div class="p-6 flex flex-col gap-5">
+        <!-- Header -->
+        <div class="flex items-center gap-3">
+          <div id="pkgSpinner" class="flex-shrink-0">
+            <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <div id="pkgDoneIcon" class="flex-shrink-0 hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <h5 id="pkgModalTitle" class="text-base font-semibold">Packaging Project…</h5>
+        </div>
+
+        <!-- Status message -->
+        <p id="pkgStatusMessage" class="text-sm text-zinc-500 dark:text-zinc-400 min-h-[1.25rem] truncate">Preparing…</p>
+
+        <!-- Progress bar -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs font-mono text-zinc-500 dark:text-zinc-400">
+            <span id="pkgFileCounter" class=""></span>
+            <span id="pkgPercent">0%</span>
+          </div>
+          <div class="w-full bg-zinc-200 dark:bg-zinc-700 h-2.5 rounded-full overflow-hidden">
+            <div id="pkgProgressBar" class="bg-blue-600 h-full rounded-full transition-all duration-200 ease-out" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Footer — only shown on completion -->
+        <div id="pkgDoneFooter" class="hidden flex justify-end">
+          <button type="button" id="pkgCloseBtn" class="btn btn-primary">Close</button>
+        </div>
+      </div>
+    </dialog>
 
     <!-- Confirm Modal -->
     <dialog id="confirmModal" class="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-lg shadow-2xl border border-zinc-200 dark:border-zinc-700 p-0 backdrop:bg-black/50 backdrop:backdrop-blur-sm w-full max-w-sm fixed inset-0 m-auto">
