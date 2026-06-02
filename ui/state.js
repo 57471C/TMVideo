@@ -85,7 +85,6 @@ const DOM = {
   clearMasterDataBtn: document.getElementById("clearMasterDataBtn"),
   closeMasterDataBtn: document.getElementById("closeMasterDataBtn"),
   closeMasterDataBtnX: document.getElementById("closeMasterDataBtnX"),
-  statusModal: document.getElementById("statusModal"),
 };
 
 const saveLocalState = () => {

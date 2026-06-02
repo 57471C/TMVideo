@@ -173,7 +173,7 @@ const addVideoToQueue = async () => {
   const videoName = await asyncPrompt("Enter a name for the new video:", `Video ${videoQueue.length + 1}`, "New Video");
   if (!videoName) return;
   const duplicate = await asyncConfirm(
-    "Would you like to duplicate the current video's tasks and video? (Click 'Cancel' to create a blank video slot)",
+    "Would you like to duplicate the current video's data? (Click 'Cancel' to create a blank video slot)",
     "Duplicate Data?",
   );
 
@@ -499,28 +499,6 @@ const initializePlayer = () => {
     const closeMasterModal = () => DOM.masterDataModal.close();
     if (DOM.closeMasterDataBtnX) DOM.closeMasterDataBtnX.addEventListener("click", closeMasterModal);
     if (DOM.closeMasterDataBtn) DOM.closeMasterDataBtn.addEventListener("click", closeMasterModal);
-  }
-
-  if (DOM.statusModal) {
-    for (const btn of DOM.statusModal.querySelectorAll(".status-btn")) {
-      btn.addEventListener("click", (e) => {
-        if (currentStatusEdit) {
-          handleInlineStatusEdit(
-            currentStatusEdit.opIndex,
-            currentStatusEdit.taskIndex,
-            e.target.getAttribute("data-status"),
-          );
-        }
-        DOM.statusModal.close();
-        currentStatusEdit = null;
-      });
-    }
-    DOM.statusModal.addEventListener("click", (e) => {
-      if (e.target === DOM.statusModal) {
-        DOM.statusModal.close();
-        currentStatusEdit = null;
-      }
-    });
   }
 
   player.addEventListener("timeupdate", seektimeupdate);
