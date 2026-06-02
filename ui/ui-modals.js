@@ -2,9 +2,11 @@ const showToast = (message, type = "error") => {
   const container = document.getElementById("toastContainer");
   if (!container) return;
 
+  const isMiniOrCinema = document.body.classList.contains("mini-player") || document.body.classList.contains("cinema-active");
+
   const toast = document.createElement("div");
   const baseClasses =
-    "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all duration-300 transform -translate-y-full opacity-0 max-w-md w-full pointer-events-auto cursor-pointer";
+    "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium transition-all duration-300 pointer-events-auto cursor-pointer max-w-md w-full opacity-0";
 
   const typeClasses =
     type === "error"
@@ -14,6 +16,13 @@ const showToast = (message, type = "error") => {
         : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400";
 
   toast.className = `${baseClasses} ${typeClasses}`;
+
+  // Set initial offscreen transforms depending on mode
+  if (isMiniOrCinema) {
+    toast.style.transform = "translateY(-100%)";
+  } else {
+    toast.style.transform = "translateX(100vw)";
+  }
 
   const icon =
     type === "error"
@@ -25,22 +34,32 @@ const showToast = (message, type = "error") => {
   toast.innerHTML = `${icon} <span>${message}</span>`;
   container.appendChild(toast);
 
-  // Click to dismiss early
-  toast.addEventListener("click", () => {
-    toast.classList.add("-translate-y-full", "opacity-0");
+  const dismiss = () => {
+    toast.style.opacity = "0";
+    if (isMiniOrCinema) {
+      toast.style.transform = "translateY(-100%)";
+    } else {
+      toast.style.transform = "translateX(-100vw)"; // Exit left
+    }
     setTimeout(() => {
       if (container.contains(toast)) container.removeChild(toast);
     }, 300);
+  };
+
+  // Click to dismiss early
+  toast.addEventListener("click", dismiss);
+
+  // Trigger entrance transition
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    if (isMiniOrCinema) {
+      toast.style.transform = "translateY(0)";
+    } else {
+      toast.style.transform = "translateX(0)";
+    }
   });
 
-  requestAnimationFrame(() => toast.classList.remove("-translate-y-full", "opacity-0"));
-
-  setTimeout(() => {
-    toast.classList.add("-translate-y-full", "opacity-0");
-    setTimeout(() => {
-      if (container.contains(toast)) container.removeChild(toast);
-    }, 300);
-  }, 4000);
+  setTimeout(dismiss, 4000);
 };
 
 // Intercept native alerts to use our sleek Toast system

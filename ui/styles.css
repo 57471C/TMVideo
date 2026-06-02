@@ -191,3 +191,23 @@ body.mini-player .h-125 {
 body.mini-player #videoPlaceholder {
   height: 100% !important;
 }
+
+/* Toast container positioning */
+#toastContainer {
+  top: auto !important;
+  bottom: 16px !important;
+  left: 16px !important;
+  right: auto !important;
+  transform: none !important;
+  align-items: flex-start !important;
+}
+
+body.mini-player #toastContainer,
+body.cinema-active #toastContainer {
+  top: 16px !important;
+  bottom: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  align-items: center !important;
+}
