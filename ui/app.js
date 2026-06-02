@@ -30,6 +30,34 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 
+window.loadSubtitleTrack = async (filePath) => {
+  let ccTrack = document.getElementById("ccTrack");
+  if (!ccTrack) {
+    ccTrack = document.createElement("track");
+    ccTrack.id = "ccTrack";
+    ccTrack.kind = "captions";
+    ccTrack.srclang = "en";
+    ccTrack.label = "English";
+    ccTrack.default = true;
+    if (player) {
+      player.appendChild(ccTrack);
+    }
+  }
+  ccTrack.src = "";
+
+  const isTauri = window.__TAURI__ !== undefined;
+  if (!isTauri || !filePath) return;
+  try {
+    const vttPath = await window.__TAURI__.core.invoke("resolve_subtitles", { videoPath: filePath });
+    if (vttPath) {
+      ccTrack.src = window.__TAURI__.core.convertFileSrc(vttPath);
+      toConsole("Loaded subtitle track", vttPath, debuggin);
+    }
+  } catch (err) {
+    toConsole("Error resolving subtitles", err, debuggin);
+  }
+};
+
 const renderVideoQueueSelect = () => {
   if (!DOM.videoQueueSelect) return;
   DOM.videoQueueSelect.innerHTML = "";
@@ -73,10 +101,13 @@ const switchVideoInQueue = async (index) => {
     player.src = tauriAssetUrl;
     player.preload = "auto";
     toggleVideoPlaceholder(false);
+    window.loadSubtitleTrack(videoFilePath);
   } else if (videoFileName && videoBlobCache[videoFileName]) {
     player.src = videoBlobCache[videoFileName];
     player.preload = "metadata";
     toggleVideoPlaceholder(false);
+    const ccTrack = document.getElementById("ccTrack");
+    if (ccTrack) ccTrack.src = "";
   } else {
     player.src = "";
     player.removeAttribute("src");
@@ -100,7 +131,7 @@ const removeCurrentVideo = async () => {
 
   const confirmRemove = await asyncConfirm(
     "Are you sure you want to remove this video from the project?",
-    "Remove Video"
+    "Remove Video",
   );
   if (!confirmRemove) return;
 
@@ -113,12 +144,12 @@ const removeCurrentVideo = async () => {
     processStartTime = 0;
     processEndTime = 0;
     markers = [];
-    
+
     player.src = "";
     player.removeAttribute("src");
     toggleVideoPlaceholder(true);
     DOM.videoPlaceholder.textContent = "Load a video to get started";
-    
+
     renderVideoQueueSelect();
     updateMarkersList();
     updateSliderTicks();
@@ -128,7 +159,7 @@ const removeCurrentVideo = async () => {
     if (activeQueueIndex >= videoQueue.length) {
       activeQueueIndex = videoQueue.length - 1;
     }
-    
+
     const currentVideo = videoQueue[activeQueueIndex];
     videoFileName = currentVideo.videoFileName || "";
     videoFilePath = currentVideo.videoFilePath || "";
@@ -141,7 +172,7 @@ const removeCurrentVideo = async () => {
 
     renderVideoQueueSelect();
     updateMarkersList();
-    
+
     player.pause();
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri && videoFilePath) {
@@ -149,10 +180,13 @@ const removeCurrentVideo = async () => {
       player.src = tauriAssetUrl;
       player.preload = "auto";
       toggleVideoPlaceholder(false);
+      window.loadSubtitleTrack(videoFilePath);
     } else if (videoFileName && videoBlobCache[videoFileName]) {
       player.src = videoBlobCache[videoFileName];
       player.preload = "metadata";
       toggleVideoPlaceholder(false);
+      const ccTrack = document.getElementById("ccTrack");
+      if (ccTrack) ccTrack.src = "";
     } else {
       player.src = "";
       player.removeAttribute("src");
@@ -275,6 +309,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
     const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
     player.src = tauriAssetUrl;
     player.preload = "auto";
+    window.loadSubtitleTrack(videoFilePath);
   } else {
     const file = fileOrPath;
     videoFileName = file.name;
@@ -285,11 +320,14 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
       const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
       player.src = tauriAssetUrl;
       player.preload = "auto";
+      window.loadSubtitleTrack(videoFilePath);
     } else {
       const fileURL = URL.createObjectURL(file);
       videoBlobCache[videoFileName] = fileURL;
       player.src = fileURL;
       player.preload = "metadata";
+      const ccTrack = document.getElementById("ccTrack");
+      if (ccTrack) ccTrack.src = "";
     }
   }
 
@@ -601,110 +639,115 @@ const initializePlayer = () => {
   updateMarkersList();
 
   // Wire up Save / Save As / Package buttons
-  projectExportButton?.addEventListener('click', () => exportToJSON(false));
-  projectSaveAsButton?.addEventListener('click', () => exportToJSON(true));
-  packageBtn?.addEventListener('click', async () => {
+  projectExportButton?.addEventListener("click", () => exportToJSON(false));
+  projectSaveAsButton?.addEventListener("click", () => exportToJSON(true));
+  packageBtn?.addEventListener("click", async () => {
     const isTauri = window.__TAURI__ !== undefined;
     if (!isTauri) {
-      showToast('Packaging requires the desktop app.', 'error');
+      showToast("Packaging requires the desktop app.", "error");
       return;
     }
 
     // --- helpers to drive the progress modal ---
-    const modal        = document.getElementById('packageProgressModal');
-    const pkgTitle     = document.getElementById('pkgModalTitle');
-    const pkgStatus    = document.getElementById('pkgStatusMessage');
-    const pkgBar       = document.getElementById('pkgProgressBar');
-    const pkgPct       = document.getElementById('pkgPercent');
-    const pkgCounter   = document.getElementById('pkgFileCounter');
-    const pkgSpinner   = document.getElementById('pkgSpinner');
-    const pkgDoneIcon  = document.getElementById('pkgDoneIcon');
-    const pkgDoneFooter = document.getElementById('pkgDoneFooter');
-    const pkgCloseBtn  = document.getElementById('pkgCloseBtn');
+    const modal = document.getElementById("packageProgressModal");
+    const pkgTitle = document.getElementById("pkgModalTitle");
+    const pkgStatus = document.getElementById("pkgStatusMessage");
+    const pkgBar = document.getElementById("pkgProgressBar");
+    const pkgPct = document.getElementById("pkgPercent");
+    const pkgCounter = document.getElementById("pkgFileCounter");
+    const pkgSpinner = document.getElementById("pkgSpinner");
+    const pkgDoneIcon = document.getElementById("pkgDoneIcon");
+    const pkgDoneFooter = document.getElementById("pkgDoneFooter");
+    const pkgCloseBtn = document.getElementById("pkgCloseBtn");
 
     const resetModal = () => {
-      pkgTitle.textContent  = 'Packaging Project…';
-      pkgStatus.textContent = 'Preparing…';
-      pkgBar.style.width    = '0%';
-      pkgPct.textContent    = '0%';
-      pkgCounter.textContent = '';
-      pkgSpinner.classList.remove('hidden');
-      pkgDoneIcon.classList.add('hidden');
-      pkgDoneFooter.classList.add('hidden');
+      pkgTitle.textContent = "Packaging Project…";
+      pkgStatus.textContent = "Preparing…";
+      pkgBar.style.width = "0%";
+      pkgPct.textContent = "0%";
+      pkgCounter.textContent = "";
+      pkgSpinner.classList.remove("hidden");
+      pkgDoneIcon.classList.add("hidden");
+      pkgDoneFooter.classList.add("hidden");
     };
 
     const updateModal = ({ step, percent, message, current, total }) => {
-      pkgBar.style.width  = `${percent}%`;
-      pkgPct.textContent  = `${percent}%`;
+      pkgBar.style.width = `${percent}%`;
+      pkgPct.textContent = `${percent}%`;
       pkgStatus.textContent = message;
-      if (total > 0 && (step === 'video' || step === 'extract')) {
+      if (total > 0 && (step === "video" || step === "extract")) {
         pkgCounter.textContent = `File ${current} of ${total}`;
       }
-      if (step === 'done') {
-        pkgTitle.textContent = 'Package Complete';
-        pkgSpinner.classList.add('hidden');
-        pkgDoneIcon.classList.remove('hidden');
-        pkgDoneFooter.classList.remove('hidden');
-        pkgBar.classList.replace('bg-blue-600', 'bg-green-500');
+      if (step === "done") {
+        pkgTitle.textContent = "Package Complete";
+        pkgSpinner.classList.add("hidden");
+        pkgDoneIcon.classList.remove("hidden");
+        pkgDoneFooter.classList.remove("hidden");
+        pkgBar.classList.replace("bg-blue-600", "bg-green-500");
       }
     };
 
     try {
       // Sync state to localStorage first
       saveLocalState();
-      const projectJson = localStorage.getItem('timeStudyData') || '{}';
-      const videoPaths = (videoQueue || [])
-        .map(v => v.videoFilePath || '')
-        .filter(p => p.length > 0);
+      const projectJson = localStorage.getItem("timeStudyData") || "{}";
+      const videoPaths = (videoQueue || []).map((v) => v.videoFilePath || "").filter((p) => p.length > 0);
 
-      const defaultName = projectName ? `${sanitizeFilename(projectName)}.tmvz` : 'project.tmvz';
+      const defaultName = projectName ? `${sanitizeFilename(projectName)}.tmvz` : "project.tmvz";
       const filePath = await window.__TAURI__.dialog.save({
-        filters: [{ name: 'TMVideo Package', extensions: ['tmvz'] }],
+        filters: [{ name: "TMVideo Package", extensions: ["tmvz"] }],
         defaultPath: defaultName,
       });
       if (!filePath) return;
 
-      const actualPath = typeof filePath === 'object' ? filePath.path : filePath;
+      const actualPath = typeof filePath === "object" ? filePath.path : filePath;
 
       // Open modal and subscribe to progress events
       resetModal();
       modal.showModal();
 
       let unlisten = null;
-      unlisten = await window.__TAURI__.event.listen('package-progress', (event) => {
+      unlisten = await window.__TAURI__.event.listen("package-progress", (event) => {
         updateModal(event.payload);
-        if (event.payload.step === 'done') {
+        if (event.payload.step === "done") {
           // Unlisten after a tick so the final update renders first
-          setTimeout(() => { if (unlisten) { unlisten(); unlisten = null; } }, 200);
+          setTimeout(() => {
+            if (unlisten) {
+              unlisten();
+              unlisten = null;
+            }
+          }, 200);
         }
       });
 
       // Wire the close button
       const onClose = () => {
         modal.close();
-        pkgBar.classList.replace('bg-green-500', 'bg-blue-600');
+        pkgBar.classList.replace("bg-green-500", "bg-blue-600");
       };
-      pkgCloseBtn?.addEventListener('click', onClose, { once: true });
+      pkgCloseBtn?.addEventListener("click", onClose, { once: true });
 
       try {
-        await window.__TAURI__.core.invoke('save_tspz_bundle', {
+        await window.__TAURI__.core.invoke("save_tspz_bundle", {
           projectJson,
           videoPaths,
           outputPath: actualPath,
         });
       } catch (invokeErr) {
         // Clean up listener and modal on Rust-side error
-        if (unlisten) { unlisten(); unlisten = null; }
+        if (unlisten) {
+          unlisten();
+          unlisten = null;
+        }
         modal.close();
-        pkgBar.classList.replace('bg-green-500', 'bg-blue-600');
+        pkgBar.classList.replace("bg-green-500", "bg-blue-600");
         throw invokeErr;
       }
     } catch (e) {
-      toConsole('Error packaging project', e, debuggin);
-      showToast(`Error packaging project: ${e?.message || e}`, 'error');
+      toConsole("Error packaging project", e, debuggin);
+      showToast(`Error packaging project: ${e?.message || e}`, "error");
     }
   });
-
 
   const urlParams = new URLSearchParams(window.location.search);
   const videoUrl = urlParams.get("v");
@@ -760,6 +803,7 @@ const initializePlayer = () => {
                 player.preload = "auto";
                 player.load();
                 toggleVideoPlaceholder(false);
+                window.loadSubtitleTrack(active.videoFilePath);
               }
               saveLocalState();
               renderVideoQueueSelect();
@@ -770,7 +814,6 @@ const initializePlayer = () => {
             toConsole("Error loading .tmvz bundle", bundleErr, debuggin);
             showToast(`Error loading bundle: ${bundleErr?.message || bundleErr}`, "error");
           }
-
         } else {
           // --- Standard .tmv load path ---
           projectFilePath = selectedPath;
@@ -778,7 +821,6 @@ const initializePlayer = () => {
           const jsonText = await window.__TAURI__.fs.readTextFile(projectFilePath);
           importFromJSON(jsonText);
         }
-
       } catch (e) {
         toConsole("Error loading project via Tauri", e, debuggin);
         alert(`Tauri Error (Project Load): ${e.message || JSON.stringify(e)}`);
@@ -788,7 +830,6 @@ const initializePlayer = () => {
       DOM.projectFileInput.click();
     }
   });
-
 
   newProjectButton?.addEventListener("click", async () => {
     if (markers.length > 0 || player.getAttribute("src")) {
@@ -1040,39 +1081,39 @@ const initializePlayer = () => {
   marqueeOverlay.addEventListener("mousemove", drawMarquee);
   marqueeOverlay.addEventListener("mouseup", endMarquee);
 
-const jumpToPreviousMarker = () => {
-  const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
-  const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
-  if (currentMarkers.length === 0) return;
+  const jumpToPreviousMarker = () => {
+    const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+    const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
+    if (currentMarkers.length === 0) return;
 
-  const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
-  const currentTime = player.currentTime;
+    const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
+    const currentTime = player.currentTime;
 
-  const target = [...sorted].reverse().find((m) => m.startTime < currentTime - 0.1);
-  if (target) {
-    player.currentTime = target.startTime;
-  } else {
-    player.currentTime = 0;
-  }
-  player.pause();
-};
+    const target = [...sorted].reverse().find((m) => m.startTime < currentTime - 0.1);
+    if (target) {
+      player.currentTime = target.startTime;
+    } else {
+      player.currentTime = 0;
+    }
+    player.pause();
+  };
 
-const jumpToNextMarker = () => {
-  const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
-  const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
-  if (currentMarkers.length === 0) return;
+  const jumpToNextMarker = () => {
+    const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+    const currentMarkers = activeVideo.markers || activeVideo.appState?.markers || markers || [];
+    if (currentMarkers.length === 0) return;
 
-  const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
-  const currentTime = player.currentTime;
+    const sorted = [...currentMarkers].sort((a, b) => a.startTime - b.startTime);
+    const currentTime = player.currentTime;
 
-  const target = sorted.find((m) => m.startTime > currentTime + 0.1);
-  if (target) {
-    player.currentTime = target.startTime;
-  } else {
-    player.currentTime = player.duration;
-  }
-  player.pause();
-};
+    const target = sorted.find((m) => m.startTime > currentTime + 0.1);
+    if (target) {
+      player.currentTime = target.startTime;
+    } else {
+      player.currentTime = player.duration;
+    }
+    player.pause();
+  };
 
   document.addEventListener("keydown", (e) => {
     // Disable shortcuts while Tetris is active to prevent key conflicts (e.g. arrows/spacebar seeking video)
@@ -1345,6 +1386,7 @@ document.addEventListener("DOMContentLoaded", () => {
               player.preload = "auto";
               player.load();
               toggleVideoPlaceholder(false);
+              window.loadSubtitleTrack(videoFilePath);
 
               renderVideoQueueSelect();
               updateLoadButtonColor();
@@ -1909,11 +1951,12 @@ const initializeTrimFeature = () => {
     batchExportList.innerHTML = "";
     videoQueue.forEach((video, index) => {
       const row = document.createElement("div");
-      row.className = "flex items-center justify-between gap-3 p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
+      row.className =
+        "flex items-center justify-between gap-3 p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
       row.innerHTML = `
         <div class="flex items-center gap-2 flex-1 min-w-0">
           <input type="checkbox" data-index="${index}" checked class="batch-video-checkbox rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
-          <span class="font-medium truncate dark:text-zinc-300" title="${video.videoFileName || 'Unknown Video'}">${video.videoFileName || 'Unknown Video'}</span>
+          <span class="font-medium truncate dark:text-zinc-300" title="${video.videoFileName || "Unknown Video"}">${video.videoFileName || "Unknown Video"}</span>
         </div>
         <div class="flex items-center gap-3 w-40 justify-end">
           <progress id="batch-progress-${index}" value="0" max="100" class="w-24 h-1.5 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-700 accent-blue-600"></progress>
@@ -2148,7 +2191,7 @@ async function processBatchQueue(presetType) {
       if (rowContainer) {
         rowContainer.classList.add("border-blue-500", "bg-blue-50/10");
       }
-      
+
       const statusIconContainer = document.getElementById(`batch-status-${index}`);
       if (statusIconContainer) {
         statusIconContainer.innerHTML = `
@@ -2182,7 +2225,9 @@ async function processBatchQueue(presetType) {
 
       try {
         markers = video.appState?.markers || [];
-        markers.forEach((m) => { if (!m.type) m.type = "standard"; });
+        markers.forEach((m) => {
+          if (!m.type) m.type = "standard";
+        });
 
         videoFileName = video.videoFileName || "";
         videoFilePath = video.videoFilePath || "";
@@ -2261,29 +2306,29 @@ async function processBatchQueue(presetType) {
             if (ffmpegChild) {
               await ffmpegChild.kill();
             }
-          }
+          },
         };
 
         const onLine = (line) => {
           parseFFmpegTime(line, exportDuration, specificProgressBar);
         };
-        ffmpeg.on('line', onLine);
+        ffmpeg.on("line", onLine);
         if (ffmpeg.stderr) {
-          ffmpeg.stderr.on('data', onLine);
+          ffmpeg.stderr.on("data", onLine);
         }
 
         ffmpegChild = await ffmpeg.spawn();
         try {
           await new Promise((resolve, reject) => {
-            ffmpeg.on('close', ({ code }) => {
+            ffmpeg.on("close", ({ code }) => {
               if (code === 0) resolve();
               else reject(new Error(`FFmpeg exited with code ${code}`));
             });
-            ffmpeg.on('error', error => reject(error));
+            ffmpeg.on("error", (error) => reject(error));
           });
         } finally {
           if (tempFilePath && remove) {
-            await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
+            await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
           }
         }
 
@@ -2306,10 +2351,10 @@ async function processBatchQueue(presetType) {
               break;
             }
             if (t >= seg.start && t <= seg.end) {
-              newTime += (t - seg.start);
+              newTime += t - seg.start;
               break;
             }
-            newTime += (seg.end - seg.start);
+            newTime += seg.end - seg.start;
           }
           return newTime;
         };
@@ -2328,7 +2373,6 @@ async function processBatchQueue(presetType) {
         video.appState.markers = remappedMarkers;
         video.processStartTime = 0;
         video.processEndTime = exportDuration;
-        
       } catch (fileErr) {
         toConsole("Batch item processing failed", fileErr, debuggin);
         if (statusIconContainer) {
@@ -2352,7 +2396,6 @@ async function processBatchQueue(presetType) {
     } else {
       showToast("Batch export completed!", "success");
     }
-
   } finally {
     markers = originalMarkers;
     videoFileName = originalVideoFileName;
@@ -2611,7 +2654,7 @@ async function executeExport(presetType) {
       await window.__TAURI__?.core?.invoke?.("run_ffmpeg", { args });
     } finally {
       if (tempFilePath && remove) {
-        await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
+        await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
       }
     }
 
@@ -2662,6 +2705,7 @@ async function executeExport(presetType) {
     player.preload = "auto";
     player.load();
     toggleVideoPlaceholder(false);
+    window.loadSubtitleTrack(videoFilePath);
 
     saveLocalState();
     updateMarkersList();
@@ -2705,7 +2749,7 @@ async function executeExport(presetType) {
       unlistenStderr();
     }
     if (tempFilePath && remove) {
-      await remove(tempFilePath).catch(e => console.warn("Failed to delete temp file:", e));
+      await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
     }
     if (trimOnlyBtn) {
       trimOnlyBtn.textContent = originalTrimOnlyText;

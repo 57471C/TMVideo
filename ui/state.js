@@ -337,10 +337,15 @@ const importFromJSON = (jsonText) => {
       player.src = tauriAssetUrl;
       player.preload = "auto";
       toggleVideoPlaceholder(false);
+      if (typeof window.loadSubtitleTrack === "function") {
+        window.loadSubtitleTrack(videoFilePath);
+      }
     } else if (videoFileName && videoBlobCache[videoFileName]) {
       player.src = videoBlobCache[videoFileName];
       player.preload = "metadata";
       toggleVideoPlaceholder(false);
+      const ccTrack = document.getElementById("ccTrack");
+      if (ccTrack) ccTrack.src = "";
     } else {
       player.src = "";
       player.removeAttribute("src");

@@ -132,6 +132,48 @@ async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String
 
 // Triggering a recompile to pick up new icons
 
+#[tauri::command]
+async fn resolve_subtitles(app_handle: tauri::AppHandle, video_path: String) -> Result<Option<String>, String> {
+    use std::path::Path;
+
+    let v_path = Path::new(&video_path);
+    let base_dir = v_path.parent().unwrap_or(Path::new(""));
+    let base_name = v_path.file_stem().unwrap_or_default().to_str().unwrap_or("video");
+    
+    let vtt_path = base_dir.join(format!("{}.vtt", base_name));
+    let srt_path = base_dir.join(format!("{}.srt", base_name));
+
+    // 1. Check if .vtt exists
+    if vtt_path.exists() {
+        return Ok(Some(vtt_path.to_string_lossy().into_owned()));
+    }
+
+    // 2. Check if .srt exists and convert
+    if srt_path.exists() {
+        let srt_str = srt_path.to_string_lossy().into_owned();
+        let vtt_str = vtt_path.to_string_lossy().into_owned();
+
+        let sidecar = app_handle.shell().sidecar("ffmpeg").map_err(|e| e.to_string())?;
+        let output = sidecar.args(["-y", "-i", &srt_str, &vtt_str]).output().await.map_err(|e| e.to_string())?;
+
+        if output.status.success() {
+            return Ok(Some(vtt_str));
+        }
+    }
+
+    // 3. Extract embedded soft-subtitles
+    let vtt_str = vtt_path.to_string_lossy().into_owned();
+    let sidecar = app_handle.shell().sidecar("ffmpeg").map_err(|e| e.to_string())?;
+    let output = sidecar.args(["-y", "-i", &video_path, "-map", "0:s:0", &vtt_str]).output().await.map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(Some(vtt_str))
+    } else {
+        let _ = std::fs::remove_file(&vtt_path);
+        Ok(None)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Bundle commands — save / load .tmvz project packages
 // ---------------------------------------------------------------------------
@@ -402,7 +444,8 @@ pub fn run() {
         get_launch_argument, 
         run_ffmpeg, abort_ffmpeg,
         save_tspz_bundle,
-        load_tspz_bundle
+        load_tspz_bundle,
+        resolve_subtitles
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
