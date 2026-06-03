@@ -286,6 +286,112 @@
           <label for="projectCommentsInput" class="form-label">Project Comments</label>
           <textarea id="projectCommentsInput" class="form-control w-full" rows="3" placeholder="Notes about this project..."></textarea>
         </div>
+
+        <hr class="border-zinc-200 dark:border-zinc-700" />
+
+        <div class="flex flex-col gap-4">
+          <h6 class="text-sm font-semibold text-zinc-900 dark:text-white">Video Editing Utilities</h6>
+
+          <!-- Config & Progress Container -->
+          <div id="trimNormalContent" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label for="trimStartInput" class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400">Start Time</label>
+                <input type="text" id="trimStartInput" class="form-control w-full font-mono text-center text-sm" placeholder="00:00:00.00">
+              </div>
+              <div>
+                <label for="trimEndInput" class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400">End Time</label>
+                <input type="text" id="trimEndInput" class="form-control w-full font-mono text-center text-sm" placeholder="00:00:00.00">
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400 block mb-2">Quality Preset (Re-encoding)</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
+                  <input type="radio" name="trimQuality" value="low" class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                  Low
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
+                  <input type="radio" name="trimQuality" value="medium" checked class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                  Medium
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
+                  <input type="radio" name="trimQuality" value="high" class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                  High
+                </label>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-700 pt-3">
+              <label for="batchExportToggle" class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer flex items-center gap-2">
+                <input type="checkbox" id="batchExportToggle" class="rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
+                Batch Export (All Videos)
+              </label>
+            </div>
+
+            <div id="batch-export-list" class="hidden space-y-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb]:rounded-full"></div>
+
+            <!-- Progress bar UI container -->
+            <div id="trimProgressContainer" class="hidden space-y-2 pt-2 cursor-pointer select-none">
+              <div class="flex justify-between items-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <div class="flex items-center gap-2">
+                  <svg id="trimProgressSpinner" class="animate-spin h-3.5 w-3.5 text-blue-500 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Processing Video...</span>
+                </div>
+                <span id="trimProgressText">0%</span>
+              </div>
+              <div class="w-full bg-zinc-200 dark:bg-zinc-700 h-2.5 rounded-full overflow-hidden">
+                <div id="trimProgressBar" class="bg-blue-600 h-full rounded-full transition-all duration-150" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Normal Footer / Buttons -->
+          <div id="trimNormalFooter" class="pt-4 border-t border-zinc-200 dark:border-zinc-700 flex flex-wrap gap-2 justify-end">
+            <button type="button" id="cancelTrimBtn" class="btn btn-outline-secondary">Cancel</button>
+            <button type="button" id="trimOnlyBtn" class="btn btn-outline-primary">Trim Only (Copy)</button>
+            <button type="button" id="trimCompressBtn" class="btn btn-primary">Trim & Compress</button>
+          </div>
+
+          <!-- Tetris Easter Egg Screen -->
+          <div id="tetrisContainer" class="hidden pt-5 flex flex-col items-center justify-center relative">
+            <div class="flex items-start gap-4">
+              <!-- Main Canvas -->
+              <canvas id="tetrisCanvas" width="200" height="400" class="rounded shadow bg-zinc-950"></canvas>
+              
+              <!-- Sidebar for stats and next block -->
+              <div class="flex flex-col gap-3">
+                <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col items-center shadow">
+                  <span class="text-[10px] text-zinc-400 font-bold uppercase mb-1.5">Next</span>
+                  <canvas id="tetrisNextCanvas" width="50" height="50" class="bg-black/40 rounded-sm"></canvas>
+                </div>
+                <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col gap-1.5 min-w-17.5 shadow text-xs">
+                  <div class="flex flex-col">
+                    <span class="text-[9px] text-zinc-500 font-bold uppercase">Score</span>
+                    <span id="tetrisScore" class="font-mono font-bold text-sm text-zinc-200">00000</span>
+                  </div>
+                  <div class="flex flex-col border-t border-zinc-800 pt-1.5">
+                    <span class="text-[9px] text-zinc-500 font-bold uppercase">High</span>
+                    <span id="tetrisHighScore" class="font-mono font-bold text-sm text-zinc-200">00000</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="text-[10px] text-zinc-500 dark:text-zinc-400 mt-4 font-medium">Tip: Press "B" to hide/show the game screen.</p>
+            
+            <!-- Overlay for Game Over / 100% Completion -->
+            <div id="tetrisOverlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center text-center p-4 hidden z-20">
+              <h6 id="tetrisOverlayTitle" class="text-lg font-bold text-white mb-4">Game Over</h6>
+              <div id="tetrisOverlayButtons" class="flex flex-col gap-2 w-full max-w-40">
+                <!-- Dynamic buttons will be inserted here -->
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -349,123 +455,6 @@
         <div class="flex justify-end gap-3">
           <button type="button" id="promptCancelBtn" class="btn btn-outline-secondary">Cancel</button>
           <button type="button" id="promptOkBtn" class="btn btn-primary">OK</button>
-        </div>
-      </div>
-    </dialog>
-
-
-
-
-
-    <!-- Trim Video Modal -->
-    <dialog id="trimModal" class="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-lg shadow-2xl border border-zinc-200 dark:border-zinc-700 p-0 backdrop:bg-black/50 backdrop:backdrop-blur-sm w-full max-w-md fixed inset-0 m-auto transition-all duration-300 ease-in-out transform opacity-100 scale-100">
-      <div class="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-700">
-        <h5 class="text-lg font-semibold flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-          Trim / Compress Video
-        </h5>
-        <button type="button" id="closeTrimBtnX" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-2xl font-bold px-2 leading-none focus:outline-none">&times;</button>
-      </div>
-      <!-- Config & Progress Container -->
-      <div id="trimNormalContent" class="p-5 space-y-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label for="trimStartInput" class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400">Start Time</label>
-            <input type="text" id="trimStartInput" class="form-control w-full font-mono text-center text-sm" placeholder="00:00:00.00">
-          </div>
-          <div>
-            <label for="trimEndInput" class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400">End Time</label>
-            <input type="text" id="trimEndInput" class="form-control w-full font-mono text-center text-sm" placeholder="00:00:00.00">
-          </div>
-        </div>
-
-        <div>
-          <label class="form-label font-semibold text-xs text-zinc-500 dark:text-zinc-400 block mb-2">Quality Preset (Re-encoding)</label>
-          <div class="flex gap-4">
-            <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
-              <input type="radio" name="trimQuality" value="low" class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-              Low
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
-              <input type="radio" name="trimQuality" value="medium" checked class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-              Medium
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer text-sm font-medium">
-              <input type="radio" name="trimQuality" value="high" class="text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-              High
-            </label>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-700 pt-3">
-          <label for="batchExportToggle" class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer flex items-center gap-2">
-            <input type="checkbox" id="batchExportToggle" class="rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
-            Batch Export (All Videos)
-          </label>
-        </div>
-
-        <div id="batch-export-list" class="hidden space-y-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-thumb]:rounded-full"></div>
-
-        <!-- Progress bar UI container -->
-        <div id="trimProgressContainer" class="hidden space-y-2 pt-2 cursor-pointer select-none">
-          <div class="flex justify-between items-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-            <div class="flex items-center gap-2">
-              <svg id="trimProgressSpinner" class="animate-spin h-3.5 w-3.5 text-blue-500 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Processing Video...</span>
-            </div>
-            <span id="trimProgressText">0%</span>
-          </div>
-          <div class="w-full bg-zinc-200 dark:bg-zinc-700 h-2.5 rounded-full overflow-hidden">
-            <div id="trimProgressBar" class="bg-blue-600 h-full rounded-full transition-all duration-150" style="width: 0%"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Normal Footer -->
-      <div id="trimNormalFooter" class="p-4 border-t border-zinc-200 dark:border-zinc-700 flex flex-wrap gap-2 justify-end bg-zinc-50 dark:bg-zinc-800/50">
-        <button type="button" id="cancelTrimBtn" class="btn btn-outline-secondary">Cancel</button>
-        <button type="button" id="trimOnlyBtn" class="btn btn-outline-primary">Trim Only (Copy)</button>
-        <button type="button" id="trimCompressBtn" class="btn btn-primary">Trim & Compress</button>
-      </div>
-
-      <!-- Tetris Easter Egg Screen -->
-      <div id="tetrisContainer" class="hidden p-5 flex flex-col items-center justify-center relative">
-        <div class="flex items-start gap-4">
-          <!-- Main Canvas -->
-          <canvas id="tetrisCanvas" width="200" height="400" class="rounded shadow bg-zinc-950"></canvas>
-          
-          <!-- Sidebar for stats and next block -->
-          <div class="flex flex-col gap-3">
-            <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col items-center shadow">
-              <span class="text-[10px] text-zinc-400 font-bold uppercase mb-1.5">Next</span>
-              <canvas id="tetrisNextCanvas" width="50" height="50" class="bg-black/40 rounded-sm"></canvas>
-            </div>
-            <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col gap-1.5 min-w-17.5 shadow text-xs">
-              <div class="flex flex-col">
-                <span class="text-[9px] text-zinc-500 font-bold uppercase">Score</span>
-                <span id="tetrisScore" class="font-mono font-bold text-sm text-zinc-200">00000</span>
-              </div>
-              <div class="flex flex-col border-t border-zinc-800 pt-1.5">
-                <span class="text-[9px] text-zinc-500 font-bold uppercase">High</span>
-                <span id="tetrisHighScore" class="font-mono font-bold text-sm text-zinc-200">00000</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <p class="text-[10px] text-zinc-500 dark:text-zinc-400 mt-4 font-medium">Tip: Press "B" to hide/show the game screen.</p>
-        
-        <!-- Overlay for Game Over / 100% Completion -->
-        <div id="tetrisOverlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center text-center p-4 hidden z-20">
-          <h6 id="tetrisOverlayTitle" class="text-lg font-bold text-white mb-4">Game Over</h6>
-          <div id="tetrisOverlayButtons" class="flex flex-col gap-2 w-full max-w-40">
-            <!-- Dynamic buttons will be inserted here -->
-          </div>
         </div>
       </div>
     </dialog>

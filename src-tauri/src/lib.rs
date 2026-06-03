@@ -571,9 +571,20 @@ async fn join_and_compress_videos(
         std::fs::copy(&temp_final_path, &final_path)
             .map_err(|e| format!("Failed to copy file across drives: {}", e))?;
 
-        let _ = std::fs::remove_file(&list_path);
-        let _ = std::fs::remove_file(&intermediate_path);
-        let _ = std::fs::remove_file(&temp_final_path);
+        let concat_list_str = list_path.to_string_lossy().to_string();
+        let concat_list_path = Path::new(&concat_list_str);
+        if concat_list_path.exists() {
+            if let Err(e) = std::fs::remove_file(concat_list_path) {
+                println!("Non-fatal warning: failed to delete temp list: {}", e);
+            }
+        }
+
+        if intermediate_path.exists() {
+            let _ = std::fs::remove_file(&intermediate_path);
+        }
+        if temp_final_path.exists() {
+            let _ = std::fs::remove_file(&temp_final_path);
+        }
 
         Ok(final_path_str.to_string())
     })

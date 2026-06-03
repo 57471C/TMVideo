@@ -126,8 +126,9 @@
     // Set up boss key listener globally
     window.addEventListener("keydown", (e) => {
       if (e.key === "b" || e.key === "B") {
-        const modal = document.getElementById("trimModal");
-        if (modal && modal.open && (document.getElementById("tetrisContainer").style.display !== "none" || isBossKeyHidden)) {
+        const panel = document.getElementById("settingsPanel");
+        const isOpen = panel && !panel.classList.contains("translate-x-full");
+        if (isOpen && (document.getElementById("tetrisContainer").style.display !== "none" || isBossKeyHidden)) {
           e.preventDefault();
           toggleBossKey();
         }
@@ -220,16 +221,11 @@
         gameOverButtons.push({
           text: "Quit",
           action: () => {
-            const modal = document.getElementById("trimModal");
-            if (modal) {
-              modal.classList.remove("opacity-100", "scale-100");
-              modal.classList.add("opacity-0", "scale-95");
-              setTimeout(() => {
-                modal.close();
-                if (typeof window.resetTrimModalUI === "function") {
-                  window.resetTrimModalUI();
-                }
-              }, 300);
+            if (typeof toggleSettings === "function") {
+              toggleSettings(false);
+            }
+            if (typeof window.resetTrimModalUI === "function") {
+              window.resetTrimModalUI();
             }
           },
         });
@@ -472,16 +468,11 @@
           gameOverButtons.push({
             text: "Quit",
             action: () => {
-              const modal = document.getElementById("trimModal");
-              if (modal) {
-                modal.classList.remove("opacity-100", "scale-100");
-                modal.classList.add("opacity-0", "scale-95");
-                setTimeout(() => {
-                  modal.close();
-                  if (typeof window.resetTrimModalUI === "function") {
-                    window.resetTrimModalUI();
-                  }
-                }, 300);
+              if (typeof toggleSettings === "function") {
+                toggleSettings(false);
+              }
+              if (typeof window.resetTrimModalUI === "function") {
+                window.resetTrimModalUI();
               }
             },
           });
@@ -498,16 +489,11 @@
     if (isProcessingComplete) return;
 
     if (window.isSecretGame) {
-      const modal = document.getElementById("trimModal");
-      if (modal) {
-        modal.classList.remove("opacity-100", "scale-100");
-        modal.classList.add("opacity-0", "scale-95");
-        setTimeout(() => {
-          modal.close();
-          if (typeof window.resetTrimModalUI === "function") {
-            window.resetTrimModalUI();
-          }
-        }, 300);
+      if (typeof toggleSettings === "function") {
+        toggleSettings(false);
+      }
+      if (typeof window.resetTrimModalUI === "function") {
+        window.resetTrimModalUI();
       }
       return;
     }
@@ -616,25 +602,22 @@
           saveHighScore();
           // Clean up keyboard events
           window.removeEventListener("keydown", handleInput);
-          const modal = document.getElementById("trimModal");
-          modal.classList.remove("opacity-100", "scale-100");
-          modal.classList.add("opacity-0", "scale-95");
-          setTimeout(() => {
-            modal.close();
-            // Restore normal dialog contents for future runs
-            document.getElementById("tetrisContainer").style.display = "none";
-            document.getElementById("tetrisContainer").classList.add("hidden");
-            document.getElementById("trimNormalContent").classList.remove("hidden");
-            document.getElementById("trimNormalFooter").classList.remove("hidden");
+          if (typeof toggleSettings === "function") {
+            toggleSettings(false);
+          }
+          // Restore normal dialog contents for future runs
+          document.getElementById("tetrisContainer").style.display = "none";
+          document.getElementById("tetrisContainer").classList.add("hidden");
+          document.getElementById("trimNormalContent").classList.remove("hidden");
+          document.getElementById("trimNormalFooter").classList.remove("hidden");
 
-            // Reset spinner & progress elements
-            const spinner = document.getElementById("trimProgressSpinner");
-            if (spinner) spinner.classList.add("hidden");
-            const progressBar = document.getElementById("trimProgressBar");
-            const progressText = document.getElementById("trimProgressText");
-            if (progressBar) progressBar.style.width = "0%";
-            if (progressText) progressText.textContent = "0%";
-          }, 300);
+          // Reset spinner & progress elements
+          const spinner = document.getElementById("trimProgressSpinner");
+          if (spinner) spinner.classList.add("hidden");
+          const progressBar = document.getElementById("trimProgressBar");
+          const progressText = document.getElementById("trimProgressText");
+          if (progressBar) progressBar.style.width = "0%";
+          if (progressText) progressText.textContent = "0%";
         },
       },
     ]);

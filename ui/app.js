@@ -1840,17 +1840,12 @@ const updateMarkerName = (markerIndex, newName) => {
   const lowerName = trimmed.toLowerCase();
   if (lowerName === "terry" || lowerName === "tetris") {
     window.isSecretGame = true;
-    const trimModal = document.getElementById("trimModal");
-    if (trimModal) {
-      if (typeof window.resetTrimModalUI === "function") {
-        window.resetTrimModalUI();
-      }
-      trimModal.classList.remove("opacity-0", "scale-95");
-      trimModal.classList.add("opacity-100", "scale-100");
-      trimModal.showModal();
-      if (typeof window.activateTetris === "function") {
-        window.activateTetris();
-      }
+    toggleSettings(true);
+    if (typeof window.resetTrimModalUI === "function") {
+      window.resetTrimModalUI();
+    }
+    if (typeof window.activateTetris === "function") {
+      window.activateTetris();
     }
     updateMarkersList();
     return;
@@ -1953,8 +1948,6 @@ const initializeTrimFeature = () => {
   if (!isTauri) return;
 
   const trimVideoBtn = document.getElementById("trimVideoBtn");
-  const trimModal = document.getElementById("trimModal");
-  const closeTrimBtnX = document.getElementById("closeTrimBtnX");
   const cancelTrimBtn = document.getElementById("cancelTrimBtn");
   const trimOnlyBtn = document.getElementById("trimOnlyBtn");
   const trimCompressBtn = document.getElementById("trimCompressBtn");
@@ -1969,18 +1962,18 @@ const initializeTrimFeature = () => {
       document.getElementById("trimStartInput").value = formatTimeToHHMMSSMS(processStartTime);
       document.getElementById("trimEndInput").value = formatTimeToHHMMSSMS(processEndTime || player.duration);
       resetTrimModalUI();
-      trimModal.classList.remove("opacity-0", "scale-95");
-      trimModal.classList.add("opacity-100", "scale-100");
-      trimModal.showModal();
+      toggleSettings(true);
     });
   }
 
   const resetTrimModalUI = () => {
-    trimOnlyBtn.disabled = false;
-    trimCompressBtn.disabled = false;
-    cancelTrimBtn.disabled = false;
-    cancelTrimBtn.className = "btn btn-outline-secondary";
-    cancelTrimBtn.textContent = "Cancel";
+    if (trimOnlyBtn) trimOnlyBtn.disabled = false;
+    if (trimCompressBtn) trimCompressBtn.disabled = false;
+    if (cancelTrimBtn) {
+      cancelTrimBtn.disabled = false;
+      cancelTrimBtn.className = "btn btn-outline-secondary";
+      cancelTrimBtn.textContent = "Cancel";
+    }
     document.getElementById("trimProgressContainer").classList.add("hidden");
     const spinner = document.getElementById("trimProgressSpinner");
     if (spinner) spinner.classList.add("hidden");
@@ -2116,10 +2109,7 @@ const initializeTrimFeature = () => {
       }
       activeFFmpegChild = null;
     }
-    trimModal.classList.remove("opacity-100", "scale-100");
-    trimModal.classList.add("opacity-0", "scale-95");
-    await new Promise((r) => setTimeout(r, 300));
-    trimModal.close();
+    toggleSettings(false);
     resetTrimModalUI();
   };
 
@@ -2138,75 +2128,7 @@ const initializeTrimFeature = () => {
     }
   };
 
-  if (closeTrimBtnX) closeTrimBtnX.addEventListener("click", closeTrim);
   if (cancelTrimBtn) cancelTrimBtn.addEventListener("click", closeTrim);
-
-  const handleTrimAction = async (isCompression) => {
-    toConsole("Trim action button clicked", { isCompression }, debuggin);
-    const startVal = parseTimeFromHHMMSSMS(document.getElementById("trimStartInput").value);
-    const endVal = parseTimeFromHHMMSSMS(document.getElementById("trimEndInput").value);
-
-    if (startVal === null || endVal === null) {
-      toConsole("Trim validation failed: Invalid time format", { startVal, endVal }, debuggin);
-      alert("Invalid start or end time format.");
-      return;
-    }
-    if (startVal >= endVal) {
-      toConsole("Trim validation failed: Start >= End", { startVal, endVal }, debuggin);
-      alert("Start time must be less than end time.");
-      return;
-    }
-
-    const qualityMode = document.querySelector('input[name="trimQuality"]:checked').value;
-    toConsole("Trim parameters validation success", { startVal, endVal, qualityMode }, debuggin);
-
-    trimOnlyBtn.disabled = true;
-    trimCompressBtn.disabled = true;
-
-    // Style Cancel button as red Abort button
-    cancelTrimBtn.disabled = false;
-    cancelTrimBtn.className = "btn btn-danger";
-    cancelTrimBtn.textContent = "Abort Trim";
-
-    try {
-      await processVideo(startVal, endVal, qualityMode, isCompression);
-    } catch (err) {
-      toConsole("Error processing video", err, debuggin);
-
-      // Quietly handle user cancellation
-      if (err.message === "Save location was not specified.") {
-        trimOnlyBtn.disabled = false;
-        trimCompressBtn.disabled = false;
-        cancelTrimBtn.disabled = false;
-        return;
-      }
-
-      // Quietly handle user abort
-      if (err.message === "Aborted by user") {
-        resetTrimModalUI();
-        return;
-      }
-
-      // Handle same path selection
-      if (err.message === "Input and output paths are identical.") {
-        trimOnlyBtn.disabled = false;
-        trimCompressBtn.disabled = false;
-        cancelTrimBtn.disabled = false;
-        alert(
-          "Error: The output file path cannot be the same as the input video path. Please choose a different name or location.",
-        );
-        return;
-      }
-
-      trimModal.classList.remove("opacity-100", "scale-100");
-      trimModal.classList.add("opacity-0", "scale-95");
-      setTimeout(() => {
-        trimModal.close();
-        resetTrimModalUI();
-      }, 300);
-      alert(`Video processing failed: ${err.message || err}`);
-    }
-  };
 
   if (trimOnlyBtn) {
     trimOnlyBtn.addEventListener("click", () => executeExport("copy"));
@@ -2700,7 +2622,6 @@ async function executeExport(presetType) {
     args.push(actualOutputPath);
     toConsole("Spawning FFmpeg with args", args, debuggin);
 
-    const trimModal = document.getElementById("trimModal");
     const progressContainer = document.getElementById("trimProgressContainer");
     const progressBar = document.getElementById("trimProgressBar");
     const progressText = document.getElementById("trimProgressText");
@@ -2854,10 +2775,7 @@ async function executeExport(presetType) {
       showToast("Video completed.", "success");
       window.onVideoProcessingFinished();
     } else {
-      trimModal.classList.remove("opacity-100", "scale-100");
-      trimModal.classList.add("opacity-0", "scale-95");
-      await new Promise((r) => setTimeout(r, 300));
-      trimModal.close();
+      toggleSettings(false);
       if (typeof window.resetTrimModalUI === "function") {
         window.resetTrimModalUI();
       }
