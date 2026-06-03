@@ -1,6 +1,6 @@
 # TMVideo
 
-[![Version](https://img.shields.io/badge/version-0.2.3-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.4-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
 
 ## Overview
 
@@ -29,6 +29,9 @@ TMVideo (Time Media Video) is a lightweight, high-performance native Windows med
    ```
 
 ## Changelog
+
+### v0.2.4
+* Added: "CC" Closed Captions toggle button with t/T (titles) shortcut key.
 
 ### v0.2.3
 * Added: "expand player" button to toggle between editing and quick view modes.
