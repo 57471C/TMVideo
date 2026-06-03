@@ -2,6 +2,7 @@ const appWindow = window.__TAURI__?.window?.appWindow || window.__TAURI__?.windo
 const Command = window.__TAURI__?.shell?.Command || window.__TAURI__?.pluginShell?.Command || null;
 const writeTextFile = window.__TAURI__?.fs?.writeTextFile || null;
 const remove = window.__TAURI__?.fs?.remove || null;
+const exists = window.__TAURI__?.fs?.exists || null;
 const tempdir = window.__TAURI__?.os?.tempdir || null;
 const join = window.__TAURI__?.path?.join || null;
 const openDialog = window.__TAURI__?.dialog?.open || null;
@@ -30,7 +31,32 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 
+window.resetClosedCaptions = () => {
+  window.currentCaptions = [];
+
+  const videoPlayer = document.querySelector('video') || player;
+  if (videoPlayer) {
+    const existingTracks = videoPlayer.querySelectorAll('track');
+    existingTracks.forEach(track => track.remove());
+
+    while (videoPlayer.textTracks.length > 0) {
+      videoPlayer.textTracks[0].mode = 'disabled';
+    }
+  }
+
+  const ccDisplay = document.getElementById('cc-output');
+  if (ccDisplay) {
+    ccDisplay.innerHTML = '';
+  }
+
+  const transcriptContainer = document.getElementById('transcript-list');
+  if (transcriptContainer) {
+    transcriptContainer.innerHTML = '';
+  }
+};
+
 window.loadSubtitleTrack = async (filePath) => {
+  window.resetClosedCaptions();
   let ccTrack = document.getElementById("ccTrack");
   if (!ccTrack) {
     ccTrack = document.createElement("track");
@@ -63,7 +89,7 @@ window.loadSubtitleTrack = async (filePath) => {
   }
 };
 
-window.joinAndCompressVideos = async (videoPaths) => {
+window.joinAndCompressVideos = async (videoSegments) => {
   const proceed = await asyncConfirm(
     "Joining these videos will clear all active timeline markers upon success. Do you want to proceed?",
     "Confirm Join & Compress",
@@ -76,7 +102,7 @@ window.joinAndCompressVideos = async (videoPaths) => {
     return;
   }
 
-  if (!videoPaths || videoPaths.length < 1) {
+  if (!videoSegments || videoSegments.length < 1) {
     alert("Please select at least one video to join.");
     return;
   }
@@ -99,7 +125,7 @@ window.joinAndCompressVideos = async (videoPaths) => {
 
   try {
     const finalPath = await window.__TAURI__.core.invoke("join_and_compress_videos", {
-      videoPaths: videoPaths,
+      videoSegments: videoSegments,
       outputFileName: outputFileName,
     });
 
@@ -915,6 +941,7 @@ const initializePlayer = () => {
       if (!proceed) return;
     }
 
+    window.resetClosedCaptions();
     player.pause();
     player.src = "";
     player.removeAttribute("src");
@@ -2067,18 +2094,22 @@ const initializeTrimFeature = () => {
 
       joinBtn.addEventListener("click", () => {
         const checkboxes = document.querySelectorAll(".batch-video-checkbox");
-        const checkedPaths = [];
+        const checkedSegments = [];
         checkboxes.forEach((cb) => {
           if (cb.checked) {
             const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
             const vid = videoQueue[idx];
             if (vid?.videoFilePath) {
-              checkedPaths.push(vid.videoFilePath);
+              checkedSegments.push({
+                path: vid.videoFilePath,
+                start_time: vid.processStartTime || 0.0,
+                end_time: vid.processEndTime || 0.0,
+              });
             }
           }
         });
         if (window.joinAndCompressVideos) {
-          window.joinAndCompressVideos(checkedPaths);
+          window.joinAndCompressVideos(checkedSegments);
         }
       });
     }
@@ -2385,7 +2416,14 @@ async function processBatchQueue(presetType) {
           });
         } finally {
           if (tempFilePath && remove) {
-            await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
+            try {
+              const fileExists = exists ? await exists(tempFilePath) : true;
+              if (fileExists) {
+                await remove(tempFilePath);
+              }
+            } catch (e) {
+              console.warn("Failed to delete temp file:", e);
+            }
           }
         }
 
@@ -2710,7 +2748,14 @@ async function executeExport(presetType) {
       await window.__TAURI__?.core?.invoke?.("run_ffmpeg", { args });
     } finally {
       if (tempFilePath && remove) {
-        await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
+        try {
+          const fileExists = exists ? await exists(tempFilePath) : true;
+          if (fileExists) {
+            await remove(tempFilePath);
+          }
+        } catch (e) {
+          console.warn("Failed to delete temp file:", e);
+        }
       }
     }
 
@@ -2802,7 +2847,14 @@ async function executeExport(presetType) {
       unlistenStderr();
     }
     if (tempFilePath && remove) {
-      await remove(tempFilePath).catch((e) => console.warn("Failed to delete temp file:", e));
+      try {
+        const fileExists = exists ? await exists(tempFilePath) : true;
+        if (fileExists) {
+          await remove(tempFilePath);
+        }
+      } catch (e) {
+        console.warn("Failed to delete temp file:", e);
+      }
     }
     if (trimOnlyBtn) {
       trimOnlyBtn.textContent = originalTrimOnlyText;

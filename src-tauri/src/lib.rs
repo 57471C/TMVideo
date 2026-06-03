@@ -421,14 +421,21 @@ async fn load_tspz_bundle(
     .map_err(|e| format!("Blocking task panicked: {e}"))?
 }
 
+#[derive(serde::Deserialize)]
+struct VideoSegment {
+    path: String,
+    start_time: f64,
+    end_time: f64,
+}
+
 #[tauri::command]
 async fn join_and_compress_videos(
     app_handle: tauri::AppHandle,
-    video_paths: Vec<String>,
+    video_segments: Vec<VideoSegment>,
     output_file_name: String,
 ) -> Result<String, String> {
     let app_handle_clone = app_handle.clone();
-    let video_paths_clone = video_paths.clone();
+    let video_segments_clone = video_segments;
     let output_file_name_clone = output_file_name.clone();
 
     tokio::task::spawn_blocking(move || {
@@ -437,12 +444,35 @@ async fn join_and_compress_videos(
         use std::path::Path;
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        if video_paths_clone.is_empty() {
-            return Err("No video paths provided.".to_string());
+        if video_segments_clone.is_empty() {
+            return Err("No video segments provided.".to_string());
         }
 
+        // Helper function to extract native duration using ffmpeg -i
+        let get_duration = |path: &str| -> Option<f64> {
+            if let Ok(sidecar) = app_handle_clone.shell().sidecar("ffmpeg") {
+                let sidecar = sidecar.args(["-i", path]);
+                if let Ok(output) = tauri::async_runtime::block_on(sidecar.output()) {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if let Some(pos) = stderr.find("Duration: ") {
+                        let sub = &stderr[pos + 10..];
+                        if sub.len() >= 11 {
+                            let parts: Vec<&str> = sub[..11].split(':').collect();
+                            if parts.len() == 3 {
+                                let hours: f64 = parts[0].parse().unwrap_or(0.0);
+                                let minutes: f64 = parts[1].parse().unwrap_or(0.0);
+                                let seconds: f64 = parts[2].parse().unwrap_or(0.0);
+                                return Some(hours * 3600.0 + minutes * 60.0 + seconds);
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        };
+
         // Step 1: Resolve Absolute Paths
-        let first_video_path = Path::new(&video_paths_clone[0]);
+        let first_video_path = Path::new(&video_segments_clone[0].path);
         let base_dir = first_video_path
             .parent()
             .ok_or_else(|| "Failed to get parent directory".to_string())?;
@@ -462,14 +492,70 @@ async fn join_and_compress_videos(
         let temp_final_path_str = temp_final_path.to_str().ok_or("Invalid temp final path")?;
         let final_path_str = final_path.to_str().ok_or("Invalid final path")?;
 
-        // Step 2: Pre-Flight Extension Match
+        // Recursive Pre-Trim execution loop
+        let mut temp_clips = Vec::new();
+        let mut final_paths_to_concat = Vec::new();
+
+        for (i, segment) in video_segments_clone.iter().enumerate() {
+            let mut needs_trim = true;
+            if segment.start_time == 0.0 {
+                if segment.end_time == 0.0 {
+                    needs_trim = false;
+                } else if let Some(native_dur) = get_duration(&segment.path) {
+                    if (segment.end_time - native_dur).abs() < 0.1 {
+                        needs_trim = false;
+                    }
+                }
+            }
+
+            if needs_trim {
+                let temp_output_path = temp_dir.join(format!("temp_seg_{}_{}.mp4", i, unique_id));
+                let temp_output_str = temp_output_path.to_str().ok_or("Invalid temp segment path")?;
+
+                let ffmpeg_sidecar = app_handle_clone
+                    .shell()
+                    .sidecar("ffmpeg")
+                    .map_err(|e| e.to_string())?
+                    .args([
+                        "-y",
+                        "-ss",
+                        &segment.start_time.to_string(),
+                        "-to",
+                        &segment.end_time.to_string(),
+                        "-i",
+                        &segment.path,
+                        "-c",
+                        "copy",
+                        temp_output_str,
+                    ]);
+
+                let output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
+                    .map_err(|e| e.to_string())?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    // Cleanup temp files
+                    for clip in &temp_clips {
+                        let _ = std::fs::remove_file(clip);
+                    }
+                    return Err(format!("Failed to trim segment {}: {}", i, stderr));
+                }
+
+                temp_clips.push(temp_output_path.clone());
+                final_paths_to_concat.push(temp_output_str.to_string());
+            } else {
+                final_paths_to_concat.push(segment.path.clone());
+            }
+        }
+
+        // Step 2: Pre-Flight Extension Match (of final paths to concat)
         let mut all_same_extension = true;
-        let first_ext = first_video_path
+        let first_ext = Path::new(&final_paths_to_concat[0])
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
-        for path in &video_paths_clone {
+        for path in &final_paths_to_concat {
             let ext = Path::new(path)
                 .extension()
                 .and_then(|e| e.to_str())
@@ -482,7 +568,7 @@ async fn join_and_compress_videos(
         }
 
         let mut list_file = std::fs::File::create(&list_path).map_err(|e| e.to_string())?;
-        for path in &video_paths_clone {
+        for path in &final_paths_to_concat {
             let safe_path = path.replace("\\", "/");
             writeln!(list_file, "file '{}'", safe_path).map_err(|e| e.to_string())?;
         }
@@ -511,9 +597,9 @@ async fn join_and_compress_videos(
         if !lossless_success {
             let mut args = vec!["-y".to_string()];
             let mut filter_complex = String::new();
-            let n = video_paths_clone.len();
+            let n = final_paths_to_concat.len();
 
-            for (i, path) in video_paths_clone.iter().enumerate() {
+            for (i, path) in final_paths_to_concat.iter().enumerate() {
                 args.push("-i".to_string());
                 args.push(path.to_string());
                 filter_complex.push_str(&format!("[{}:v][{}:a]", i, i));
@@ -540,6 +626,9 @@ async fn join_and_compress_videos(
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let _ = std::fs::remove_file(&list_path);
                 let _ = std::fs::remove_file(&intermediate_path);
+                for clip in &temp_clips {
+                    let _ = std::fs::remove_file(clip);
+                }
                 return Err(format!("Filtergraph fallback failed: {}", stderr));
             }
         }
@@ -564,6 +653,9 @@ async fn join_and_compress_videos(
             let _ = std::fs::remove_file(&list_path);
             let _ = std::fs::remove_file(&intermediate_path);
             let _ = std::fs::remove_file(&temp_final_path);
+            for clip in &temp_clips {
+                let _ = std::fs::remove_file(clip);
+            }
             return Err(format!("Final compression failed: {}", stderr));
         }
 
@@ -584,6 +676,11 @@ async fn join_and_compress_videos(
         }
         if temp_final_path.exists() {
             let _ = std::fs::remove_file(&temp_final_path);
+        }
+        for clip in &temp_clips {
+            if clip.exists() {
+                let _ = std::fs::remove_file(clip);
+            }
         }
 
         Ok(final_path_str.to_string())
