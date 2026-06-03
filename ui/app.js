@@ -33,14 +33,72 @@ let isAborted = false;
 
 window.resetClosedCaptions = () => {
   window.currentCaptions = [];
+  window.captionsVisible = true;
+
+  const ccToggleBtn = document.getElementById("ccToggleBtn");
+  if (ccToggleBtn) {
+    ccToggleBtn.setAttribute("disabled", "true");
+    ccToggleBtn.classList.remove("text-yellow-500", "dark:text-yellow-400");
+    ccToggleBtn.classList.add("text-zinc-400", "dark:text-zinc-600");
+  }
+
+  if (window.captionInterval) {
+    clearInterval(window.captionInterval);
+    window.captionInterval = null;
+  }
+  if (window.subInterval) {
+    clearInterval(window.subInterval);
+    window.subInterval = null;
+  }
+
+  // Recent Memory Purge
+  localStorage.removeItem("captions");
+  localStorage.removeItem("subtitles");
+  localStorage.removeItem("transcript");
+  localStorage.removeItem("whisper_results");
+  sessionStorage.removeItem("captions");
+  sessionStorage.removeItem("subtitles");
+
+  if (window.indexedDB) {
+    const dbsToPurge = ["TMVideoDB", "TranscriptDB", "WhisperDB", "captions", "subtitles"];
+    for (const dbName of dbsToPurge) {
+      try {
+        const deleteRequest = window.indexedDB.deleteDatabase(dbName);
+        deleteRequest.onsuccess = () => console.log("Successfully purged offline database:", dbName);
+      } catch (e) {
+        console.warn("Database purge skipped for:", dbName, e);
+      }
+    }
+  }
+
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && (key.toLowerCase().includes('caption') || key.toLowerCase().includes('sub') || key.toLowerCase().includes('transcript') || key.toLowerCase().includes('cue'))) {
+      localStorage.removeItem(key);
+    }
+  }
+
+  for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const key = sessionStorage.key(i);
+    if (key && (key.toLowerCase().includes('caption') || key.toLowerCase().includes('sub') || key.toLowerCase().includes('transcript') || key.toLowerCase().includes('cue'))) {
+      sessionStorage.removeItem(key);
+    }
+  }
 
   const videoPlayer = document.querySelector('video') || player;
   if (videoPlayer) {
+    videoPlayer.pause();
     const existingTracks = videoPlayer.querySelectorAll('track');
     existingTracks.forEach(track => track.remove());
 
     while (videoPlayer.textTracks.length > 0) {
       videoPlayer.textTracks[0].mode = 'disabled';
+    }
+    videoPlayer.src = '';
+    try {
+      videoPlayer.load(); // Forces the browser to flush the active buffer completely
+    } catch (e) {
+      // Ignore load error on empty src
     }
   }
 
@@ -56,7 +114,6 @@ window.resetClosedCaptions = () => {
 };
 
 window.loadSubtitleTrack = async (filePath) => {
-  window.resetClosedCaptions();
   let ccTrack = document.getElementById("ccTrack");
   if (!ccTrack) {
     ccTrack = document.createElement("track");
@@ -78,6 +135,12 @@ window.loadSubtitleTrack = async (filePath) => {
     if (vttPath) {
       ccTrack.src = window.__TAURI__.core.convertFileSrc(vttPath);
       toConsole("Loaded subtitle track", vttPath, debuggin);
+      const ccToggleBtn = document.getElementById("ccToggleBtn");
+      if (ccToggleBtn) {
+        ccToggleBtn.removeAttribute("disabled");
+        ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
+        ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
+      }
     } else {
       const genBtn = document.getElementById("generateBtn") || document.getElementById("generateAutoCaptionsBtn");
       if (genBtn) {
@@ -185,6 +248,7 @@ const switchVideoInQueue = async (index) => {
   updateMarkersList();
 
   player.pause();
+  window.resetClosedCaptions();
   const isTauri = window.__TAURI__ !== undefined;
 
   if (isTauri && videoFilePath) {
@@ -265,6 +329,7 @@ const removeCurrentVideo = async () => {
     updateMarkersList();
 
     player.pause();
+    window.resetClosedCaptions();
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri && videoFilePath) {
       const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
@@ -391,6 +456,8 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
   }
 
   const isRelinking = !hasExistingVideo && (markers.length > 0 || projectName !== "");
+
+  window.resetClosedCaptions();
 
   if (isTauriPath) {
     const filePath = typeof fileOrPath === "object" ? fileOrPath.path : fileOrPath;
@@ -598,6 +665,24 @@ const initializePlayer = () => {
         disableMiniPlayerMode();
       } else {
         enableMiniPlayerMode();
+      }
+    });
+  }
+
+  const ccToggleBtn = document.getElementById("ccToggleBtn");
+  if (ccToggleBtn) {
+    ccToggleBtn.addEventListener("click", () => {
+      if (ccToggleBtn.hasAttribute("disabled")) return;
+      window.captionsVisible = !window.captionsVisible;
+      if (player && player.textTracks && player.textTracks.length > 0) {
+        player.textTracks[0].mode = window.captionsVisible ? "showing" : "hidden";
+      }
+      if (window.captionsVisible) {
+        ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
+        ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
+      } else {
+        ccToggleBtn.classList.remove("text-yellow-500", "dark:text-yellow-400");
+        ccToggleBtn.classList.add("text-zinc-400", "dark:text-zinc-600");
       }
     });
   }
@@ -854,6 +939,7 @@ const initializePlayer = () => {
   const videoUrl = urlParams.get("v");
   if (videoUrl) {
     toConsole("Found video URL in GET parameter", videoUrl, debuggin);
+    window.resetClosedCaptions();
     videoFileName = videoUrl.split("/").pop().split("?")[0] || videoUrl;
     player.src = videoUrl;
     player.load();
@@ -1263,6 +1349,15 @@ const initializePlayer = () => {
           player.pause();
         }
         break;
+      case "t":
+      case "T": {
+        e.preventDefault();
+        const ccBtn = document.getElementById("ccToggleBtn");
+        if (ccBtn && !ccBtn.hasAttribute("disabled")) {
+          ccBtn.click();
+        }
+        break;
+      }
       case "ArrowLeft":
         e.preventDefault();
         if (!player.src) return;
@@ -1435,6 +1530,7 @@ document.addEventListener("DOMContentLoaded", () => {
           ) {
             try {
               // Initialize blank project state
+              window.resetClosedCaptions();
               player.pause();
               player.src = "";
               player.removeAttribute("src");
@@ -1637,6 +1733,14 @@ const updateZoom = () => {
 
 const seektimeupdate = () => {
   if (player && playerReady) {
+    // Absolute DOM Overwrite Container Protection
+    if (!window.currentCaptions || window.currentCaptions.length === 0) {
+      const ccDisplay = document.getElementById("cc-output");
+      if (ccDisplay) {
+        ccDisplay.innerHTML = "";
+      }
+    }
+
     const currentTime = player.currentTime;
     const duration = player.duration;
     if (seekBar) {

@@ -330,6 +330,9 @@ const importFromJSON = (jsonText) => {
     DOM.markersList.innerHTML = "";
 
     // Handle Video Relinking
+    if (typeof window.resetClosedCaptions === "function") {
+      window.resetClosedCaptions();
+    }
     player.pause();
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri && videoFilePath) {
