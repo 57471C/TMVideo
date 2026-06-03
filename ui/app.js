@@ -59,9 +59,10 @@ window.loadSubtitleTrack = async (filePath) => {
     }
   } catch (err) {
     toConsole("Error resolving subtitles", err, debuggin);
-    if (generateBtn) {
+    /*if (generateBtn) {
       generateBtn.classList.remove("hidden");
     }
+      */
   }
 };
 
@@ -804,7 +805,7 @@ const initializePlayer = () => {
               });
               // Reload the active video with the temp path
               const active = videoQueue[activeQueueIndex];
-              if (active && active.videoFilePath) {
+              if (active?.videoFilePath) {
                 const url = window.__TAURI__.core.convertFileSrc(active.videoFilePath);
                 player.src = url;
                 player.preload = "auto";
@@ -1925,6 +1926,11 @@ const initializeTrimFeature = () => {
       batchExportList.innerHTML = "";
     }
 
+    if (trimOnlyBtn) trimOnlyBtn.style.display = "inline-flex";
+    if (trimCompressBtn) trimCompressBtn.style.display = "inline-flex";
+    const joinBtn = document.getElementById("joinAndCompressBtn");
+    if (joinBtn) joinBtn.style.display = "none";
+
     if (typeof window.cleanupTetris === "function") {
       window.cleanupTetris();
     }
@@ -1955,11 +1961,23 @@ const initializeTrimFeature = () => {
 
   const renderBatchExportList = () => {
     if (!batchExportList) return;
-    batchExportList.innerHTML = "";
+    batchExportList.innerHTML = `
+      <div class="flex items-center justify-between mb-2 px-1">
+        <span class="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">Queue</span>
+        <label class="flex items-center gap-2 cursor-pointer group" title="Merge selected videos into a single file">
+          <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300 select-none group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Join Videos</span>
+          <div class="relative">
+            <input type="checkbox" id="joinFilesToggle" class="sr-only peer">
+            <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+          </div>
+        </label>
+      </div>
+    `;
+
     videoQueue.forEach((video, index) => {
       const row = document.createElement("div");
       row.className =
-        "flex items-center justify-between gap-3 p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
+        "flex items-center justify-between gap-3 p-2 mb-1.5 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
       row.innerHTML = `
         <div class="flex items-center gap-2 flex-1 min-w-0">
           <input type="checkbox" data-index="${index}" checked class="batch-video-checkbox rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
@@ -1973,6 +1991,49 @@ const initializeTrimFeature = () => {
         </div>
       `;
       batchExportList.appendChild(row);
+    });
+
+    let joinBtn = document.getElementById("joinAndCompressBtn");
+    if (!joinBtn) {
+      joinBtn = document.createElement("button");
+      joinBtn.type = "button";
+      joinBtn.id = "joinAndCompressBtn";
+      joinBtn.className = "btn btn-primary font-bold tracking-wide";
+      joinBtn.style.display = "none";
+      joinBtn.textContent = "Join & Compress Selected";
+      if (trimCompressBtn && trimCompressBtn.parentNode) {
+        trimCompressBtn.parentNode.insertBefore(joinBtn, trimCompressBtn.nextSibling);
+      }
+
+      joinBtn.addEventListener("click", () => {
+        const checkboxes = document.querySelectorAll(".batch-video-checkbox");
+        const checkedPaths = [];
+        checkboxes.forEach((cb) => {
+          if (cb.checked) {
+            const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
+            const vid = videoQueue[idx];
+            if (vid && vid.videoFilePath) {
+              checkedPaths.push(vid.videoFilePath);
+            }
+          }
+        });
+        if (window.joinAndCompressVideos) {
+          window.joinAndCompressVideos(checkedPaths);
+        }
+      });
+    }
+
+    const joinFilesToggle = document.getElementById("joinFilesToggle");
+    joinFilesToggle.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        if (joinBtn) joinBtn.style.display = "inline-flex";
+        if (trimOnlyBtn) trimOnlyBtn.style.display = "none";
+        if (trimCompressBtn) trimCompressBtn.style.display = "none";
+      } else {
+        if (joinBtn) joinBtn.style.display = "none";
+        if (trimOnlyBtn) trimOnlyBtn.style.display = "inline-flex";
+        if (trimCompressBtn) trimCompressBtn.style.display = "inline-flex";
+      }
     });
   };
 
