@@ -294,13 +294,13 @@
       <div class="p-6 flex flex-col gap-5">
         <!-- Header -->
         <div class="flex items-center gap-3">
-          <div id="pkgSpinner" class="flex-shrink-0">
+          <div id="pkgSpinner" class="shrink-0">
             <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           </div>
-          <div id="pkgDoneIcon" class="flex-shrink-0 hidden">
+          <div id="pkgDoneIcon" class="shrink-0 hidden">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
           </div>
           <h5 id="pkgModalTitle" class="text-base font-semibold">Packaging Project…</h5>
@@ -446,7 +446,7 @@
               <span class="text-[10px] text-zinc-400 font-bold uppercase mb-1.5">Next</span>
               <canvas id="tetrisNextCanvas" width="50" height="50" class="bg-black/40 rounded-sm"></canvas>
             </div>
-            <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col gap-1.5 min-w-[70px] shadow text-xs">
+            <div class="bg-zinc-900/80 border border-zinc-700 rounded p-2 flex flex-col gap-1.5 min-w-17.5 shadow text-xs">
               <div class="flex flex-col">
                 <span class="text-[9px] text-zinc-500 font-bold uppercase">Score</span>
                 <span id="tetrisScore" class="font-mono font-bold text-sm text-zinc-200">00000</span>
@@ -463,7 +463,7 @@
         <!-- Overlay for Game Over / 100% Completion -->
         <div id="tetrisOverlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center text-center p-4 hidden z-20">
           <h6 id="tetrisOverlayTitle" class="text-lg font-bold text-white mb-4">Game Over</h6>
-          <div id="tetrisOverlayButtons" class="flex flex-col gap-2 w-full max-w-[160px]">
+          <div id="tetrisOverlayButtons" class="flex flex-col gap-2 w-full max-w-40">
             <!-- Dynamic buttons will be inserted here -->
           </div>
         </div>

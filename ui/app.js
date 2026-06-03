@@ -53,16 +53,73 @@ window.loadSubtitleTrack = async (filePath) => {
       ccTrack.src = window.__TAURI__.core.convertFileSrc(vttPath);
       toConsole("Loaded subtitle track", vttPath, debuggin);
     } else {
-      if (generateBtn) {
-        generateBtn.classList.remove("hidden");
+      const genBtn = document.getElementById("generateBtn") || document.getElementById("generateAutoCaptionsBtn");
+      if (genBtn) {
+        genBtn.classList.remove("hidden");
       }
     }
   } catch (err) {
     toConsole("Error resolving subtitles", err, debuggin);
-    /*if (generateBtn) {
-      generateBtn.classList.remove("hidden");
+  }
+};
+
+window.joinAndCompressVideos = async (videoPaths) => {
+  const proceed = await asyncConfirm(
+    "Joining these videos will clear all active timeline markers upon success. Do you want to proceed?",
+    "Confirm Join & Compress",
+  );
+  if (!proceed) return;
+
+  const isTauri = window.__TAURI__ !== undefined;
+  if (!isTauri) {
+    alert("Tauri desktop API is required.");
+    return;
+  }
+
+  if (!videoPaths || videoPaths.length < 1) {
+    alert("Please select at least one video to join.");
+    return;
+  }
+
+  const outputFileName = await asyncPrompt(
+    "Enter output file name (e.g. final_video.mp4):",
+    "final_video.mp4",
+    "Output File",
+  );
+  if (!outputFileName) return;
+
+  const joinBtn = document.getElementById("joinAndCompressBtn");
+  const originalText = joinBtn ? joinBtn.textContent : "Join & Compress Selected";
+  if (joinBtn) {
+    joinBtn.disabled = true;
+    joinBtn.textContent = "Processing...";
+  }
+
+  showToast("Joining and compressing videos... This may take a while.", "info");
+
+  try {
+    const finalPath = await window.__TAURI__.core.invoke("join_and_compress_videos", {
+      videoPaths: videoPaths,
+      outputFileName: outputFileName,
+    });
+
+    // On Success (State Reset)
+    markers = [];
+    if (DOM.markerTicksContainer) DOM.markerTicksContainer.innerHTML = "";
+
+    if (typeof updateMarkersList === "function") updateMarkersList();
+    if (typeof updateSliderTicks === "function") updateSliderTicks();
+    saveLocalState();
+
+    showToast("Success! Final video generated. Active markers have been reset.", "success");
+  } catch (err) {
+    toConsole("Join & Compress failed", err, debuggin);
+    alert(`Join and Compress failed: ${err.message || err}`);
+  } finally {
+    if (joinBtn) {
+      joinBtn.disabled = false;
+      joinBtn.textContent = originalText;
     }
-      */
   }
 };
 
@@ -394,6 +451,16 @@ async function toggleCinemaMode() {
 
   // 1. Toggle DOM classes for layout shift
   document.body.classList.toggle("cinema-active", isCinemaMode);
+
+  // Handle scrollbar visibility for the main content area
+  const mainContentArea = document.getElementById("mainLayoutGrid")?.parentElement;
+  if (mainContentArea) {
+    if (isCinemaMode) {
+      mainContentArea.style.overflowY = "hidden";
+    } else {
+      mainContentArea.style.overflowY = "auto";
+    }
+  }
 
   // 2. Handle Monitor Fullscreen
   if (appWindow) {
@@ -1968,7 +2035,7 @@ const initializeTrimFeature = () => {
           <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300 select-none group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Join Videos</span>
           <div class="relative">
             <input type="checkbox" id="joinFilesToggle" class="sr-only peer">
-            <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
           </div>
         </label>
       </div>
@@ -2001,7 +2068,7 @@ const initializeTrimFeature = () => {
       joinBtn.className = "btn btn-primary font-bold tracking-wide";
       joinBtn.style.display = "none";
       joinBtn.textContent = "Join & Compress Selected";
-      if (trimCompressBtn && trimCompressBtn.parentNode) {
+      if (trimCompressBtn?.parentNode) {
         trimCompressBtn.parentNode.insertBefore(joinBtn, trimCompressBtn.nextSibling);
       }
 
@@ -2012,7 +2079,7 @@ const initializeTrimFeature = () => {
           if (cb.checked) {
             const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
             const vid = videoQueue[idx];
-            if (vid && vid.videoFilePath) {
+            if (vid?.videoFilePath) {
               checkedPaths.push(vid.videoFilePath);
             }
           }

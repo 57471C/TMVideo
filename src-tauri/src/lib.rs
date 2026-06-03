@@ -421,6 +421,166 @@ async fn load_tspz_bundle(
     .map_err(|e| format!("Blocking task panicked: {e}"))?
 }
 
+#[tauri::command]
+async fn join_and_compress_videos(
+    app_handle: tauri::AppHandle,
+    video_paths: Vec<String>,
+    output_file_name: String,
+) -> Result<String, String> {
+    let app_handle_clone = app_handle.clone();
+    let video_paths_clone = video_paths.clone();
+    let output_file_name_clone = output_file_name.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use std::env;
+        use std::io::Write;
+        use std::path::Path;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        if video_paths_clone.is_empty() {
+            return Err("No video paths provided.".to_string());
+        }
+
+        // Step 1: Resolve Absolute Paths
+        let first_video_path = Path::new(&video_paths_clone[0]);
+        let base_dir = first_video_path
+            .parent()
+            .ok_or_else(|| "Failed to get parent directory".to_string())?;
+
+        let unique_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis();
+        let temp_dir = env::temp_dir();
+        let list_path = temp_dir.join(format!("concat_list_{}.txt", unique_id));
+        let intermediate_path = temp_dir.join(format!("intermediate_{}.mp4", unique_id));
+        let temp_final_path = temp_dir.join(format!("temp_final_{}.mp4", unique_id));
+        let final_path = base_dir.join(&output_file_name_clone);
+
+        let list_path_str = list_path.to_str().ok_or("Invalid list path")?;
+        let intermediate_path_str = intermediate_path.to_str().ok_or("Invalid intermediate path")?;
+        let temp_final_path_str = temp_final_path.to_str().ok_or("Invalid temp final path")?;
+        let final_path_str = final_path.to_str().ok_or("Invalid final path")?;
+
+        // Step 2: Pre-Flight Extension Match
+        let mut all_same_extension = true;
+        let first_ext = first_video_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        for path in &video_paths_clone {
+            let ext = Path::new(path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            if ext != first_ext {
+                all_same_extension = false;
+                break;
+            }
+        }
+
+        let mut list_file = std::fs::File::create(&list_path).map_err(|e| e.to_string())?;
+        for path in &video_paths_clone {
+            let safe_path = path.replace("\\", "/");
+            writeln!(list_file, "file '{}'", safe_path).map_err(|e| e.to_string())?;
+        }
+        list_file.sync_all().map_err(|e| e.to_string())?;
+
+        let mut lossless_success = false;
+
+        if all_same_extension {
+            let ffmpeg_sidecar = app_handle_clone
+                .shell()
+                .sidecar("ffmpeg")
+                .map_err(|e| e.to_string())?
+                .args([
+                    "-y", "-f", "concat", "-safe", "0", "-i", list_path_str, "-c", "copy",
+                    intermediate_path_str,
+                ]);
+
+            let output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
+                .map_err(|e| e.to_string())?;
+            if output.status.success() {
+                lossless_success = true;
+            }
+        }
+
+        // Step 3: Fallback Mixed Media Mode
+        if !lossless_success {
+            let mut args = vec!["-y".to_string()];
+            let mut filter_complex = String::new();
+            let n = video_paths_clone.len();
+
+            for (i, path) in video_paths_clone.iter().enumerate() {
+                args.push("-i".to_string());
+                args.push(path.to_string());
+                filter_complex.push_str(&format!("[{}:v][{}:a]", i, i));
+            }
+            filter_complex.push_str(&format!("concat=n={}:v=1:a=1[v][a]", n));
+
+            args.push("-filter_complex".to_string());
+            args.push(filter_complex);
+            args.push("-map".to_string());
+            args.push("[v]".to_string());
+            args.push("-map".to_string());
+            args.push("[a]".to_string());
+            args.push(intermediate_path_str.to_string());
+
+            let ffmpeg_sidecar = app_handle_clone
+                .shell()
+                .sidecar("ffmpeg")
+                .map_err(|e| e.to_string())?
+                .args(args);
+            let output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
+                .map_err(|e| e.to_string())?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let _ = std::fs::remove_file(&list_path);
+                let _ = std::fs::remove_file(&intermediate_path);
+                return Err(format!("Filtergraph fallback failed: {}", stderr));
+            }
+        }
+
+        // Step 4: Final Compression Step
+        let compression_args = vec![
+            "-y", "-i", intermediate_path_str, "-c:v", "libx264", "-crf", "23", "-preset",
+            "medium", "-c:a", "aac", "-b:a", "128k", temp_final_path_str,
+        ];
+
+        let ffmpeg_sidecar = app_handle_clone
+            .shell()
+            .sidecar("ffmpeg")
+            .map_err(|e| e.to_string())?
+            .args(compression_args);
+
+        let output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
+            .map_err(|e| e.to_string())?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let _ = std::fs::remove_file(&list_path);
+            let _ = std::fs::remove_file(&intermediate_path);
+            let _ = std::fs::remove_file(&temp_final_path);
+            return Err(format!("Final compression failed: {}", stderr));
+        }
+
+        // Step 5: Cleanup and Return (with Cross-Drive LINK Support)
+        std::fs::copy(&temp_final_path, &final_path)
+            .map_err(|e| format!("Failed to copy file across drives: {}", e))?;
+
+        let _ = std::fs::remove_file(&list_path);
+        let _ = std::fs::remove_file(&intermediate_path);
+        let _ = std::fs::remove_file(&temp_final_path);
+
+        Ok(final_path_str.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -445,7 +605,8 @@ pub fn run() {
         run_ffmpeg, abort_ffmpeg,
         save_tspz_bundle,
         load_tspz_bundle,
-        resolve_subtitles
+        resolve_subtitles,
+        join_and_compress_videos
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

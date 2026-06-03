@@ -2,7 +2,19 @@ const showToast = (message, type = "error") => {
   const container = document.getElementById("toastContainer");
   if (!container) return;
 
-  const isMiniOrCinema = document.body.classList.contains("mini-player") || document.body.classList.contains("cinema-active");
+  const isMiniOrCinema =
+    document.body.classList.contains("mini-player") || document.body.classList.contains("cinema-active");
+
+  // Explicitly force position and strip margin auto overrides using cssText
+  container.className = `fixed z-[9999] flex flex-col gap-2 w-full max-w-md pointer-events-none px-4 ${isMiniOrCinema ? "items-center" : "items-end"}`;
+
+  if (isMiniOrCinema) {
+    container.style.cssText =
+      "top: 1rem !important; bottom: auto !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; margin: 0 !important;";
+  } else {
+    container.style.cssText =
+      "top: auto !important; bottom: 1.5rem !important; left: auto !important; right: 1.5rem !important; transform: none !important; margin: 0 !important;";
+  }
 
   const toast = document.createElement("div");
   const baseClasses =
@@ -19,9 +31,9 @@ const showToast = (message, type = "error") => {
 
   // Set initial offscreen transforms depending on mode
   if (isMiniOrCinema) {
-    toast.style.transform = "translateY(-100%)";
+    toast.style.transform = "translateY(-150%)"; // Slide down from top
   } else {
-    toast.style.transform = "translateX(100vw)";
+    toast.style.transform = "translateX(120%)"; // Slide in from right
   }
 
   const icon =
@@ -37,9 +49,9 @@ const showToast = (message, type = "error") => {
   const dismiss = () => {
     toast.style.opacity = "0";
     if (isMiniOrCinema) {
-      toast.style.transform = "translateY(-100%)";
+      toast.style.transform = "translateY(-150%)";
     } else {
-      toast.style.transform = "translateX(-100vw)"; // Exit left
+      toast.style.transform = "translateX(120%)"; // Exit right
     }
     setTimeout(() => {
       if (container.contains(toast)) container.removeChild(toast);
