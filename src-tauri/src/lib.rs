@@ -689,6 +689,96 @@ async fn join_and_compress_videos(
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
+#[tauri::command]
+async fn get_waveform_data(
+    app_handle: tauri::AppHandle,
+    video_path: String,
+    duration_seconds: f64,
+) -> Result<Vec<i32>, String> {
+    tokio::task::spawn_blocking(move || {
+        tauri::async_runtime::block_on(async {
+            let sidecar_probe = app_handle
+                .shell()
+                .sidecar("ffmpeg")
+                .map_err(|e| format!("Failed to find sidecar: {}", e))?
+                .args(["-i", &video_path]);
+
+            let probe_output = sidecar_probe.output().await
+                .map_err(|e| format!("Failed to run probe: {}", e))?;
+
+            let stderr_str = String::from_utf8_lossy(&probe_output.stderr);
+            let has_audio = stderr_str.contains("Audio:");
+
+            if !has_audio {
+                // PATH B (Silent Video Fallback)
+                let length = (duration_seconds * 60.0).round() as usize;
+                let peaks = vec![5; length];
+                return Ok(peaks);
+            }
+
+            // PATH A (Real Audio)
+            let sidecar = app_handle
+                .shell()
+                .sidecar("ffmpeg")
+                .map_err(|e| format!("Failed to find sidecar: {}", e))?;
+
+            let sidecar_cmd = sidecar.args([
+                "-i",
+                &video_path,
+                "-ac",
+                "1",
+                "-ar",
+                "8000",
+                "-f",
+                "s8",
+                "-acodec",
+                "pcm_s8",
+                "-",
+            ]);
+
+            let (mut rx, _child) = sidecar_cmd
+                .spawn()
+                .map_err(|e| format!("Failed to spawn ffmpeg: {}", e))?;
+
+            let mut all_bytes = Vec::new();
+            while let Some(event) = rx.recv().await {
+                match event {
+                    CommandEvent::Stdout(bytes) => {
+                        all_bytes.extend_from_slice(&bytes);
+                    }
+                    _ => {}
+                }
+            }
+
+            if all_bytes.is_empty() {
+                return Err("No audio data extracted".to_string());
+            }
+
+            let chunk_size = 128;
+            let mut peaks = Vec::new();
+            for chunk in all_bytes.chunks(chunk_size) {
+                let mut max_val = 0u8;
+                for &b in chunk {
+                    let val = if b == i8::MIN as u8 {
+                        127
+                    } else {
+                        (b as i8).abs() as u8
+                    };
+                    if val > max_val {
+                        max_val = val;
+                    }
+                }
+                let peak = (max_val as i32).min(127);
+                peaks.push(peak);
+            }
+
+            Ok(peaks)
+        })
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -736,7 +826,8 @@ pub fn run() {
         save_tspz_bundle,
         load_tspz_bundle,
         resolve_subtitles,
-        join_and_compress_videos
+        join_and_compress_videos,
+        get_waveform_data
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

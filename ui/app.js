@@ -35,6 +35,19 @@ window.resetClosedCaptions = () => {
   window.currentCaptions = [];
   window.captionsVisible = true;
 
+  if (window.peaksInstance) {
+    try {
+      window.peaksInstance.destroy();
+    } catch (e) {
+      console.error("Error destroying peaksInstance:", e);
+    }
+    window.peaksInstance = null;
+  }
+  const peaksContainer = document.getElementById("peaks-container");
+  if (peaksContainer) {
+    peaksContainer.classList.add("hidden");
+  }
+
   const ccToggleBtn = document.getElementById("ccToggleBtn");
   if (ccToggleBtn) {
     ccToggleBtn.setAttribute("disabled", "true");
@@ -149,6 +162,78 @@ window.loadSubtitleTrack = async (filePath) => {
     }
   } catch (err) {
     toConsole("Error resolving subtitles", err, debuggin);
+  }
+};
+
+window.initWaveform = async (filePath, duration) => {
+  if (window.peaksInstance) {
+    try {
+      window.peaksInstance.destroy();
+    } catch (e) {
+      console.error("Error destroying peaksInstance:", e);
+    }
+    window.peaksInstance = null;
+  }
+
+  const peaksContainer = document.getElementById("peaks-container");
+  if (peaksContainer) {
+    peaksContainer.classList.add("hidden");
+  }
+
+  const isTauri = window.__TAURI__ !== undefined;
+  if (!isTauri || !filePath) return;
+
+  try {
+    const peakArray = await window.__TAURI__.core.invoke("get_waveform_data", { 
+      videoPath: filePath,
+      durationSeconds: duration
+    });
+    if (!peakArray || peakArray.length === 0) {
+      console.warn("No waveform data returned");
+      return;
+    }
+
+    const waveformDataObject = {
+      version: 2,
+      channels: 1,
+      sample_rate: 8000,
+      samples_per_pixel: 128,
+      bits: 8,
+      length: peakArray.length,
+      data: peakArray
+    };
+
+    if (peaksContainer) {
+      peaksContainer.classList.remove("hidden");
+    }
+
+    const videoEl = document.querySelector('video') || player;
+
+    if (window.peaks && typeof window.peaks.init === "function") {
+      window.peaks.init({
+        containers: {
+          zoomview: document.getElementById('zoomview-container'),
+          overview: document.getElementById('overview-container')
+        },
+        mediaElement: videoEl,
+        waveformArray: waveformDataObject,
+        zoomLevels: [512, 1024, 2048]
+      }, function(err, peaksInstance) {
+        if (err) {
+          console.error("Waveform Init Failure:", err);
+          if (peaksContainer) peaksContainer.classList.add("hidden");
+          return;
+        }
+        window.peaksInstance = peaksInstance;
+      });
+    } else {
+      console.error("peaks.js is not loaded on window");
+    }
+  } catch (err) {
+    console.error("Error generating waveform data:", err);
+    if (peaksContainer) {
+      peaksContainer.classList.add("hidden");
+    }
   }
 };
 
@@ -779,6 +864,10 @@ const initializePlayer = () => {
     volumeSlider.value = 0;
     DOM.volumeValue.textContent = "0";
     toConsole("Video muted on load", "Success", debuggin);
+
+    if (videoFilePath) {
+      window.initWaveform(videoFilePath, duration);
+    }
   });
   player.addEventListener("play", () => {
     DOM.playIcon.classList.add("hidden");
