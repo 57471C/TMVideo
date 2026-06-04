@@ -254,17 +254,20 @@
 
       <!-- High-resolution Peaks timeline engine -->
       <div id="peaks-timeline-wrapper" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 p-4 rounded shadow-sm mt-6 px-4" style="display: none;">
-        
-        <div id="timeline-ruler-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700" style="height: 24px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid; margin-bottom: 8px; border-radius: 4px;">
-          0:00:00 / Sequence Time Tracks Placeholder
-        </div>
+        <div id="non-linear-sequencer" class="relative">
+          <div id="timeline-marker-overlay" class="absolute inset-0 pointer-events-none z-20"></div>
+          
+          <div id="timeline-ruler-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700" style="height: 24px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid; margin-bottom: 8px; border-radius: 4px;">
+            0:00:00 / Sequence Time Tracks Placeholder
+          </div>
 
-        <div id="timeline-video-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 64px; position: relative; overflow-x: auto; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-bottom: 8px; border-radius: 4px;">
-          Video Filmstrip Strip Track Frame Housing
-        </div>
+          <div id="timeline-video-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 64px; position: relative; overflow-x: auto; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-bottom: 8px; border-radius: 4px;">
+            Video Filmstrip Strip Track Frame Housing
+          </div>
 
-        <div id="timeline-audio-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 40px; position: relative; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px;">
-          Linear Amplitude Peak Canvas Element
+          <div id="timeline-audio-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 40px; position: relative; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px;">
+            Linear Amplitude Peak Canvas Element
+          </div>
         </div>
       </div>
 

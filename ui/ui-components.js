@@ -262,6 +262,9 @@ const updateMarkersList = () => {
     }
 
     if (typeof updateSliderTicks === "function") updateSliderTicks();
+    if (typeof window.paintTimelineMarkersAndShading === "function") {
+      window.paintTimelineMarkersAndShading();
+    }
   } catch (error) {
     toConsole("updateMarkersList error", error.message, debuggin);
   }

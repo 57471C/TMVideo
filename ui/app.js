@@ -22,6 +22,95 @@ function syncTimelinePlayheadSmoothly() {
   playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
 }
 
+window.paintTimelineMarkersAndShading = () => {
+  const overlay = document.getElementById("timeline-marker-overlay");
+  if (!overlay) return;
+  overlay.innerHTML = "";
+
+  const videoElement = player || document.querySelector("video");
+  if (!videoElement || !videoElement.duration) return;
+
+  const duration = videoElement.duration;
+
+  // Start/End Trimming Shading
+  const startMarker = markers.find((m) => m.type === "in" || m.type === "start");
+  if (startMarker && startMarker.startTime > 0) {
+    const startPct = (startMarker.startTime / duration) * 100;
+    const startShade = document.createElement("div");
+    startShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
+    startShade.style.left = "0%";
+    startShade.style.width = `${startPct}%`;
+    overlay.appendChild(startShade);
+  }
+
+  const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
+  if (endMarker && endMarker.startTime < duration) {
+    const endPct = (endMarker.startTime / duration) * 100;
+    const endShade = document.createElement("div");
+    endShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
+    endShade.style.left = `${endPct}%`;
+    endShade.style.width = `${100 - endPct}%`;
+    overlay.appendChild(endShade);
+  }
+
+  // Loop through markers sequentially
+  for (let i = 0; i < markers.length; i += 1) {
+    const marker = markers[i];
+    const markerLeft = (marker.startTime / duration) * 100;
+
+    // Jump Skipping Shading
+    if (marker.type === "jump") {
+      const nextMarker = markers[i + 1];
+      const endTime = nextMarker ? nextMarker.startTime : duration;
+      const endPct = (endTime / duration) * 100;
+      const widthPct = endPct - markerLeft;
+      if (widthPct > 0) {
+        const jumpShade = document.createElement("div");
+        jumpShade.className = "absolute top-0 bottom-0 bg-zinc-500/20 dark:bg-zinc-900/40";
+        jumpShade.style.left = `${markerLeft}%`;
+        jumpShade.style.width = `${widthPct}%`;
+        overlay.appendChild(jumpShade);
+      }
+    }
+
+    // Loop sequence highlight span
+    if (marker.type === "loop") {
+      const nextMarker = markers[i + 1];
+      const endTime = nextMarker ? nextMarker.startTime : duration;
+      const endPct = (endTime / duration) * 100;
+      const widthPct = endPct - markerLeft;
+      if (widthPct > 0) {
+        const loopShade = document.createElement("div");
+        loopShade.className = "absolute top-0 bottom-0 bg-cyan-500/10 dark:bg-cyan-400/10";
+        loopShade.style.left = `${markerLeft}%`;
+        loopShade.style.width = `${widthPct}%`;
+        overlay.appendChild(loopShade);
+      }
+    }
+
+    // Create line element
+    const lineElement = document.createElement("div");
+    lineElement.style.left = `${markerLeft}%`;
+
+    if (
+      marker.type === "in" ||
+      marker.type === "start" ||
+      marker.type === "out" ||
+      marker.type === "end" ||
+      marker.type === "jump"
+    ) {
+      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-zinc-400 dark:bg-zinc-500 z-10";
+    } else if (marker.type === "loop") {
+      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-cyan-500 dark:bg-cyan-400 z-10";
+    } else {
+      // normal annotation marker
+      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-yellow-400 z-10";
+    }
+
+    overlay.appendChild(lineElement);
+  }
+};
+
 let loadVideoButton;
 let addMarkerBtn;
 let toggleFormatButton;
@@ -382,6 +471,9 @@ window.loadWaveformTimeline = async () => {
     paintTimelineRuler(duration);
     setupVideoTrack();
     drawCustomAudioWaveform();
+    if (typeof window.paintTimelineMarkersAndShading === "function") {
+      window.paintTimelineMarkersAndShading();
+    }
 
     // Trigger filmstrip thumbnail extraction
     const videoTrack = document.getElementById("timeline-video-track");
