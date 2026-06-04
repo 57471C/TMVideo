@@ -12,8 +12,7 @@
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="css/peaks-custom.css" />
-    <!-- Peaks.js Timeline Engine -->
-    <script src="peaks.js"></script>
+
      
 
   </head>
@@ -278,9 +277,17 @@
 
       <!-- High-resolution Peaks timeline engine -->
       <div id="peaks-timeline-wrapper" class="peaks-container w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-4 rounded shadow-sm mt-6 px-4" style="display: none;">
-        <div id="peaks-loading-text" class="text-zinc-500 dark:text-zinc-400 text-sm text-center py-4 hidden">Compiling Detailed Timeline Map...</div>
-        <div id="zoomview-container" class="peaks-zoomview h-20 mb-2"></div>
-        <div id="overview-container" class="peaks-overview h-12"></div>
+        <div id="timeline-ruler-track" style="width: 100%; height: 24px; background: #1e293b; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; color: #94a3b8; font-size: 11px; font-family: monospace; border-bottom: 1px solid #334155;">
+          0:00:00 / Sequence Time Tracks Placeholder
+        </div>
+
+        <div id="timeline-video-track" style="width: 100%; height: 64px; background: #1e293b; border-radius: 4px; position: relative; overflow-x: auto; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; border: 1px dashed #475569;">
+          Video Filmstrip Strip Track Frame Housing
+        </div>
+
+        <div id="timeline-audio-track" style="width: 100%; height: 40px; background: #1e293b; border-radius: 4px; position: relative; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; border: 1px dashed #475569;">
+          Linear Amplitude Peak Canvas Element
+        </div>
       </div>
 
 

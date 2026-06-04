@@ -178,9 +178,6 @@ window.loadWaveformTimeline = async () => {
   if (!isTauri || !videoFilePath) return;
 
   const wrapper = document.getElementById("peaks-timeline-wrapper");
-  const loadingText = document.getElementById("peaks-loading-text");
-  const zoomView = document.getElementById("zoomview-container");
-  const overview = document.getElementById("overview-container");
   const seekBarContainer = document.getElementById("seekBarContainer");
 
   if (document.body.classList.contains("mini-player")) {
@@ -189,38 +186,12 @@ window.loadWaveformTimeline = async () => {
     return;
   }
 
-  if (window.currentWaveformDataPath === videoFilePath && window.peaksInstance) {
-    if (seekBarContainer) seekBarContainer.style.display = "block";
-    if (wrapper) {
-      wrapper.style.display = "block";
-      if (loadingText) loadingText.classList.add("hidden");
-      if (zoomView) zoomView.classList.remove("hidden");
-      if (overview) overview.classList.remove("hidden");
-    }
-    return;
-  }
-
-  if (window.peaksInstance) {
-    try {
-      window.peaksInstance.destroy();
-    } catch (e) {
-      console.error("Error destroying peaksInstance:", e);
-    }
-    window.peaksInstance = null;
-  }
-
   if (seekBarContainer) {
     seekBarContainer.style.display = "block";
   }
   if (wrapper) {
     wrapper.style.display = "block";
   }
-  if (loadingText) {
-    loadingText.textContent = "Compiling Detailed Timeline Map...";
-    loadingText.classList.remove("hidden");
-  }
-  if (zoomView) zoomView.classList.add("hidden");
-  if (overview) overview.classList.add("hidden");
 
   try {
     const videoEl = document.querySelector("video") || player;
@@ -231,73 +202,17 @@ window.loadWaveformTimeline = async () => {
     });
     if (!peakArray || peakArray.length === 0) {
       console.warn("Waveform data empty, bypassing timeline initialization.");
-      if (wrapper) wrapper.style.display = "none";
-      if (seekBarContainer) seekBarContainer.style.display = "block";
+      window.currentWaveformData = [];
       return;
     }
 
-    const interleavedData = [];
-    for (let i = 0; i < peakArray.length; i++) {
-      const val = peakArray[i];
-      const minVal = -val;
-      const maxVal = val;
-      interleavedData.push(minVal, maxVal);
-    }
-
-    const calculatedSamplesPerPixel = Math.floor((8000 * duration) / peakArray.length);
-
-    const waveformDataObject = {
-      version: 2,
-      channels: 1,
-      sample_rate: 8000,
-      samples_per_pixel: calculatedSamplesPerPixel || 128,
-      bits: 8,
-      length: peakArray.length,
-      data: interleavedData
-    };
-
+    // Save the raw peak data sequence directly to the global window memory state
+    window.currentWaveformData = peakArray;
     window.currentWaveformDataPath = videoFilePath;
 
-    if (loadingText) loadingText.classList.add("hidden");
-    if (zoomView) zoomView.classList.remove("hidden");
-    if (overview) overview.classList.remove("hidden");
-
-
-
-    if (window.peaks && typeof window.peaks.init === "function") {
-      window.peaks.init({
-        containers: {
-          zoomview: zoomView,
-          overview: overview
-        },
-        zoomview: {
-          container: zoomView
-        },
-        overview: {
-          container: overview
-        },
-        mediaElement: videoEl,
-        waveformArray: waveformDataObject,
-        waveformData: {
-          json: waveformDataObject
-        },
-        zoomLevels: [512, 1024, 2048]
-      }, (err, peaksInstance) => {
-        if (err) {
-          console.error("Waveform Init Failure:", err);
-          if (wrapper) wrapper.style.display = "none";
-          if (seekBarContainer) seekBarContainer.style.display = "block";
-          return;
-        }
-        window.peaksInstance = peaksInstance;
-      });
-    } else {
-      console.error("peaks.js is not loaded on window");
-    }
   } catch (err) {
     console.error("Error generating waveform data:", err);
-    if (wrapper) wrapper.style.display = "none";
-    if (seekBarContainer) seekBarContainer.style.display = "block";
+    window.currentWaveformData = [];
   }
 };
 

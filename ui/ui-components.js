@@ -306,17 +306,7 @@ const updateVideoTimeSummary = () => {
           <span>Video Duration:</span>
           <span id="videoDurationDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedDuration}</span>
         </span>
-      </div>
     `;
-
-    if (window.peaksInstance) {
-      const zoomview = window.peaksInstance.views.getView('zoomview');
-      if (zoomview) {
-        const start = processStartTime || 0;
-        const end = (processEndTime > 0) ? processEndTime : (typeof player !== "undefined" && player ? player.duration : 0);
-        zoomview.setZoom({ start, end });
-      }
-    }
   } catch (error) {
     toConsole("updateVideoTimeSummary error", error.message, debuggin);
   }
