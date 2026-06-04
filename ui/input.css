@@ -3,257 +3,259 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: "Inter", system-ui, sans-serif;
+	--font-sans: "Inter", system-ui, sans-serif;
 }
 
 @layer utilities {
-  /* Modern sleek buttons (Mux inspired) */
-  .btn {
-    @apply px-3 py-1.5 text-sm font-medium transition-all duration-200 border border-slate-200/60 dark:border-white/5 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 active:scale-95 cursor-pointer backdrop-blur-sm;
-  }
-  .btn:disabled {
-    @apply opacity-50 cursor-default active:scale-100;
-  }
-  .btn-sm {
-    @apply px-2.5 py-1 text-xs rounded;
-  }
-  .btn-primary {
-    @apply bg-blue-600/90 text-white hover:bg-blue-600 border-transparent dark:bg-blue-500/80 dark:hover:bg-blue-500;
-  }
-  .btn-outline-primary {
-    @apply bg-transparent border-blue-500/50 text-blue-600 hover:bg-blue-50 dark:border-blue-400/50 dark:text-blue-400 dark:hover:bg-blue-500/10;
-  }
-  .btn-danger {
-    @apply bg-rose-600/90 text-white hover:bg-rose-600 border-transparent dark:bg-rose-500/80 dark:hover:bg-rose-500;
-  }
-  .btn-outline-danger {
-    @apply bg-transparent border-rose-500/50 text-rose-600 hover:bg-rose-50 dark:border-rose-400/50 dark:text-rose-400 dark:hover:bg-rose-500/10;
-  }
-  .btn-secondary {
-    @apply bg-zinc-500/90 text-white hover:bg-zinc-500 border-transparent dark:bg-zinc-600/80 dark:hover:bg-zinc-600;
-  }
-  .btn-outline-secondary {
-    @apply bg-transparent border-zinc-400/50 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-500/50 dark:text-zinc-300 dark:hover:bg-zinc-700/50;
-  }
-  .btn-dark-gray {
-    @apply bg-zinc-700/90 text-white hover:bg-zinc-700 border-transparent dark:bg-zinc-700/80 dark:hover:bg-zinc-600;
-  }
-  .btn-yellow {
-    @apply bg-amber-500/90 text-white hover:bg-amber-500 border-transparent dark:bg-amber-500/80 dark:hover:bg-amber-500;
-  }
-  .btn-orange {
-    @apply bg-orange-500/90 text-white hover:bg-orange-500 border-transparent dark:bg-orange-500/80 dark:hover:bg-orange-500;
-  }
-  .btn-outline-orange {
-    @apply bg-transparent border-orange-500/50 text-orange-600 hover:bg-orange-50 dark:border-orange-400/50 dark:text-orange-400 dark:hover:bg-orange-500/10;
-  }
-  .btn-light-green {
-    @apply bg-emerald-600/90 text-white hover:bg-emerald-600 border-transparent dark:bg-emerald-500/80 dark:hover:bg-emerald-500;
-  }
-  .btn-lighter-green {
-    @apply bg-emerald-500/90 text-white hover:bg-emerald-500 border-transparent dark:bg-emerald-400/80 dark:hover:bg-emerald-400;
-  }
+	/* Modern sleek buttons (Mux inspired) */
+	.btn {
+		@apply px-3 py-1.5 text-sm font-medium transition-all duration-200 border border-slate-200/60 dark:border-white/5 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 active:scale-95 cursor-pointer backdrop-blur-sm;
+	}
+	.btn:disabled {
+		@apply opacity-50 cursor-default active:scale-100;
+	}
+	.btn-sm {
+		@apply px-2.5 py-1 text-xs rounded;
+	}
+	.btn-primary {
+		@apply bg-blue-600/90 text-white hover:bg-blue-600 border-transparent dark:bg-blue-500/80 dark:hover:bg-blue-500;
+	}
+	.btn-outline-primary {
+		@apply bg-transparent border-blue-500/50 text-blue-600 hover:bg-blue-50 dark:border-blue-400/50 dark:text-blue-400 dark:hover:bg-blue-500/10;
+	}
+	.btn-danger {
+		@apply bg-rose-600/90 text-white hover:bg-rose-600 border-transparent dark:bg-rose-500/80 dark:hover:bg-rose-500;
+	}
+	.btn-outline-danger {
+		@apply bg-transparent border-rose-500/50 text-rose-600 hover:bg-rose-50 dark:border-rose-400/50 dark:text-rose-400 dark:hover:bg-rose-500/10;
+	}
+	.btn-secondary {
+		@apply bg-zinc-500/90 text-white hover:bg-zinc-500 border-transparent dark:bg-zinc-600/80 dark:hover:bg-zinc-600;
+	}
+	.btn-outline-secondary {
+		@apply bg-transparent border-zinc-400/50 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-500/50 dark:text-zinc-300 dark:hover:bg-zinc-700/50;
+	}
+	.btn-dark-gray {
+		@apply bg-zinc-700/90 text-white hover:bg-zinc-700 border-transparent dark:bg-zinc-700/80 dark:hover:bg-zinc-600;
+	}
+	.btn-yellow {
+		@apply bg-amber-500/90 text-white hover:bg-amber-500 border-transparent dark:bg-amber-500/80 dark:hover:bg-amber-500;
+	}
+	.btn-orange {
+		@apply bg-orange-500/90 text-white hover:bg-orange-500 border-transparent dark:bg-orange-500/80 dark:hover:bg-orange-500;
+	}
+	.btn-outline-orange {
+		@apply bg-transparent border-orange-500/50 text-orange-600 hover:bg-orange-50 dark:border-orange-400/50 dark:text-orange-400 dark:hover:bg-orange-500/10;
+	}
+	.btn-light-green {
+		@apply bg-emerald-600/90 text-white hover:bg-emerald-600 border-transparent dark:bg-emerald-500/80 dark:hover:bg-emerald-500;
+	}
+	.btn-lighter-green {
+		@apply bg-emerald-500/90 text-white hover:bg-emerald-500 border-transparent dark:bg-emerald-400/80 dark:hover:bg-emerald-400;
+	}
 
-  .form-control {
-    @apply px-3 py-1.5 border border-zinc-300 rounded bg-white dark:bg-zinc-800 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500;
-  }
-  .form-label {
-    @apply block text-sm font-medium mb-1 text-zinc-700 dark:text-zinc-300;
-  }
+	.form-control {
+		@apply px-3 py-1.5 border border-zinc-300 rounded bg-white dark:bg-zinc-800 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500;
+	}
+	.form-label {
+		@apply block text-sm font-medium mb-1 text-zinc-700 dark:text-zinc-300;
+	}
 
-  /* Modern sleek sliders (Mux inspired) */
-  .form-range {
-    @apply w-full h-1.5 bg-zinc-200 dark:bg-zinc-700/80 rounded-full appearance-none cursor-pointer outline-none shadow-inner;
-  }
-  .form-range::-webkit-slider-thumb {
-    @apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
-  }
-  .form-range::-moz-range-thumb {
-    @apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
-  }
+	/* Modern sleek sliders (Mux inspired) */
+	.form-range {
+		@apply w-full h-1.5 bg-zinc-200 dark:bg-zinc-700/80 rounded-full appearance-none cursor-pointer outline-none shadow-inner;
+	}
+	.form-range::-webkit-slider-thumb {
+		@apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
+	}
+	.form-range::-moz-range-thumb {
+		@apply appearance-none w-1.5 h-4 rounded-full bg-blue-500 hover:bg-blue-400 hover:scale-110 active:scale-95 transition-all duration-200 shadow-md border-0;
+	}
 
-  .slider-ticks {
-    background-image: repeating-linear-gradient(
-      to right,
-      transparent,
-      transparent calc(10% - 1px),
-      rgba(0, 0, 0, 0.15) calc(10% - 1px),
-      rgba(0, 0, 0, 0.15) 10%
-    );
-  }
-  .dark .slider-ticks {
-    background-image: repeating-linear-gradient(
-      to right,
-      transparent,
-      transparent calc(10% - 1px),
-      rgba(255, 255, 255, 0.15) calc(10% - 1px),
-      rgba(255, 255, 255, 0.15) 10%
-    );
-  }
+	.slider-ticks {
+		background-image: repeating-linear-gradient(
+			to right,
+			transparent,
+			transparent calc(10% - 1px),
+			rgba(0, 0, 0, 0.15) calc(10% - 1px),
+			rgba(0, 0, 0, 0.15) 10%
+		);
+	}
+	.dark .slider-ticks {
+		background-image: repeating-linear-gradient(
+			to right,
+			transparent,
+			transparent calc(10% - 1px),
+			rgba(255, 255, 255, 0.15) calc(10% - 1px),
+			rgba(255, 255, 255, 0.15) 10%
+		);
+	}
 
-  .timeline-ticks {
-    background-image: repeating-linear-gradient(
-      to right,
-      transparent,
-      transparent calc(var(--tick-interval, 100%) - 1px),
-      rgba(0, 0, 0, 0.15) calc(var(--tick-interval, 100%) - 1px),
-      rgba(0, 0, 0, 0.15) var(--tick-interval, 100%)
-    );
-  }
-  .dark .timeline-ticks {
-    background-image: repeating-linear-gradient(
-      to right,
-      transparent,
-      transparent calc(var(--tick-interval, 100%) - 1px),
-      rgba(255, 255, 255, 0.15) calc(var(--tick-interval, 100%) - 1px),
-      rgba(255, 255, 255, 0.15) var(--tick-interval, 100%)
-    );
-  }
+	.timeline-ticks {
+		background-image: repeating-linear-gradient(
+			to right,
+			transparent,
+			transparent calc(var(--tick-interval, 100%) - 1px),
+			rgba(0, 0, 0, 0.15) calc(var(--tick-interval, 100%) - 1px),
+			rgba(0, 0, 0, 0.15) var(--tick-interval, 100%)
+		);
+	}
+	.dark .timeline-ticks {
+		background-image: repeating-linear-gradient(
+			to right,
+			transparent,
+			transparent calc(var(--tick-interval, 100%) - 1px),
+			rgba(255, 255, 255, 0.15) calc(var(--tick-interval, 100%) - 1px),
+			rgba(255, 255, 255, 0.15) var(--tick-interval, 100%)
+		);
+	}
 
-  .table {
-    @apply w-full text-left text-sm;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  .table th,
-  .table td {
-    @apply p-2 border-b border-r border-zinc-200 dark:border-zinc-700;
-  }
-  .table tr:first-child th,
-  .table tr:first-child td {
-    @apply border-t border-zinc-200 dark:border-zinc-700;
-  }
-  .table th:first-child,
-  .table td:first-child {
-    @apply border-l border-zinc-200 dark:border-zinc-700;
-  }
-  .table thead th {
-    @apply bg-zinc-100 dark:bg-zinc-800 font-semibold;
-  }
+	.table {
+		@apply w-full text-left text-sm;
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+	.table th,
+	.table td {
+		@apply p-2 border-b border-r border-zinc-200 dark:border-zinc-700;
+	}
+	.table tr:first-child th,
+	.table tr:first-child td {
+		@apply border-t border-zinc-200 dark:border-zinc-700;
+	}
+	.table th:first-child,
+	.table td:first-child {
+		@apply border-l border-zinc-200 dark:border-zinc-700;
+	}
+	.table thead th {
+		@apply bg-zinc-100 dark:bg-zinc-800 font-semibold;
+	}
 
-  /* Video Player Icons */
-  .btn-icon {
-    @apply text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
-  }
-  .btn-icon-highlight {
-    @apply text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
-  }
+	/* Video Player Icons */
+	.btn-icon {
+		@apply text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
+	}
+	.btn-icon-highlight {
+		@apply text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-default;
+	}
 
-  /* Project Name Input */
-  .project-name-input {
-    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-1 w-40 sm:w-64 transition-all;
-  }
+	/* Project Name Input */
+	.project-name-input {
+		@apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-1 w-40 sm:w-64 transition-all;
+	}
 
-  /* Video Queue Select Dropdown */
-  .video-queue-select {
-    @apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white px-2 py-1 cursor-pointer transition-all w-auto max-w-[180px] sm:max-w-[320px] md:max-w-[480px] appearance-none;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.25rem center;
-    background-repeat: no-repeat;
-    background-size: 1.5em 1.5em;
-    padding-right: 2rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
-  }
+	/* Video Queue Select Dropdown */
+	.video-queue-select {
+		@apply bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md outline-none text-base font-medium text-zinc-900 dark:text-zinc-200 dark:focus:text-white px-2 py-1 cursor-pointer transition-all w-auto max-w-[180px] sm:max-w-[320px] md:max-w-[480px] appearance-none;
+		background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+		background-position: right 0.25rem center;
+		background-repeat: no-repeat;
+		background-size: 1.5em 1.5em;
+		padding-right: 2rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow: hidden;
+	}
 }
 
 /* Cinema Mode styling */
 .cinema-active {
-  overflow: hidden !important;
+	overflow: hidden !important;
 
-  header {
-    display: none !important;
-  }
+	header {
+		display: none !important;
+	}
 
-  #rightPanel {
-    display: none !important;
-  }
+	#rightPanel {
+		display: none !important;
+	}
 
-  #mainLayoutGrid {
-    grid-template-columns: 1fr !important;
-    gap: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-  }
+	#mainLayoutGrid {
+		grid-template-columns: 1fr !important;
+		gap: 0 !important;
+		width: 100vw !important;
+		height: 100vh !important;
+		max-width: 100vw !important;
+		max-height: 100vh !important;
+	}
 
-  /* Reset padding of the main container */
-  .flex-1.px-4.lg\:px-6.pb-4.lg\:pb-6 {
-    padding: 0 !important;
-  }
+	/* Reset padding of the main container */
+	.flex-1.px-4.lg\:px-6.pb-4.lg\:pb-6 {
+		padding: 0 !important;
+	}
 
-  /* The left column container takes full viewport height and width */
-  #mainLayoutGrid > div:first-child {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    position: relative !important;
-    top: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background: #000000 !important;
-  }
+	/* The left column container takes full viewport height and width */
+	#mainLayoutGrid > div:first-child {
+		width: 100vw !important;
+		height: 100vh !important;
+		max-width: 100vw !important;
+		position: relative !important;
+		top: 0 !important;
+		padding: 0 !important;
+		margin: 0 !important;
+		display: flex !important;
+		flex-direction: column !important;
+		background: #000000 !important;
+	}
 
-  /* Make videoWrapper take full height and width */
-  #videoWrapper {
-    height: 100% !important;
-    width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
+	/* Make videoWrapper take full height and width */
+	#video-wrapper-id {
+		height: 100% !important;
+		width: 100% !important;
+		display: flex !important;
+		align-items: center !important;
+		justify-content: center !important;
+	}
 
-  #videoPlaceholder {
-    height: 100% !important;
-  }
+	#videoPlaceholder {
+		height: 100% !important;
+	}
 
-  /* The video wrapper container should take all remaining space */
-  .h-125 {
-    height: 100% !important;
-    flex: 1 !important;
-  }
+	/* The video wrapper container should take all remaining space */
+	.h-125 {
+		height: 100% !important;
+		flex: 1 !important;
+	}
 
-  /* Transform media controls into a floating overlay */
-  #mediaControlsContainer {
-    position: absolute !important;
-    bottom: 24px !important;
-    left: 50% !important;
-    transform: translate(-50%, 0) !important;
-    width: 90% !important;
-    max-width: 850px !important;
-    z-index: 50 !important;
-    background: rgba(24, 24, 27, 0.8) !important; /* zinc-900 with opacity */
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.7) !important;
-    transition: opacity 0.3s ease, transform 0.3s ease, bottom 0.3s ease !important;
-    padding: 12px 16px !important;
-  }
+	/* Transform media controls into a floating overlay */
+	#mediaControlsContainer {
+		position: absolute !important;
+		bottom: 24px !important;
+		left: 50% !important;
+		transform: translate(-50%, 0) !important;
+		width: 90% !important;
+		max-width: 850px !important;
+		z-index: 50 !important;
+		background: rgba(24, 24, 27, 0.8) !important; /* zinc-900 with opacity */
+		backdrop-filter: blur(12px) !important;
+		border: 1px solid rgba(255, 255, 255, 0.15) !important;
+		border-radius: 12px !important;
+		box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.7) !important;
+		transition:
+			opacity 0.3s ease,
+			transform 0.3s ease,
+			bottom 0.3s ease !important;
+		padding: 12px 16px !important;
+	}
 
-  /* Support slide-down transition overriding absolute center transform */
-  #mediaControlsContainer.translate-y-full {
-    transform: translate(-50%, 150%) !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-  }
+	/* Support slide-down transition overriding absolute center transform */
+	#mediaControlsContainer.translate-y-full {
+		transform: translate(-50%, 150%) !important;
+		opacity: 0 !important;
+		pointer-events: none !important;
+	}
 
-  /* Text color adjustments for control elements inside floating overlay */
-  #mediaControlsContainer span,
-  #mediaControlsContainer button {
-    color: #f4f4f5 !important; /* zinc-100 */
-  }
+	/* Text color adjustments for control elements inside floating overlay */
+	#mediaControlsContainer span,
+	#mediaControlsContainer button {
+		color: #f4f4f5 !important; /* zinc-100 */
+	}
 
-  #mediaControlsContainer button:hover {
-    color: #ffffff !important;
-  }
+	#mediaControlsContainer button:hover {
+		color: #ffffff !important;
+	}
 
-  #mediaControlsContainer .form-range {
-    background-color: rgba(255, 255, 255, 0.2) !important;
-  }
+	#mediaControlsContainer .form-range {
+		background-color: rgba(255, 255, 255, 0.2) !important;
+	}
 }
-

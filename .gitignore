@@ -22,3 +22,4 @@ src-tauri/models/
 # ignore gemini folder/file
 .gemini/
 AI_CONTEXT.md
+.aiiarules

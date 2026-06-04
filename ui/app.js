@@ -339,6 +339,9 @@ const renderVideoQueueSelect = () => {
 const switchVideoInQueue = async (index) => {
   if (index === activeQueueIndex) return;
 
+  if (typeof window.resetVideoViewport === "function") {
+    window.resetVideoViewport(player);
+  }
   preserveProcessTimes = true;
   saveLocalState();
 
@@ -393,6 +396,9 @@ const switchVideoInQueue = async (index) => {
 };
 
 const removeCurrentVideo = async () => {
+  if (typeof window.resetVideoViewport === "function") {
+    window.resetVideoViewport(player);
+  }
   if (videoQueue.length === 0) return;
 
   const confirmRemove = await asyncConfirm(
@@ -544,6 +550,9 @@ const editVideoInQueue = async () => {
 };
 
 const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
+  if (typeof window.resetVideoViewport === "function") {
+    window.resetVideoViewport(player);
+  }
   const currentSrc = player.getAttribute("src");
   const hasExistingVideo = currentSrc && currentSrc !== "";
 
@@ -902,6 +911,9 @@ const initializePlayer = () => {
       } else {
         window.loadWaveformTimeline();
       }
+    }
+    if (typeof window.initializeVideoViewportZoomPan === "function") {
+      window.initializeVideoViewportZoomPan(player, document.getElementById("video-wrapper-id"));
     }
   });
   player.addEventListener("play", () => {
@@ -1401,18 +1413,30 @@ const initializePlayer = () => {
   });
 
   DOM.zoomIn.addEventListener("click", () => {
-    zoomLevel += 0.1;
-    updateZoom();
+    window.zoomLevel += 0.1;
+    if (typeof window.updateViewportTransform === "function") {
+      window.updateViewportTransform(document.querySelector("video"));
+    } else {
+      updateZoom();
+    }
   });
   DOM.zoomOut.addEventListener("click", () => {
-    zoomLevel = Math.max(0.1, zoomLevel - 0.2);
-    updateZoom();
+    window.zoomLevel = Math.max(0.1, window.zoomLevel - 0.2);
+    if (typeof window.updateViewportTransform === "function") {
+      window.updateViewportTransform(document.querySelector("video"));
+    } else {
+      updateZoom();
+    }
   });
   DOM.resetZoom.addEventListener("click", () => {
-    zoomLevel = 1;
-    translateX = 0;
-    translateY = 0;
-    updateZoom();
+    window.zoomLevel = 1.0;
+    window.translateX = 0;
+    window.translateY = 0;
+    if (typeof window.updateViewportTransform === "function") {
+      window.updateViewportTransform(document.querySelector("video"));
+    } else {
+      updateZoom();
+    }
   });
   if (DOM.takeSnapshotBtn) {
     DOM.takeSnapshotBtn.addEventListener("click", takeSnapshot);
@@ -1775,12 +1799,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-const startMarquee = (e) => {
-  if (e.target.closest(".zoom-controls")) return;
+let selectionStart = { x: 0, y: 0 };
+let selectionEnd = { x: 0, y: 0 };
+
+const startMarquee = (event) => {
+  if (event.button !== 0) return;
+  if (event.target.closest(".zoom-controls")) return;
   isDrawing = true;
   const rect = marqueeOverlay.getBoundingClientRect();
-  startX = e.clientX - rect.left;
-  startY = e.clientY - rect.top;
+  startX = event.clientX - rect.left;
+  startY = event.clientY - rect.top;
+
+  const videoElement = DOM.video;
+  const videoRect = videoElement.getBoundingClientRect();
+  const normalizedStart = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
+  selectionStart.x = normalizedStart.x;
+  selectionStart.y = normalizedStart.y;
+
   marqueeRect.style.left = `${startX}px`;
   marqueeRect.style.top = `${startY}px`;
   marqueeRect.style.width = "0px";
@@ -1789,11 +1824,17 @@ const startMarquee = (e) => {
   toConsole("Marquee start", `(${startX}, ${startY})`, debuggin);
 };
 
-const drawMarquee = (e) => {
+const drawMarquee = (event) => {
   if (!isDrawing) return;
   const rect = marqueeOverlay.getBoundingClientRect();
-  const currentX = e.clientX - rect.left;
-  const currentY = e.clientY - rect.top;
+  const currentX = event.clientX - rect.left;
+  const currentY = event.clientY - rect.top;
+
+  const videoElement = DOM.video;
+  const videoRect = videoElement.getBoundingClientRect();
+  const normalizedEnd = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
+  selectionEnd.x = normalizedEnd.x;
+  selectionEnd.y = normalizedEnd.y;
 
   const width = currentX - startX;
   const height = currentY - startY;
@@ -1815,24 +1856,27 @@ const drawMarquee = (e) => {
   }
 };
 
-const endMarquee = (e) => {
+const endMarquee = (event) => {
   if (!isDrawing) return;
+  if (event.button !== 0) return;
   isDrawing = false;
   marqueeRect.style.display = "none";
 
-  const rect = marqueeOverlay.getBoundingClientRect();
-  const endX = e.clientX - rect.left;
-  const endY = e.clientY - rect.top;
+  const videoElement = DOM.video;
+  const videoRect = videoElement.getBoundingClientRect();
+  const normalizedEnd = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
+  selectionEnd.x = normalizedEnd.x;
+  selectionEnd.y = normalizedEnd.y;
 
-  const x1 = Math.min(startX, endX);
-  const x2 = Math.max(startX, endX);
-  const y1 = Math.min(startY, endY);
-  const y2 = Math.max(startY, endY);
+  const minX = Math.min(selectionStart.x, selectionEnd.x);
+  const maxX = Math.max(selectionStart.x, selectionEnd.x);
+  const minY = Math.min(selectionStart.y, selectionEnd.y);
+  const maxY = Math.max(selectionStart.y, selectionEnd.y);
 
-  const marqueeWidth = x2 - x1;
-  const marqueeHeight = y2 - y1;
+  const marqueeWidth = maxX - minX;
+  const marqueeHeight = maxY - minY;
 
-  toConsole("Marquee end", `Box: (${x1}, ${y1}) to (${x2}, ${y2})`, debuggin);
+  toConsole("Marquee end (normalized)", `Box: (${minX}, ${minY}) to (${maxX}, ${maxY})`, debuggin);
 
   if (marqueeWidth < 10 || marqueeHeight < 10) {
     toConsole("Marquee too small, ignoring zoom", null, debuggin);
@@ -1840,62 +1884,44 @@ const endMarquee = (e) => {
   }
 
   const videoWrapper = DOM.videoWrapper;
-  const wrapperWidth = videoWrapper.clientWidth;
-  const wrapperHeight = videoWrapper.clientHeight;
+  const containerWidth = videoWrapper.clientWidth;
+  const containerHeight = videoWrapper.clientHeight;
 
-  const video = DOM.video;
-  const videoRect = video.getBoundingClientRect();
-  const wrapperRect = videoWrapper.getBoundingClientRect();
-  const offsetX = videoRect.left - wrapperRect.left;
-  const offsetY = videoRect.top - wrapperRect.top;
-  const videoDisplayWidth = videoRect.width;
-  const videoDisplayHeight = videoRect.height;
-  toConsole(
-    "Video display",
-    `Width: ${videoDisplayWidth}, Height: ${videoDisplayHeight}, Offset: (${offsetX}, ${offsetY})`,
-    debuggin,
-  );
+  // Compute box sizes relative to container dimensions and define the new scaling multiplier target
+  let targetZoom = Math.min(containerWidth / marqueeWidth, containerHeight / marqueeHeight);
+  targetZoom = Math.min(5.0, Math.max(1.0, targetZoom));
 
-  const marqueeX1 = x1 - offsetX;
-  const marqueeY1 = y1 - offsetY;
-  const marqueeX2 = x2 - offsetX;
-  const marqueeY2 = y2 - offsetY;
+  // Re-multiply the normalized top-left anchor point against your updated zoom factor to prevent coordinate scaling offset drift
+  window.zoomLevel = targetZoom;
+  window.translateX = -minX * targetZoom;
+  window.translateY = -minY * targetZoom;
 
-  const marqueeCenterX = (marqueeX1 + marqueeX2) / 2;
-  const marqueeCenterY = (marqueeY1 + marqueeY2) / 2;
-  toConsole("Marquee center (display)", `(${marqueeCenterX}, ${marqueeCenterY})`, debuggin);
+  if (targetZoom <= 1.0) {
+    window.zoomLevel = 1.0;
+    window.translateX = 0;
+    window.translateY = 0;
+  }
 
-  const zoomX = videoDisplayWidth / marqueeWidth;
-  const zoomY = videoDisplayHeight / marqueeHeight;
-  const newZoomLevel = Math.min(zoomX, zoomY);
-  toConsole("New zoom level (relative)", newZoomLevel, debuggin);
+  toConsole("New viewport settings from marquee", `Zoom: ${window.zoomLevel}, Translate: (${window.translateX}, ${window.translateY})`, debuggin);
 
-  const previousZoomLevel = zoomLevel;
-  zoomLevel *= newZoomLevel;
-  toConsole("Cumulative zoom level", zoomLevel, debuggin);
-
-  const videoCoordX = (marqueeCenterX - translateX * previousZoomLevel) / previousZoomLevel;
-  const videoCoordY = (marqueeCenterY - translateY * previousZoomLevel) / previousZoomLevel;
-  toConsole("Marquee center (video coords)", `(${videoCoordX}, ${videoCoordY})`, debuggin);
-
-  const scaledVideoCoordX = videoCoordX * zoomLevel;
-  const scaledVideoCoordY = videoCoordY * zoomLevel;
-  toConsole("Scaled video coordinates", `(${scaledVideoCoordX}, ${scaledVideoCoordY})`, debuggin);
-
-  translateX = (wrapperWidth / 2 - scaledVideoCoordX) / zoomLevel;
-  translateY = (wrapperHeight / 2 - scaledVideoCoordY) / zoomLevel;
-  toConsole("New translation", `(${translateX}, ${translateY})`, debuggin);
-
-  const finalX = videoCoordX * zoomLevel + translateX * zoomLevel;
-  const finalY = videoCoordY * zoomLevel + translateY * zoomLevel;
-  toConsole("Final center position", `(${finalX}, ${finalY})`, debuggin);
-
-  updateZoom();
+  if (typeof window.updateViewportTransform === 'function') {
+    window.updateViewportTransform(videoElement);
+  } else {
+    videoElement.style.transformOrigin = "0px 0px";
+    videoElement.style.transform = `translate(${window.translateX}px, ${window.translateY}px) scale(${window.zoomLevel})`;
+  }
 };
 
 const updateZoom = () => {
   const video = DOM.video;
-  video.style.transform = `scale(${zoomLevel}) translate(${translateX}px, ${translateY}px)`;
+  if (typeof window.updateViewportTransform === "function") {
+    if (window.viewportState) {
+      window.viewportState.syncFromGlobals();
+    }
+    window.updateViewportTransform(video);
+  } else {
+    video.style.transform = `scale(${zoomLevel}) translate(${translateX}px, ${translateY}px)`;
+  }
   toConsole("Zoom updated", `Level: ${zoomLevel}, Translate: (${translateX}, ${translateY})`, debuggin);
 };
 

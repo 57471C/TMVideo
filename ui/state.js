@@ -41,7 +41,7 @@ let marqueeRect;
 const DOM = {
   markersList: document.getElementById("markersList"),
   videoPlaceholder: document.getElementById("videoPlaceholder"),
-  videoWrapper: document.getElementById("videoWrapper"),
+  videoWrapper: document.getElementById("video-wrapper-id"),
 
   darkModeToggle: document.getElementById("darkModeToggle"),
   sunIcon: document.getElementById("sunIcon"),
@@ -296,6 +296,9 @@ const exportToJSON = async (isSaveAs = false) => {
 };
 
 const importFromJSON = (jsonText) => {
+  if (typeof window.resetVideoViewport === "function") {
+    window.resetVideoViewport(player);
+  }
   try {
     preserveProcessTimes = true;
     const data = JSON.parse(jsonText);

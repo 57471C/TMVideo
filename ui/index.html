@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="tailwind.css" />
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="css/peaks-custom.css" />
 
      
 
@@ -26,13 +25,13 @@
         <span class="text-zinc-300 dark:text-zinc-600 hidden sm:inline font-light text-xl">/</span>
         <div class="flex items-center gap-1">
           <select id="videoQueueSelect" class="video-queue-select" title="Switch Video in Queue"></select>
-          <button id="editVideoQueueBtn" class="hidden border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Rename Video">
+          <button type="button" id="editVideoQueueBtn" class="hidden border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Rename Video">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
           </button>
-          <button id="addVideoQueueBtn" class="border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Add Video">
+          <button type="button" id="addVideoQueueBtn" class="border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Add Video">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </button>
-          <button id="removeVideoQueueBtn" onclick="removeCurrentVideo()" class="border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Remove Current Video">
+          <button type="button" id="removeVideoQueueBtn" onclick="removeCurrentVideo()" class="border border-transparent hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 p-1 flex items-center justify-center rounded-md w-8 h-8 transition-colors shadow-none cursor-pointer" title="Remove Current Video">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
         </div>
@@ -40,30 +39,30 @@
       <div class="flex items-center gap-3 sm:gap-4">
         <!-- File Management Actions -->
         <div class="flex items-center gap-1 sm:gap-2 border-r border-zinc-200 dark:border-zinc-700 pr-2 sm:pr-4">
-          <button id="newProjectButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="New Project">
+          <button type="button" id="newProjectButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="New Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></svg>
             <span class="hidden md:inline">New</span>
           </button>
-          <button id="projectImportButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Load Project">
+          <button type="button" id="projectImportButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Load Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             <span class="hidden md:inline">Load</span>
           </button>
-          <button id="projectExportButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Save Project">
+          <button type="button" id="projectExportButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Save Project">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.5l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             <span class="hidden md:inline">Save</span>
           </button>
-          <button id="projectSaveAsButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Save Project As...">
+          <button type="button" id="projectSaveAsButton" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Save Project As...">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.5l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
             <span class="hidden md:inline">Save As</span>
           </button>
-          <button id="packageBtn" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Package Project (.tmvz)">
+          <button type="button" id="packageBtn" class="btn btn-sm btn-outline-secondary whitespace-nowrap flex justify-center items-center gap-2" title="Package Project (.tmvz)">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
             <span class="hidden md:inline">Package</span>
           </button>
         <input type="file" id="projectFileInput" accept=".tmv" style="display: none" />
         </div>
 
-        <button id="darkModeToggle" class="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors" title="Toggle Dark Mode">
+        <button type="button" id="darkModeToggle" class="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors" title="Toggle Dark Mode">
           <!-- Sun Icon -->
           <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden">
             <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
@@ -73,13 +72,13 @@
             <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
           </svg>
         </button>
-        <button id="openSettingsBtn" class="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors" title="Project Settings">
+        <button type="button" id="openSettingsBtn" class="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors" title="Project Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
             <circle cx="12" cy="12" r="3"></circle>
           </svg>
         </button>
-        <button id="openHelpBtn" class="btn btn-sm border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Help / Shortcuts</button>
+        <button type="button" id="openHelpBtn" class="btn btn-sm border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Help / Shortcuts</button>
       </div>
     </header>
 
@@ -89,8 +88,8 @@
         <div class="flex flex-col gap-4 lg:sticky lg:top-0 pt-4 lg:pt-6 lg:z-20 self-start">
           <div class="w-full h-125 relative group">
             <div id="videoPlaceholder" class="w-full h-full min-h-125 bg-zinc-900 text-zinc-400 flex items-center justify-center text-lg p-5 absolute top-0 left-0 z-10 cursor-pointer border border-transparent dark:border-zinc-700 transition-colors duration-200">Load a video to get started</div>
-            <div id="videoWrapper" class="w-full h-full absolute top-0 left-0 overflow-hidden bg-black z-10" style="display: none;">
-              <button id="expandToEditorBtn" class="absolute top-2.5 left-2.5 z-20 btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 hidden" style="padding: 0 !important;" title="Expand to Editor">
+            <div id="video-wrapper-id" class="relative overflow-hidden w-full h-full bg-black flex items-center justify-center" style="display: none;">
+              <button type="button" id="expandToEditorBtn" class="absolute top-2.5 left-2.5 z-20 btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 hidden" style="padding: 0 !important;" title="Expand to Editor">
                 <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                 </svg>
@@ -98,21 +97,21 @@
               <div id="marqueeOverlay" class="absolute inset-0 z-12 cursor-crosshair">
                 <div id="marqueeRect" class="absolute border-2 border-dashed border-blue-600 bg-blue-600/10 pointer-events-none hidden"></div>
               </div>
-              <video id="my_video" crossorigin="anonymous" class="max-h-full w-auto h-full block object-contain origin-top-left transition-transform duration-300 ease-in-out z-1">
+              <video id="my_video" crossorigin="anonymous" class="w-full h-full object-contain z-1">
                 <track kind="captions" />
                 Your browser does not support the video tag.
               </video>
               <div id="videoOverlayControls" class="absolute top-2.5 right-2.5 z-15 flex items-center gap-1.5">
-                <button id="zoomIn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom In">+</button>
-                <button id="zoomOut" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom Out">-</button>
-                <button id="resetZoom" class="btn btn-sm btn-dark-gray flex items-center justify-center h-7 px-2.5" title="Reset Zoom">Reset</button>
-                <button id="takeSnapshotBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Take Snapshot (S)">
+                <button type="button" id="zoomIn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom In">+</button>
+                <button type="button" id="zoomOut" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0 font-bold text-sm" style="padding: 0 !important;" title="Zoom Out">-</button>
+                <button type="button" id="resetZoom" class="btn btn-sm btn-dark-gray flex items-center justify-center h-7 px-2.5" title="Reset Zoom">Reset</button>
+                <button type="button" id="takeSnapshotBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Take Snapshot (S)">
                   <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                     <circle cx="12" cy="13" r="4"/>
                   </svg>
                 </button>
-                <button id="toggleCinemaBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Toggle Cinema Mode (\)">
+                <button type="button" id="toggleCinemaBtn" class="btn btn-sm btn-dark-gray flex items-center justify-center w-7 h-7 p-0" style="padding: 0 !important;" title="Toggle Cinema Mode (\)">
                   <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px !important; height: 20px !important;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
                   </svg>
@@ -138,48 +137,48 @@
               </div>
               <div class="w-full flex items-center justify-center flex-wrap mt-2.5 gap-1.5 sm:gap-2">
                 <span id="tetrisHighScoreDisplay" class="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono select-none mr-2 hidden">HS:00000</span>
-                <button id="ccToggleBtn" disabled class="btn-icon mr-8 inline-flex items-center justify-center align-middle text-zinc-400 dark:text-zinc-600 disabled:opacity-40" title="Toggle Closed Captions">
+                <button type="button" id="ccToggleBtn" disabled class="btn-icon mr-8 inline-flex items-center justify-center align-middle text-zinc-400 dark:text-zinc-600 disabled:opacity-40" title="Toggle Closed Captions">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="5" width="18" height="14" rx="2" ry="2"/>
                     <path d="M10 9a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3"/>
                     <path d="M17 9a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3"/>
                   </svg>
                 </button>
-                <button id="toggleMiniPlayerBtn" class="btn-icon mr-8 inline-flex items-center justify-center align-middle" title="Toggle Mini Player Mode">
+                <button type="button" id="toggleMiniPlayerBtn" class="btn-icon mr-8 inline-flex items-center justify-center align-middle" title="Toggle Mini Player Mode">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="5" width="20" height="14" rx="2" />
                     <rect x="12" y="13" width="8" height="5" rx="1" />
                   </svg>
                 </button>
-                <button id="loadVideoButton" class="btn-icon-highlight mr-8" title="Load Video">
+                <button type="button" id="loadVideoButton" class="btn-icon-highlight mr-8" title="Load Video">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"></path>
                   </svg>
                 </button>
-                <button id="trimVideoBtn" class="btn-icon hidden mr-4" title="Trim / Compress Video">
+                <button type="button" id="trimVideoBtn" class="btn-icon hidden mr-4" title="Trim / Compress Video">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m22 8-6 4 6 4V8Z" />
                     <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
                   </svg>
                 </button>
-                <button id="jumpToStartButton" class="btn-icon" title="Jump to Start">
+                <button type="button" id="jumpToStartButton" class="btn-icon" title="Jump to Start">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="19 20 9 12 19 4 19 20"></polygon>
                     <line x1="5" y1="19" x2="5" y2="5"></line>
                   </svg>
                 </button>
-                <button id="rewind5sButton" class="btn-icon" title="Rewind 5s">
+                <button type="button" id="rewind5sButton" class="btn-icon" title="Rewind 5s">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="11 19 2 12 11 5 11 19"></polygon>
                     <polygon points="22 19 13 12 22 5 22 19"></polygon>
                   </svg>
                 </button>
-                <button id="rewind1sButton" class="btn-icon" title="Rewind 1s">
+                <button type="button" id="rewind1sButton" class="btn-icon" title="Rewind 1s">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
                   </svg>
                 </button>
-                <button id="playPauseButton" class="btn-icon" title="Play / Pause">
+                <button type="button" id="playPauseButton" class="btn-icon" title="Play / Pause">
                   <!-- Play -->
                   <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -190,18 +189,18 @@
                     <rect x="14" y="4" width="4" height="16"></rect>
                   </svg>
                 </button>
-                <button id="forward1sButton" class="btn-icon" title="Forward 1s">
+                <button type="button" id="forward1sButton" class="btn-icon" title="Forward 1s">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="9 18 15 12 9 6"></polyline>
                   </svg>
                 </button>
-                <button id="forward5sButton" class="btn-icon" title="Forward 5s">
+                <button type="button" id="forward5sButton" class="btn-icon" title="Forward 5s">
                   <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="13 19 22 12 13 5 13 19"></polygon>
                     <polygon points="2 19 11 12 2 5 2 19"></polygon>
                   </svg>
                 </button>
-                <button id="muteButton" class="btn-icon ml-8" title="Mute/Unmute">
+                <button type="button" id="muteButton" class="btn-icon ml-8" title="Mute/Unmute">
                   <!-- Volume High (Unmuted) -->
                   <svg id="volumeOnIcon" xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -529,6 +528,7 @@
 
     <script src="tetris.js"></script>
     <script src="js/timeline-engine.js"></script>
+    <script src="js/viewport-engine.js"></script>
     <script src="app.js"></script>
 
   </body>
