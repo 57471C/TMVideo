@@ -10,14 +10,46 @@ let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
 let playheadAnimationId = null;
+let lastCheckedVideoTime = 0;
 
 function syncTimelinePlayheadSmoothly() {
   if (player && playerReady && player.duration) {
-    const completionPercent = (player.currentTime / player.duration) * 100;
+    const currentVideoTime = player.currentTime;
+    const duration = player.duration;
+
+    // Look-ahead intersection delta calculation for jump markers
+    if (currentVideoTime > lastCheckedVideoTime) {
+      if (markers && markers.length > 0) {
+        const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
+        const endLimit =
+          activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined
+            ? activeVideo.virtualEndTime
+            : duration;
+
+        for (let i = 0; i < markers.length; i += 1) {
+          const marker = markers[i];
+          if (marker.type === "jump") {
+            const nextMarker = markers[i + 1];
+            const boundaryTime = nextMarker ? nextMarker.startTime : endLimit;
+
+            // Did the video playhead pass over this marker time during this frame tick?
+            if (marker.startTime >= lastCheckedVideoTime && marker.startTime <= currentVideoTime) {
+              lastCheckedVideoTime = boundaryTime;
+              player.currentTime = boundaryTime;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    const finalVideoTime = player.currentTime;
+    const completionPercent = (finalVideoTime / duration) * 100;
     const playheads = document.querySelectorAll(".sequencer-playhead");
     for (const ph of playheads) {
       ph.style.left = `${completionPercent}%`;
     }
+    lastCheckedVideoTime = finalVideoTime;
   }
   playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
 }
@@ -1163,11 +1195,13 @@ const initializePlayer = () => {
   player.addEventListener("play", () => {
     DOM.playIcon.classList.add("hidden");
     DOM.pauseIcon.classList.remove("hidden");
+    lastCheckedVideoTime = player.currentTime;
     if (!playheadAnimationId) {
       playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
     }
   });
   player.addEventListener("playing", () => {
+    lastCheckedVideoTime = player.currentTime;
     if (!playheadAnimationId) {
       playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
     }
@@ -1187,6 +1221,7 @@ const initializePlayer = () => {
     }
   });
   player.addEventListener("seeking", () => {
+    lastCheckedVideoTime = player.currentTime;
     if (playheadAnimationId) {
       cancelAnimationFrame(playheadAnimationId);
       playheadAnimationId = null;
