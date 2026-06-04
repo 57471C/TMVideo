@@ -697,6 +697,28 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
+      let possible_paths = [
+          ("node_modules/peaks.js/dist/peaks.js", "ui/peaks.js"),
+          ("../node_modules/peaks.js/dist/peaks.js", "../ui/peaks.js"),
+      ];
+      let mut copied = false;
+      for (src, dest) in possible_paths {
+          if std::path::Path::new(src).exists() {
+              if let Some(parent) = std::path::Path::new(dest).parent() {
+                  let _ = std::fs::create_dir_all(parent);
+              }
+              if let Err(e) = std::fs::copy(src, dest) {
+                  eprintln!("Failed to copy peaks.js from {} to {}: {}", src, dest, e);
+              } else {
+                  println!("Successfully copied peaks.js from {} to {}", src, dest);
+                  copied = true;
+                  break;
+              }
+          }
+      }
+      if !copied {
+          eprintln!("Could not find node_modules/peaks.js/dist/peaks.js in any expected paths.");
+      }
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

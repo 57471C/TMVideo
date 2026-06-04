@@ -674,7 +674,7 @@ const initializePlayer = () => {
     ccToggleBtn.addEventListener("click", () => {
       if (ccToggleBtn.hasAttribute("disabled")) return;
       window.captionsVisible = !window.captionsVisible;
-      if (player && player.textTracks && player.textTracks.length > 0) {
+      if (player?.textTracks && player.textTracks.length > 0) {
         player.textTracks[0].mode = window.captionsVisible ? "showing" : "hidden";
       }
       if (window.captionsVisible) {
