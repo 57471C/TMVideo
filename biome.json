@@ -1,47 +1,30 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
-  "vcs": {
-    "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true
-  },
-  "files": {
-    "ignoreUnknown": false,
-    "includes": [
-      "ui/app.js",
-      "ui/charts.js",
-      "ui/state.js",
-      "ui/ui-modals.js",
-      "ui/ui-components.js",
-      "ui/utils.js",
-      "ui/index.html",
-      "package.json",
-      "biome.json"
-    ]
-  },
-  "css": {
-    "parser": {
-      "tailwindDirectives": true
-    }
-  },
-  "formatter": {
-    "enabled": true,
-    "formatWithErrors": false,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 120
+  "$schema": "https://biomejs.dev/schemas/1.8.3/schema.json",
+  "organizeImports": {
+    "enabled": true
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "correctness": {
-        "noUnusedVariables": "off"
-      },
-      "a11y": {
-        "useButtonType": "off",
-        "noSvgWithoutTitle": "off"
-      }
-    }
+      "recommended": true
+    },
+    "ignore": [
+      "node_modules/",
+      "src-tauri/target/",
+      "dist/",
+      "ui/js/peaks.js",
+      "/.jpg",
+      "/.png"
+    ]
+  },
+  "files": {
+    "ignore": [
+      "node_modules/",
+      "src-tauri/target/",
+      "dist/",
+      "ui/js/peaks.js",
+      "/.jpg",
+      "/.png"
+    ]
   }
 }

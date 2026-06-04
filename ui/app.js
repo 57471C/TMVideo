@@ -9,139 +9,6 @@ const openDialog = window.__TAURI__?.dialog?.open || null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
-let playheadAnimationId = null;
-let lastCheckedVideoTime = 0;
-
-function syncTimelinePlayheadSmoothly() {
-  if (player && playerReady && player.duration) {
-    const currentVideoTime = player.currentTime;
-    const duration = player.duration;
-
-    // Look-ahead intersection delta calculation for jump markers
-    if (currentVideoTime > lastCheckedVideoTime) {
-      if (markers && markers.length > 0) {
-        const activeVideo = (typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
-        const endLimit =
-          activeVideo.virtualEndTime !== null && activeVideo.virtualEndTime !== undefined
-            ? activeVideo.virtualEndTime
-            : duration;
-
-        for (let i = 0; i < markers.length; i += 1) {
-          const marker = markers[i];
-          if (marker.type === "jump") {
-            const nextMarker = markers[i + 1];
-            const boundaryTime = nextMarker ? nextMarker.startTime : endLimit;
-
-            // Did the video playhead pass over this marker time during this frame tick?
-            if (marker.startTime >= lastCheckedVideoTime && marker.startTime <= currentVideoTime) {
-              lastCheckedVideoTime = boundaryTime;
-              player.currentTime = boundaryTime;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    const finalVideoTime = player.currentTime;
-    const completionPercent = (finalVideoTime / duration) * 100;
-    const playheads = document.querySelectorAll(".sequencer-playhead");
-    for (const ph of playheads) {
-      ph.style.left = `${completionPercent}%`;
-    }
-    lastCheckedVideoTime = finalVideoTime;
-  }
-  playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
-}
-
-window.paintTimelineMarkersAndShading = () => {
-  const overlay = document.getElementById("timeline-marker-overlay");
-  if (!overlay) return;
-  overlay.innerHTML = "";
-
-  const videoElement = player || document.querySelector("video");
-  if (!videoElement || !videoElement.duration) return;
-
-  const duration = videoElement.duration;
-
-  // Start/End Trimming Shading
-  const startMarker = markers.find((m) => m.type === "in" || m.type === "start");
-  if (startMarker && startMarker.startTime > 0) {
-    const startPct = (startMarker.startTime / duration) * 100;
-    const startShade = document.createElement("div");
-    startShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
-    startShade.style.left = "0%";
-    startShade.style.width = `${startPct}%`;
-    overlay.appendChild(startShade);
-  }
-
-  const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
-  if (endMarker && endMarker.startTime < duration) {
-    const endPct = (endMarker.startTime / duration) * 100;
-    const endShade = document.createElement("div");
-    endShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
-    endShade.style.left = `${endPct}%`;
-    endShade.style.width = `${100 - endPct}%`;
-    overlay.appendChild(endShade);
-  }
-
-  // Loop through markers sequentially
-  for (let i = 0; i < markers.length; i += 1) {
-    const marker = markers[i];
-    const markerLeft = (marker.startTime / duration) * 100;
-
-    // Jump Skipping Shading
-    if (marker.type === "jump") {
-      const nextMarker = markers[i + 1];
-      const endTime = nextMarker ? nextMarker.startTime : duration;
-      const endPct = (endTime / duration) * 100;
-      const widthPct = endPct - markerLeft;
-      if (widthPct > 0) {
-        const jumpShade = document.createElement("div");
-        jumpShade.className = "absolute top-0 bottom-0 bg-zinc-500/20 dark:bg-zinc-900/40";
-        jumpShade.style.left = `${markerLeft}%`;
-        jumpShade.style.width = `${widthPct}%`;
-        overlay.appendChild(jumpShade);
-      }
-    }
-
-    // Loop sequence highlight span
-    if (marker.type === "loop") {
-      const nextMarker = markers[i + 1];
-      const endTime = nextMarker ? nextMarker.startTime : duration;
-      const endPct = (endTime / duration) * 100;
-      const widthPct = endPct - markerLeft;
-      if (widthPct > 0) {
-        const loopShade = document.createElement("div");
-        loopShade.className = "absolute top-0 bottom-0 bg-cyan-500/10 dark:bg-cyan-400/10";
-        loopShade.style.left = `${markerLeft}%`;
-        loopShade.style.width = `${widthPct}%`;
-        overlay.appendChild(loopShade);
-      }
-    }
-
-    // Create line element
-    const lineElement = document.createElement("div");
-    lineElement.style.left = `${markerLeft}%`;
-
-    if (
-      marker.type === "in" ||
-      marker.type === "start" ||
-      marker.type === "out" ||
-      marker.type === "end" ||
-      marker.type === "jump"
-    ) {
-      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-zinc-400 dark:bg-zinc-500 z-10";
-    } else if (marker.type === "loop") {
-      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-cyan-500 dark:bg-cyan-400 z-10";
-    } else {
-      // normal annotation marker
-      lineElement.className = "absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-yellow-400 z-10";
-    }
-
-    overlay.appendChild(lineElement);
-  }
-};
 
 let loadVideoButton;
 let addMarkerBtn;
@@ -307,161 +174,6 @@ window.loadSubtitleTrack = async (filePath) => {
   }
 };
 
-const paintTimelineRuler = (duration) => {
-  const rulerTrack = document.getElementById("timeline-ruler-track");
-  if (!rulerTrack) return;
-  rulerTrack.innerHTML = "";
-  rulerTrack.style.position = "relative";
-  rulerTrack.style.overflow = "hidden";
-
-  // Create playhead
-  const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
-  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
-  rulerTrack.appendChild(playhead);
-
-  // Add click to seek
-  if (!rulerTrack.dataset.hasClickListener) {
-    rulerTrack.addEventListener("click", (e) => {
-      if (e.target.classList.contains("sequencer-playhead")) return;
-      const rect = rulerTrack.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = clickX / rect.width;
-      player.currentTime = pct * duration;
-      const calculatedPercent = pct * 100;
-      const playheads = document.querySelectorAll(".sequencer-playhead");
-      for (const ph of playheads) {
-        ph.style.left = `${calculatedPercent}%`;
-      }
-    });
-    rulerTrack.dataset.hasClickListener = "true";
-  }
-
-  // Calculate ticks
-  const width = rulerTrack.offsetWidth || rulerTrack.getBoundingClientRect().width || 800;
-  let tickInterval = 5; // seconds
-  if (duration <= 15) tickInterval = 1;
-  else if (duration <= 60) tickInterval = 5;
-  else if (duration <= 300) tickInterval = 15;
-  else if (duration <= 1200) tickInterval = 60;
-  else tickInterval = 300;
-
-  const numTicks = Math.floor(duration / tickInterval);
-  for (let i = 0; i <= numTicks; i++) {
-    const time = i * tickInterval;
-    const pct = (time / duration) * 100;
-    if (pct > 100) break;
-
-    const tick = document.createElement("div");
-    tick.className = "absolute top-0 bottom-0 border-l border-zinc-300 dark:border-zinc-600 pl-1 text-[10px] text-zinc-500 dark:text-zinc-400 z-10 select-none flex items-center";
-    tick.style.left = `${pct}%`;
-    
-    // Format label as MM:SS
-    const mins = Math.floor(time / 60);
-    const secs = Math.floor(time % 60);
-    tick.textContent = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    
-    rulerTrack.appendChild(tick);
-  }
-};
-
-const setupVideoTrack = () => {
-  const videoTrack = document.getElementById("timeline-video-track");
-  if (!videoTrack) return;
-  
-  // Clear any old playheads
-  videoTrack.querySelectorAll(".sequencer-playhead").forEach((ph) => ph.remove());
-  videoTrack.style.position = "relative";
-
-  const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
-  const duration = player.duration || 1;
-  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
-  videoTrack.appendChild(playhead);
-
-  // Add click to seek
-  if (!videoTrack.dataset.hasClickListener) {
-    videoTrack.addEventListener("click", (e) => {
-      const rect = videoTrack.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = clickX / rect.width;
-      player.currentTime = pct * player.duration;
-      const calculatedPercent = pct * 100;
-      const playheads = document.querySelectorAll(".sequencer-playhead");
-      for (const ph of playheads) {
-        ph.style.left = `${calculatedPercent}%`;
-      }
-    });
-    videoTrack.dataset.hasClickListener = "true";
-  }
-};
-
-const drawCustomAudioWaveform = () => {
-  const audioTrack = document.getElementById("timeline-audio-track");
-  if (!audioTrack) return;
-  audioTrack.innerHTML = "";
-  audioTrack.style.position = "relative";
-
-  // Create playhead
-  const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
-  const duration = player.duration || 1;
-  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
-  audioTrack.appendChild(playhead);
-
-  // Add click to seek
-  if (!audioTrack.dataset.hasClickListener) {
-    audioTrack.addEventListener("click", (e) => {
-      const rect = audioTrack.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = clickX / rect.width;
-      player.currentTime = pct * player.duration;
-      const calculatedPercent = pct * 100;
-      const playheads = document.querySelectorAll(".sequencer-playhead");
-      for (const ph of playheads) {
-        ph.style.left = `${calculatedPercent}%`;
-      }
-    });
-    audioTrack.dataset.hasClickListener = "true";
-  }
-
-  const data = window.currentWaveformData;
-  if (!data || data.length === 0) return;
-
-  const canvas = document.createElement("canvas");
-  canvas.style.width = "100%";
-  canvas.style.height = "100%";
-  audioTrack.appendChild(canvas);
-
-  const observer = new ResizeObserver(() => {
-    const rect = audioTrack.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.scale(dpr, dpr);
-
-    const midY = rect.height / 2;
-    ctx.beginPath();
-    ctx.strokeStyle = document.documentElement.classList.contains("dark") ? "#cbd5e1" : "#4b5563";
-    ctx.lineWidth = 1.5;
-
-    const step = rect.width / data.length;
-    for (let i = 0; i < data.length; i++) {
-      const x = i * step;
-      const amp = (data[i] / 128) * (rect.height / 2.2);
-      ctx.moveTo(x, midY - amp);
-      ctx.lineTo(x, midY + amp);
-    }
-    ctx.stroke();
-  });
-  observer.observe(audioTrack);
-};
-
 window.loadWaveformTimeline = async () => {
   const isTauri = window.__TAURI__ !== undefined;
   if (!isTauri || !videoFilePath) return;
@@ -500,9 +212,9 @@ window.loadWaveformTimeline = async () => {
     window.currentWaveformDataPath = videoFilePath;
 
     // Trigger ruler, video, and audio track rendering
-    paintTimelineRuler(duration);
-    setupVideoTrack();
-    drawCustomAudioWaveform();
+    window.paintTimelineRuler(duration);
+    window.setupVideoTrack();
+    window.drawCustomAudioWaveform();
     if (typeof window.paintTimelineMarkersAndShading === "function") {
       window.paintTimelineMarkersAndShading();
     }
@@ -511,7 +223,7 @@ window.loadWaveformTimeline = async () => {
     const videoTrack = document.getElementById("timeline-video-track");
     if (videoTrack) {
       videoTrack.innerHTML = "Developing Video Filmstrip Tracks...";
-      setupVideoTrack();
+      window.setupVideoTrack();
     }
 
     const totalTrackWidth = (videoTrack && videoTrack.offsetWidth) || 1200;
@@ -534,14 +246,14 @@ window.loadWaveformTimeline = async () => {
               "h-full w-[120px] object-cover flex-shrink-0 border-r border-zinc-200 dark:border-zinc-700 pointer-events-none";
             videoTrack.appendChild(imgElement);
           }
-          setupVideoTrack();
+          window.setupVideoTrack();
         }
       })
       .catch((err) => {
         console.error("Error generating filmstrip thumbnails:", err);
         if (videoTrack) {
           videoTrack.innerHTML = "Failed to load filmstrip.";
-          setupVideoTrack();
+          window.setupVideoTrack();
         }
       });
 
@@ -1195,36 +907,36 @@ const initializePlayer = () => {
   player.addEventListener("play", () => {
     DOM.playIcon.classList.add("hidden");
     DOM.pauseIcon.classList.remove("hidden");
-    lastCheckedVideoTime = player.currentTime;
-    if (!playheadAnimationId) {
-      playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
+    window.lastCheckedVideoTime = player.currentTime;
+    if (!window.playheadAnimationId) {
+      window.playheadAnimationId = requestAnimationFrame(window.syncTimelinePlayheadSmoothly);
     }
   });
   player.addEventListener("playing", () => {
-    lastCheckedVideoTime = player.currentTime;
-    if (!playheadAnimationId) {
-      playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
+    window.lastCheckedVideoTime = player.currentTime;
+    if (!window.playheadAnimationId) {
+      window.playheadAnimationId = requestAnimationFrame(window.syncTimelinePlayheadSmoothly);
     }
   });
   player.addEventListener("pause", () => {
     DOM.playIcon.classList.remove("hidden");
     DOM.pauseIcon.classList.add("hidden");
-    if (playheadAnimationId) {
-      cancelAnimationFrame(playheadAnimationId);
-      playheadAnimationId = null;
+    if (window.playheadAnimationId) {
+      cancelAnimationFrame(window.playheadAnimationId);
+      window.playheadAnimationId = null;
     }
   });
   player.addEventListener("ended", () => {
-    if (playheadAnimationId) {
-      cancelAnimationFrame(playheadAnimationId);
-      playheadAnimationId = null;
+    if (window.playheadAnimationId) {
+      cancelAnimationFrame(window.playheadAnimationId);
+      window.playheadAnimationId = null;
     }
   });
   player.addEventListener("seeking", () => {
-    lastCheckedVideoTime = player.currentTime;
-    if (playheadAnimationId) {
-      cancelAnimationFrame(playheadAnimationId);
-      playheadAnimationId = null;
+    window.lastCheckedVideoTime = player.currentTime;
+    if (window.playheadAnimationId) {
+      cancelAnimationFrame(window.playheadAnimationId);
+      window.playheadAnimationId = null;
     }
   });
   player.addEventListener("error", () => {
