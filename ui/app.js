@@ -9,6 +9,19 @@ const openDialog = window.__TAURI__?.dialog?.open || null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
+let playheadAnimationId = null;
+
+function syncTimelinePlayheadSmoothly() {
+  if (player && playerReady && player.duration) {
+    const completionPercent = (player.currentTime / player.duration) * 100;
+    const playheads = document.querySelectorAll(".sequencer-playhead");
+    for (const ph of playheads) {
+      ph.style.left = `${completionPercent}%`;
+    }
+  }
+  playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
+}
+
 let loadVideoButton;
 let addMarkerBtn;
 let toggleFormatButton;
@@ -182,18 +195,26 @@ const paintTimelineRuler = (duration) => {
 
   // Create playhead
   const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
   playhead.style.left = `${(player.currentTime / duration) * 100}%`;
   rulerTrack.appendChild(playhead);
 
   // Add click to seek
-  rulerTrack.addEventListener("click", (e) => {
-    if (e.target.classList.contains("sequencer-playhead")) return;
-    const rect = rulerTrack.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const pct = clickX / rect.width;
-    player.currentTime = pct * duration;
-  });
+  if (!rulerTrack.dataset.hasClickListener) {
+    rulerTrack.addEventListener("click", (e) => {
+      if (e.target.classList.contains("sequencer-playhead")) return;
+      const rect = rulerTrack.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = clickX / rect.width;
+      player.currentTime = pct * duration;
+      const calculatedPercent = pct * 100;
+      const playheads = document.querySelectorAll(".sequencer-playhead");
+      for (const ph of playheads) {
+        ph.style.left = `${calculatedPercent}%`;
+      }
+    });
+    rulerTrack.dataset.hasClickListener = "true";
+  }
 
   // Calculate ticks
   const width = rulerTrack.offsetWidth || rulerTrack.getBoundingClientRect().width || 800;
@@ -232,18 +253,26 @@ const setupVideoTrack = () => {
   videoTrack.style.position = "relative";
 
   const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
   const duration = player.duration || 1;
   playhead.style.left = `${(player.currentTime / duration) * 100}%`;
   videoTrack.appendChild(playhead);
 
   // Add click to seek
-  videoTrack.addEventListener("click", (e) => {
-    const rect = videoTrack.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const pct = clickX / rect.width;
-    player.currentTime = pct * player.duration;
-  });
+  if (!videoTrack.dataset.hasClickListener) {
+    videoTrack.addEventListener("click", (e) => {
+      const rect = videoTrack.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = clickX / rect.width;
+      player.currentTime = pct * player.duration;
+      const calculatedPercent = pct * 100;
+      const playheads = document.querySelectorAll(".sequencer-playhead");
+      for (const ph of playheads) {
+        ph.style.left = `${calculatedPercent}%`;
+      }
+    });
+    videoTrack.dataset.hasClickListener = "true";
+  }
 };
 
 const drawCustomAudioWaveform = () => {
@@ -254,18 +283,26 @@ const drawCustomAudioWaveform = () => {
 
   // Create playhead
   const playhead = document.createElement("div");
-  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
   const duration = player.duration || 1;
   playhead.style.left = `${(player.currentTime / duration) * 100}%`;
   audioTrack.appendChild(playhead);
 
   // Add click to seek
-  audioTrack.addEventListener("click", (e) => {
-    const rect = audioTrack.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const pct = clickX / rect.width;
-    player.currentTime = pct * player.duration;
-  });
+  if (!audioTrack.dataset.hasClickListener) {
+    audioTrack.addEventListener("click", (e) => {
+      const rect = audioTrack.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = clickX / rect.width;
+      player.currentTime = pct * player.duration;
+      const calculatedPercent = pct * 100;
+      const playheads = document.querySelectorAll(".sequencer-playhead");
+      for (const ph of playheads) {
+        ph.style.left = `${calculatedPercent}%`;
+      }
+    });
+    audioTrack.dataset.hasClickListener = "true";
+  }
 
   const data = window.currentWaveformData;
   if (!data || data.length === 0) return;
@@ -289,7 +326,7 @@ const drawCustomAudioWaveform = () => {
 
     const midY = rect.height / 2;
     ctx.beginPath();
-    ctx.strokeStyle = document.documentElement.classList.contains("dark") ? "#eab308" : "#1e40af";
+    ctx.strokeStyle = document.documentElement.classList.contains("dark") ? "#cbd5e1" : "#4b5563";
     ctx.lineWidth = 1.5;
 
     const step = rect.width / data.length;
@@ -345,6 +382,44 @@ window.loadWaveformTimeline = async () => {
     paintTimelineRuler(duration);
     setupVideoTrack();
     drawCustomAudioWaveform();
+
+    // Trigger filmstrip thumbnail extraction
+    const videoTrack = document.getElementById("timeline-video-track");
+    if (videoTrack) {
+      videoTrack.innerHTML = "Developing Video Filmstrip Tracks...";
+      setupVideoTrack();
+    }
+
+    const totalTrackWidth = (videoTrack && videoTrack.offsetWidth) || 1200;
+    const requiredTileCount = Math.ceil(totalTrackWidth / 120);
+
+    window.__TAURI__.core
+      .invoke("generate_timeline_thumbnails", { 
+        videoPath: videoFilePath,
+        tileCount: requiredTileCount
+      })
+      .then((thumbnailPaths) => {
+        if (videoTrack) {
+          videoTrack.innerHTML = "";
+          videoTrack.style.justifyContent = "flex-start";
+          videoTrack.style.overflowX = "auto";
+          for (const pathString of thumbnailPaths) {
+            const imgElement = document.createElement("img");
+            imgElement.src = window.__TAURI__.core.convertFileSrc(pathString);
+            imgElement.className =
+              "h-full w-[120px] object-cover flex-shrink-0 border-r border-zinc-200 dark:border-zinc-700 pointer-events-none";
+            videoTrack.appendChild(imgElement);
+          }
+          setupVideoTrack();
+        }
+      })
+      .catch((err) => {
+        console.error("Error generating filmstrip thumbnails:", err);
+        if (videoTrack) {
+          videoTrack.innerHTML = "Failed to load filmstrip.";
+          setupVideoTrack();
+        }
+      });
 
   } catch (err) {
     console.error("Error generating waveform data:", err);
@@ -996,10 +1071,34 @@ const initializePlayer = () => {
   player.addEventListener("play", () => {
     DOM.playIcon.classList.add("hidden");
     DOM.pauseIcon.classList.remove("hidden");
+    if (!playheadAnimationId) {
+      playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
+    }
+  });
+  player.addEventListener("playing", () => {
+    if (!playheadAnimationId) {
+      playheadAnimationId = requestAnimationFrame(syncTimelinePlayheadSmoothly);
+    }
   });
   player.addEventListener("pause", () => {
     DOM.playIcon.classList.remove("hidden");
     DOM.pauseIcon.classList.add("hidden");
+    if (playheadAnimationId) {
+      cancelAnimationFrame(playheadAnimationId);
+      playheadAnimationId = null;
+    }
+  });
+  player.addEventListener("ended", () => {
+    if (playheadAnimationId) {
+      cancelAnimationFrame(playheadAnimationId);
+      playheadAnimationId = null;
+    }
+  });
+  player.addEventListener("seeking", () => {
+    if (playheadAnimationId) {
+      cancelAnimationFrame(playheadAnimationId);
+      playheadAnimationId = null;
+    }
   });
   player.addEventListener("error", () => {
     toConsole("Video load error", "Failed to load video from URL", debuggin);
@@ -1428,6 +1527,12 @@ const initializePlayer = () => {
         if (processStartTime > 0 && time < processStartTime) time = processStartTime;
         if (processEndTime > 0 && time > processEndTime) time = processEndTime;
         player.currentTime = time;
+        const duration = player.duration || 1;
+        const pct = (time / duration) * 100;
+        const playheads = document.querySelectorAll(".sequencer-playhead");
+        for (const ph of playheads) {
+          ph.style.left = `${pct}%`;
+        }
       }
     });
     seekBar.addEventListener("mouseup", (e) => e.target.blur());

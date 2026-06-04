@@ -779,6 +779,113 @@ async fn get_waveform_data(
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
+#[tauri::command]
+async fn generate_timeline_thumbnails(
+    app_handle: tauri::AppHandle,
+    video_path: String,
+    tile_count: usize,
+) -> Result<Vec<String>, String> {
+    let app_handle_clone = app_handle.clone();
+    tokio::task::spawn_blocking(move || {
+        // Helper function to extract native duration using ffmpeg -i
+        let get_duration = |path: &str| -> Option<f64> {
+            if let Ok(sidecar) = app_handle_clone.shell().sidecar("ffmpeg") {
+                let sidecar = sidecar.args(["-i", path]);
+                if let Ok(output) = tauri::async_runtime::block_on(sidecar.output()) {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if let Some(pos) = stderr.find("Duration: ") {
+                        let sub = &stderr[pos + 10..];
+                        if sub.len() >= 11 {
+                            let parts: Vec<&str> = sub[..11].split(':').collect();
+                            if parts.len() == 3 {
+                                let hours: f64 = parts[0].parse().unwrap_or(0.0);
+                                let minutes: f64 = parts[1].parse().unwrap_or(0.0);
+                                let seconds: f64 = parts[2].parse().unwrap_or(0.0);
+                                return Some(hours * 3600.0 + minutes * 60.0 + seconds);
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        };
+
+        let total_duration_seconds = get_duration(&video_path).unwrap_or(10.0);
+        let interval_step = total_duration_seconds / (tile_count as f64);
+        let dynamic_fps_filter = format!("fps=1/{},scale=120:-1", interval_step);
+
+        // Resolve temporary workspace directory pathway using app_handle.path().app_cache_dir()
+        let cache_path = app_handle_clone
+            .path()
+            .app_cache_dir()
+            .map_err(|e| format!("Failed to get app cache dir: {}", e))?
+            .join("tmvideo_thumbnails");
+
+        // Ensure the directory is created if missing
+        std::fs::create_dir_all(&cache_path)
+            .map_err(|e| format!("Failed to create thumbnail directory: {}", e))?;
+
+        // Clear out stale .jpg fragments in that folder
+        if let Ok(entries) = std::fs::read_dir(&cache_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+
+        let cache_path_string = cache_path.to_string_lossy().to_string();
+
+        // Fire bundled "ffmpeg" static sidecar target binary
+        let sidecar = app_handle_clone
+            .shell()
+            .sidecar("ffmpeg")
+            .map_err(|e| format!("Failed to find sidecar: {}", e))?
+            .args([
+                "-i",
+                &video_path,
+                "-vf",
+                &dynamic_fps_filter,
+                "-q:v",
+                "5",
+                &format!("{}/thumb_%04d.jpg", cache_path_string),
+            ]);
+
+        // Wait for the ffmpeg execution pipeline child process to terminate successfully
+        let output = tauri::async_runtime::block_on(sidecar.output())
+            .map_err(|e| format!("Failed to run sidecar: {}", e))?;
+
+        if !output.status.success() {
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("FFmpeg failed: {}", stderr_str));
+        }
+
+        // Scan the output directory sequentially
+        let mut thumbnails = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&cache_path) {
+            let mut entry_paths = Vec::new();
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
+                    entry_paths.push(path);
+                }
+            }
+
+            // Sort sequentially (thumb_0001.jpg, thumb_0002.jpg, etc.)
+            entry_paths.sort();
+
+            for path in entry_paths {
+                thumbnails.push(path.to_string_lossy().to_string());
+            }
+        }
+
+        Ok(thumbnails)
+    })
+    .await
+    .map_err(|e| format!("Task panicked: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -805,7 +912,8 @@ pub fn run() {
         load_tspz_bundle,
         resolve_subtitles,
         join_and_compress_videos,
-        get_waveform_data
+        get_waveform_data,
+        generate_timeline_thumbnails
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
