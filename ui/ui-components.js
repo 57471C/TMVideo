@@ -18,8 +18,19 @@ const toggleTypeDropdown = (e, index) => {
     }
   }
   const menu = document.getElementById(`type-menu-${index}`);
-  if (menu) {
-    menu.classList.toggle("hidden");
+  const button = document.getElementById(`type-btn-${index}`);
+  if (menu && button) {
+    const isOpening = menu.classList.contains("hidden");
+    if (isOpening) {
+      menu.classList.remove("hidden");
+      const rect = button.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${rect.left}px`;
+      menu.style.zIndex = "1000";
+    } else {
+      menu.classList.add("hidden");
+    }
   }
 };
 
@@ -30,10 +41,17 @@ document.addEventListener("click", () => {
   }
 });
 
+document.addEventListener("scroll", () => {
+  const menus = document.querySelectorAll('[id^="type-menu-"]');
+  for (const menu of menus) {
+    menu.classList.add("hidden");
+  }
+}, { passive: true, capture: true });
+
 const updateStickyOffsets = () => {
   const activeLoggingPanel = document.getElementById("activeLoggingPanel");
   const markersList = document.getElementById("markersList");
-  if (!activeLoggingPanel || !markersList) return;
+  if (!markersList) return;
 
   const tableHeader = markersList.querySelector("thead");
   if (!tableHeader) return;
@@ -48,6 +66,8 @@ const updateStickyOffsets = () => {
     tableHeader.style.top = "0px";
     return;
   }
+
+  if (!activeLoggingPanel) return;
 
   const scrollContainerRect = scrollContainer.getBoundingClientRect();
   const tableRect = table.getBoundingClientRect();
@@ -94,10 +114,16 @@ const updateMarkersList = () => {
     if (!DOM.markersList) throw new Error("Markers list element not found");
     const rows = [
       `<table class="table table-fixed w-full font-mono text-base tabular-nums [&_th]:align-middle [&_td]:align-middle [&_th]:text-sm sm:[&_th]:text-base [&_td]:text-sm sm:[&_td]:text-base [&_th]:py-1 [&_th]:h-5">
-           <thead class="sticky top-0 z-20 bg-slate-800 text-white shadow-sm">
+           <thead class="sticky top-0 z-20 text-slate-800 dark:text-slate-100 font-semibold bg-slate-200 dark:bg-slate-800 shadow-sm">
            <tr>
              <th scope="col" class="text-left align-middle w-auto pl-1 sm:pl-2">
-               Marker Name
+               <div class="flex items-center justify-between w-full">
+                 <span class="text-sm font-bold">Marker Name</span>
+                 <button id="addMarkerBtn" class="btn btn-xs btn-primary shadow-sm py-0.5 px-2 h-6 flex items-center gap-1 text-[11px] font-medium leading-none cursor-pointer">
+                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                   Add Marker
+                 </button>
+               </div>
              </th>
              <th scope="col" class="text-center w-[155px] whitespace-nowrap px-1">Start Time</th>
              <th scope="col" class="text-center w-24 whitespace-nowrap px-1">Duration</th>
@@ -110,7 +136,6 @@ const updateMarkersList = () => {
       const markerTimeInputId = `markerTimeInput-${i}`;
       const formattedTime = formatTimeToHHMMSSMS(marker.startTime);
       const safeMarkerName = escapeHTML(marker.name);
-
       const isNegative = marker.startTime < 0;
       const isInvalid =
         isNegative || marker.startTime < processStartTime || (processEndTime > 0 && marker.startTime > processEndTime);
@@ -213,11 +238,7 @@ const updateMarkersList = () => {
     DOM.markersTableFoot = document.getElementById("markersTableFoot");
     const table = DOM.markersList.querySelector("table");
     if (!table) throw new Error("Markers table element not found");
-    if (markers.length > 0) {
-      table.style.display = "table";
-    } else {
-      table.style.display = "none";
-    }
+    table.style.display = "table";
     updateVideoTimeSummary();
 
     // Attach listeners for manual input typing in start times

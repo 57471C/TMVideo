@@ -173,6 +173,137 @@ window.loadSubtitleTrack = async (filePath) => {
   }
 };
 
+const paintTimelineRuler = (duration) => {
+  const rulerTrack = document.getElementById("timeline-ruler-track");
+  if (!rulerTrack) return;
+  rulerTrack.innerHTML = "";
+  rulerTrack.style.position = "relative";
+  rulerTrack.style.overflow = "hidden";
+
+  // Create playhead
+  const playhead = document.createElement("div");
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+  rulerTrack.appendChild(playhead);
+
+  // Add click to seek
+  rulerTrack.addEventListener("click", (e) => {
+    if (e.target.classList.contains("sequencer-playhead")) return;
+    const rect = rulerTrack.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = clickX / rect.width;
+    player.currentTime = pct * duration;
+  });
+
+  // Calculate ticks
+  const width = rulerTrack.offsetWidth || rulerTrack.getBoundingClientRect().width || 800;
+  let tickInterval = 5; // seconds
+  if (duration <= 15) tickInterval = 1;
+  else if (duration <= 60) tickInterval = 5;
+  else if (duration <= 300) tickInterval = 15;
+  else if (duration <= 1200) tickInterval = 60;
+  else tickInterval = 300;
+
+  const numTicks = Math.floor(duration / tickInterval);
+  for (let i = 0; i <= numTicks; i++) {
+    const time = i * tickInterval;
+    const pct = (time / duration) * 100;
+    if (pct > 100) break;
+
+    const tick = document.createElement("div");
+    tick.className = "absolute top-0 bottom-0 border-l border-zinc-300 dark:border-zinc-600 pl-1 text-[10px] text-zinc-500 dark:text-zinc-400 z-10 select-none flex items-center";
+    tick.style.left = `${pct}%`;
+    
+    // Format label as MM:SS
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    tick.textContent = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    
+    rulerTrack.appendChild(tick);
+  }
+};
+
+const setupVideoTrack = () => {
+  const videoTrack = document.getElementById("timeline-video-track");
+  if (!videoTrack) return;
+  
+  // Clear any old playheads
+  videoTrack.querySelectorAll(".sequencer-playhead").forEach((ph) => ph.remove());
+  videoTrack.style.position = "relative";
+
+  const playhead = document.createElement("div");
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  const duration = player.duration || 1;
+  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+  videoTrack.appendChild(playhead);
+
+  // Add click to seek
+  videoTrack.addEventListener("click", (e) => {
+    const rect = videoTrack.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = clickX / rect.width;
+    player.currentTime = pct * player.duration;
+  });
+};
+
+const drawCustomAudioWaveform = () => {
+  const audioTrack = document.getElementById("timeline-audio-track");
+  if (!audioTrack) return;
+  audioTrack.innerHTML = "";
+  audioTrack.style.position = "relative";
+
+  // Create playhead
+  const playhead = document.createElement("div");
+  playhead.className = "sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-red-600 dark:bg-red-500 pointer-events-none z-30";
+  const duration = player.duration || 1;
+  playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+  audioTrack.appendChild(playhead);
+
+  // Add click to seek
+  audioTrack.addEventListener("click", (e) => {
+    const rect = audioTrack.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = clickX / rect.width;
+    player.currentTime = pct * player.duration;
+  });
+
+  const data = window.currentWaveformData;
+  if (!data || data.length === 0) return;
+
+  const canvas = document.createElement("canvas");
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  audioTrack.appendChild(canvas);
+
+  const observer = new ResizeObserver(() => {
+    const rect = audioTrack.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(dpr, dpr);
+
+    const midY = rect.height / 2;
+    ctx.beginPath();
+    ctx.strokeStyle = document.documentElement.classList.contains("dark") ? "#eab308" : "#1e40af";
+    ctx.lineWidth = 1.5;
+
+    const step = rect.width / data.length;
+    for (let i = 0; i < data.length; i++) {
+      const x = i * step;
+      const amp = (data[i] / 128) * (rect.height / 2.2);
+      ctx.moveTo(x, midY - amp);
+      ctx.lineTo(x, midY + amp);
+    }
+    ctx.stroke();
+  });
+  observer.observe(audioTrack);
+};
+
 window.loadWaveformTimeline = async () => {
   const isTauri = window.__TAURI__ !== undefined;
   if (!isTauri || !videoFilePath) return;
@@ -209,6 +340,11 @@ window.loadWaveformTimeline = async () => {
     // Save the raw peak data sequence directly to the global window memory state
     window.currentWaveformData = peakArray;
     window.currentWaveformDataPath = videoFilePath;
+
+    // Trigger ruler, video, and audio track rendering
+    paintTimelineRuler(duration);
+    setupVideoTrack();
+    drawCustomAudioWaveform();
 
   } catch (err) {
     console.error("Error generating waveform data:", err);
@@ -688,14 +824,7 @@ const initializePlayer = () => {
   marqueeOverlay = DOM.marqueeOverlay;
   marqueeRect = DOM.marqueeRect;
 
-  const activeLoggingPanel = document.getElementById("activeLoggingPanel");
-  if (activeLoggingPanel) {
-    new ResizeObserver(() => {
-      if (typeof updateStickyOffsets === "function") {
-        updateStickyOffsets();
-      }
-    }).observe(activeLoggingPanel);
-  }
+
 
   const isDarkMode = localStorage.getItem("darkMode") === "true";
 
@@ -1845,6 +1974,14 @@ const seektimeupdate = () => {
     updateTimeDisplay(currentTime, "currentTime");
     if (duration) {
       updateTimeDisplay(duration, "durationTime");
+    }
+
+    if (duration > 0) {
+      const pct = (currentTime / duration) * 100;
+      const playheads = document.querySelectorAll(".sequencer-playhead");
+      for (const ph of playheads) {
+        ph.style.left = `${pct}%`;
+      }
     }
 
     // Playhead Execution Logic: Jump & Loop

@@ -242,50 +242,28 @@
         </div>
 
         <!-- Right Column: Controls -->
-        <div id="rightPanel" class="flex flex-col">
-          <div id="activeLoggingPanel" class="sticky top-0 z-30 pt-4 lg:pt-6 pb-5 bg-zinc-50 dark:bg-zinc-900 transition-colors duration-200">
-          <div class="w-full p-2.5 lg:p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3 z-0 transition-colors duration-200">
-            <div class="flex justify-between items-center w-full flex-wrap gap-3">
-              <!-- Left Side: Active Logging -->
-              <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <button id="addMarkerBtn" class="btn btn-primary shadow-sm flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                  Add Marker
-                </button>
-              </div>
+        <div id="rightPanel" class="flex flex-col pt-4 lg:pt-6">
 
-              <!-- Right Side: Data and View Settings -->
-              <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
-               <!-- <button id="toggleFormatButton" class="btn btn-outline-secondary flex items-center gap-1.5 shadow-sm">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>Format (HH:MM:SS.MS)</span>
-                </button>
-                  <button id="exportButton" class="btn btn-outline-secondary flex items-center gap-1.5 shadow-sm" title="Export Data (CSV)">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                    CSV
-                  </button>
-                -->
-              </div>
-            </div>
-          </div>
-          </div>
 
           <!-- Markers List Table -->
-          <div id="markersList" style="max-height: calc(100vh - 420px); overflow-y: auto;"></div>
+          <div id="markersList" style="max-height: calc(100vh - 420px); overflow-y: auto;">
+            
+          </div>
         </div>
       </div>
 
       <!-- High-resolution Peaks timeline engine -->
-      <div id="peaks-timeline-wrapper" class="peaks-container w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-4 rounded shadow-sm mt-6 px-4" style="display: none;">
-        <div id="timeline-ruler-track" style="width: 100%; height: 24px; background: #1e293b; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; color: #94a3b8; font-size: 11px; font-family: monospace; border-bottom: 1px solid #334155;">
+      <div id="peaks-timeline-wrapper" class="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 p-4 rounded shadow-sm mt-6 px-4" style="display: none;">
+        
+        <div id="timeline-ruler-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700" style="height: 24px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid; margin-bottom: 8px; border-radius: 4px;">
           0:00:00 / Sequence Time Tracks Placeholder
         </div>
 
-        <div id="timeline-video-track" style="width: 100%; height: 64px; background: #1e293b; border-radius: 4px; position: relative; overflow-x: auto; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; border: 1px dashed #475569;">
+        <div id="timeline-video-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 64px; position: relative; overflow-x: auto; display: flex; align-items: center; justify-content: center; font-size: 12px; margin-bottom: 8px; border-radius: 4px;">
           Video Filmstrip Strip Track Frame Housing
         </div>
 
-        <div id="timeline-audio-track" style="width: 100%; height: 40px; background: #1e293b; border-radius: 4px; position: relative; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; border: 1px dashed #475569;">
+        <div id="timeline-audio-track" class="w-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 border-dashed" style="height: 40px; position: relative; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px;">
           Linear Amplitude Peak Canvas Element
         </div>
       </div>
