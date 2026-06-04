@@ -44,6 +44,11 @@ const updateStickyOffsets = () => {
   const scrollContainer = markersList.closest(".overflow-y-auto");
   if (!scrollContainer) return;
 
+  if (scrollContainer === markersList) {
+    tableHeader.style.top = "0px";
+    return;
+  }
+
   const scrollContainerRect = scrollContainer.getBoundingClientRect();
   const tableRect = table.getBoundingClientRect();
 
@@ -89,7 +94,7 @@ const updateMarkersList = () => {
     if (!DOM.markersList) throw new Error("Markers list element not found");
     const rows = [
       `<table class="table table-fixed w-full font-mono text-base tabular-nums [&_th]:align-middle [&_td]:align-middle [&_th]:text-sm sm:[&_th]:text-base [&_td]:text-sm sm:[&_td]:text-base [&_th]:py-1 [&_th]:h-5">
-           <thead class="sticky z-20 bg-zinc-50 dark:bg-zinc-900 shadow-sm">
+           <thead class="sticky top-0 z-20 bg-slate-800 text-white shadow-sm">
            <tr>
              <th scope="col" class="text-left align-middle w-auto pl-1 sm:pl-2">
                Marker Name
@@ -303,6 +308,15 @@ const updateVideoTimeSummary = () => {
         </span>
       </div>
     `;
+
+    if (window.peaksInstance) {
+      const zoomview = window.peaksInstance.views.getView('zoomview');
+      if (zoomview) {
+        const start = processStartTime || 0;
+        const end = (processEndTime > 0) ? processEndTime : (typeof player !== "undefined" && player ? player.duration : 0);
+        zoomview.setZoom({ start, end });
+      }
+    }
   } catch (error) {
     toConsole("updateVideoTimeSummary error", error.message, debuggin);
   }

@@ -31,6 +31,9 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 
+window.currentWaveformDataPath = null;
+window.peaksInstance = null;
+
 window.resetClosedCaptions = () => {
   window.currentCaptions = [];
   window.captionsVisible = true;
@@ -43,9 +46,14 @@ window.resetClosedCaptions = () => {
     }
     window.peaksInstance = null;
   }
-  const peaksContainer = document.getElementById("peaks-container");
+  window.currentWaveformDataPath = null;
+  const peaksContainer = document.getElementById("peaks-timeline-wrapper");
   if (peaksContainer) {
-    peaksContainer.classList.add("hidden");
+    peaksContainer.style.display = "none";
+  }
+  const seekBarContainer = document.getElementById("seekBarContainer");
+  if (seekBarContainer) {
+    seekBarContainer.style.display = "block";
   }
 
   const ccToggleBtn = document.getElementById("ccToggleBtn");
@@ -165,7 +173,33 @@ window.loadSubtitleTrack = async (filePath) => {
   }
 };
 
-window.initWaveform = async (filePath, duration) => {
+window.loadWaveformTimeline = async () => {
+  const isTauri = window.__TAURI__ !== undefined;
+  if (!isTauri || !videoFilePath) return;
+
+  const wrapper = document.getElementById("peaks-timeline-wrapper");
+  const loadingText = document.getElementById("peaks-loading-text");
+  const zoomView = document.getElementById("zoomview-container");
+  const overview = document.getElementById("overview-container");
+  const seekBarContainer = document.getElementById("seekBarContainer");
+
+  if (document.body.classList.contains("mini-player")) {
+    if (wrapper) wrapper.style.display = "none";
+    if (seekBarContainer) seekBarContainer.style.display = "block";
+    return;
+  }
+
+  if (window.currentWaveformDataPath === videoFilePath && window.peaksInstance) {
+    if (seekBarContainer) seekBarContainer.style.display = "block";
+    if (wrapper) {
+      wrapper.style.display = "block";
+      if (loadingText) loadingText.classList.add("hidden");
+      if (zoomView) zoomView.classList.remove("hidden");
+      if (overview) overview.classList.remove("hidden");
+    }
+    return;
+  }
+
   if (window.peaksInstance) {
     try {
       window.peaksInstance.destroy();
@@ -175,53 +209,84 @@ window.initWaveform = async (filePath, duration) => {
     window.peaksInstance = null;
   }
 
-  const peaksContainer = document.getElementById("peaks-container");
-  if (peaksContainer) {
-    peaksContainer.classList.add("hidden");
+  if (seekBarContainer) {
+    seekBarContainer.style.display = "block";
   }
-
-  const isTauri = window.__TAURI__ !== undefined;
-  if (!isTauri || !filePath) return;
+  if (wrapper) {
+    wrapper.style.display = "block";
+  }
+  if (loadingText) {
+    loadingText.textContent = "Compiling Detailed Timeline Map...";
+    loadingText.classList.remove("hidden");
+  }
+  if (zoomView) zoomView.classList.add("hidden");
+  if (overview) overview.classList.add("hidden");
 
   try {
+    const videoEl = document.querySelector("video") || player;
+    const duration = videoEl.duration || player.duration || 0;
     const peakArray = await window.__TAURI__.core.invoke("get_waveform_data", { 
-      videoPath: filePath,
+      videoPath: videoFilePath,
       durationSeconds: duration
     });
     if (!peakArray || peakArray.length === 0) {
-      console.warn("No waveform data returned");
+      console.warn("Waveform data empty, bypassing timeline initialization.");
+      if (wrapper) wrapper.style.display = "none";
+      if (seekBarContainer) seekBarContainer.style.display = "block";
       return;
     }
+
+    const interleavedData = [];
+    for (let i = 0; i < peakArray.length; i++) {
+      const val = peakArray[i];
+      const minVal = -val;
+      const maxVal = val;
+      interleavedData.push(minVal, maxVal);
+    }
+
+    const calculatedSamplesPerPixel = Math.floor((8000 * duration) / peakArray.length);
 
     const waveformDataObject = {
       version: 2,
       channels: 1,
       sample_rate: 8000,
-      samples_per_pixel: 128,
+      samples_per_pixel: calculatedSamplesPerPixel || 128,
       bits: 8,
       length: peakArray.length,
-      data: peakArray
+      data: interleavedData
     };
 
-    if (peaksContainer) {
-      peaksContainer.classList.remove("hidden");
-    }
+    window.currentWaveformDataPath = videoFilePath;
 
-    const videoEl = document.querySelector('video') || player;
+    if (loadingText) loadingText.classList.add("hidden");
+    if (zoomView) zoomView.classList.remove("hidden");
+    if (overview) overview.classList.remove("hidden");
+
+
 
     if (window.peaks && typeof window.peaks.init === "function") {
       window.peaks.init({
         containers: {
-          zoomview: document.getElementById('zoomview-container'),
-          overview: document.getElementById('overview-container')
+          zoomview: zoomView,
+          overview: overview
+        },
+        zoomview: {
+          container: zoomView
+        },
+        overview: {
+          container: overview
         },
         mediaElement: videoEl,
         waveformArray: waveformDataObject,
+        waveformData: {
+          json: waveformDataObject
+        },
         zoomLevels: [512, 1024, 2048]
-      }, function(err, peaksInstance) {
+      }, (err, peaksInstance) => {
         if (err) {
           console.error("Waveform Init Failure:", err);
-          if (peaksContainer) peaksContainer.classList.add("hidden");
+          if (wrapper) wrapper.style.display = "none";
+          if (seekBarContainer) seekBarContainer.style.display = "block";
           return;
         }
         window.peaksInstance = peaksInstance;
@@ -231,9 +296,8 @@ window.initWaveform = async (filePath, duration) => {
     }
   } catch (err) {
     console.error("Error generating waveform data:", err);
-    if (peaksContainer) {
-      peaksContainer.classList.add("hidden");
-    }
+    if (wrapper) wrapper.style.display = "none";
+    if (seekBarContainer) seekBarContainer.style.display = "block";
   }
 };
 
@@ -669,6 +733,15 @@ async function toggleCinemaMode() {
     }
   }
 
+  // Handle peaks timeline display between Cinema and Normal modes
+  const wrapper = document.getElementById("peaks-timeline-wrapper");
+  if (isCinemaMode) {
+    if (wrapper) wrapper.style.display = "none";
+  } else {
+    if (wrapper) wrapper.style.display = "block";
+    window.loadWaveformTimeline();
+  }
+
   toConsole("Cinema mode toggled", isCinemaMode, debuggin);
 }
 
@@ -866,7 +939,14 @@ const initializePlayer = () => {
     toConsole("Video muted on load", "Success", debuggin);
 
     if (videoFilePath) {
-      window.initWaveform(videoFilePath, duration);
+      if (document.body.classList.contains("mini-player")) {
+        const wrapper = document.getElementById("peaks-timeline-wrapper");
+        if (wrapper) wrapper.style.display = "none";
+        const seekBarContainer = document.getElementById("seekBarContainer");
+        if (seekBarContainer) seekBarContainer.style.display = "block";
+      } else {
+        window.loadWaveformTimeline();
+      }
     }
   });
   player.addEventListener("play", () => {
@@ -1565,6 +1645,11 @@ const enableMiniPlayerMode = async () => {
   document.body.classList.add("mini-player");
   const expandBtn = document.getElementById("expandToEditorBtn");
   if (expandBtn) expandBtn.classList.remove("hidden");
+
+  const wrapper = document.getElementById("peaks-timeline-wrapper");
+  if (wrapper) wrapper.style.display = "none";
+  const seekBarContainer = document.getElementById("seekBarContainer");
+  if (seekBarContainer) seekBarContainer.style.display = "block";
 };
 
 const disableMiniPlayerMode = async () => {
@@ -1579,6 +1664,12 @@ const disableMiniPlayerMode = async () => {
       console.error("Error disabling mini player mode", e);
     }
   }
+
+  const wrapper = document.getElementById("peaks-timeline-wrapper");
+  if (wrapper) wrapper.style.display = "block";
+  const seekBarContainer = document.getElementById("seekBarContainer");
+  if (seekBarContainer) seekBarContainer.style.display = "block";
+  window.loadWaveformTimeline();
 };
 
 document.addEventListener("DOMContentLoaded", () => {

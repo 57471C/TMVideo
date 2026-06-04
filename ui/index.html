@@ -121,17 +121,13 @@
               </div>
             </div>
           </div>
-          
-          <div id="peaks-container" class="peaks-container w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-2 rounded shadow-sm hidden">
-            <div id="zoomview-container" class="peaks-zoomview h-20 mb-2"></div>
-            <div id="overview-container" class="peaks-overview h-12"></div>
-          </div>
+
 
           <div id="mediaControlsContainer" class="w-full p-2.5 lg:p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-wrap gap-1.5 z-0 transition-all duration-300 ease-in-out">
             <div id="video_controls_bar" class="w-full m-0 p-0">
               <div class="w-full flex items-center gap-4">
                 <span id="currentTime" class="font-mono tabular-nums text-sm text-zinc-500 dark:text-zinc-400 w-24 text-center">00:00:00.00</span>
-                <div class="flex-1 relative flex items-center h-full min-h-6">
+                <div id="seekBarContainer" class="flex-1 relative flex items-center h-full min-h-6">
                   <div id="startGreyOut" class="absolute h-1.5 bg-zinc-800 dark:bg-zinc-950 top-1/2 -translate-y-1/2 z-20 pointer-events-none left-0 w-0 rounded-l-full hidden"></div>
                   <div id="endGreyOut" class="absolute h-1.5 bg-zinc-800 dark:bg-zinc-950 top-1/2 -translate-y-1/2 z-20 pointer-events-none right-0 w-0 rounded-r-full hidden"></div>
                   <input type="range" class="form-range w-full timeline-ticks z-10" min="0" max="100" value="0" id="seekBar" aria-label="Seek Video" />
@@ -241,6 +237,8 @@
               </div>
             </div>
           </div>
+          
+          
           <input type="file" id="videoFileInput" accept="video/*" style="display: none" />
         </div>
 
@@ -274,8 +272,15 @@
           </div>
 
           <!-- Markers List Table -->
-          <div id="markersList"></div>
+          <div id="markersList" style="max-height: calc(100vh - 420px); overflow-y: auto;"></div>
         </div>
+      </div>
+
+      <!-- High-resolution Peaks timeline engine -->
+      <div id="peaks-timeline-wrapper" class="peaks-container w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-4 rounded shadow-sm mt-6 px-4" style="display: none;">
+        <div id="peaks-loading-text" class="text-zinc-500 dark:text-zinc-400 text-sm text-center py-4 hidden">Compiling Detailed Timeline Map...</div>
+        <div id="zoomview-container" class="peaks-zoomview h-20 mb-2"></div>
+        <div id="overview-container" class="peaks-overview h-12"></div>
       </div>
 
 
