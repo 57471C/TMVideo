@@ -1,6 +1,6 @@
 {
   "name": "timestudy",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "A web-based application for conducting time and motion studies.",
   "main": "ui/index.html",
   "scripts": {
