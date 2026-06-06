@@ -226,9 +226,6 @@ const loadLocalState = () => {
         if (typeof window.loadSubtitleTrack === "function") {
           window.loadSubtitleTrack(currentVideo.videoFilePath);
         }
-        if (typeof window.loadWaveformTimeline === "function") {
-          window.loadWaveformTimeline();
-        }
       }
     }
   }

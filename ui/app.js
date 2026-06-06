@@ -589,6 +589,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
     const filePath = typeof fileOrPath === "object" ? fileOrPath.path : fileOrPath;
     videoFileName = typeof fileOrPath === "object" && fileOrPath.name ? fileOrPath.name : filePath.split(/[/\\]/).pop();
     videoFilePath = filePath;
+    saveLocalState();
 
     const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
     player.src = tauriAssetUrl;
@@ -598,6 +599,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
     const file = fileOrPath;
     videoFileName = file.name;
     videoFilePath = file.path || ""; // Tauri injects the absolute path here
+    saveLocalState();
 
     const isTauri = window.__TAURI__ !== undefined;
     if (isTauri && videoFilePath) {
@@ -1061,6 +1063,23 @@ const initializePlayer = () => {
   volumeSlider = document.getElementById("volumeSlider");
 
   loadLocalState();
+
+  if (videoQueue && videoQueue.length > 0) {
+    const currentVideo = videoQueue[activeQueueIndex];
+    if (currentVideo && currentVideo.videoFilePath) {
+      const isTauri = window.__TAURI__ !== undefined;
+      if (isTauri && window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) {
+        const assetUrl = window.__TAURI__.core.convertFileSrc(currentVideo.videoFilePath);
+        player.src = assetUrl;
+        player.preload = "auto";
+        player.load();
+        toggleVideoPlaceholder(false);
+        if (typeof window.loadSubtitleTrack === "function") {
+          window.loadSubtitleTrack(currentVideo.videoFilePath);
+        }
+      }
+    }
+  }
 
   updateMarkersList();
 
@@ -1749,7 +1768,10 @@ window.onload = () => {
   if (!playerReady) {
     initializePlayer();
   }
-  toggleVideoPlaceholder(true);
+  
+  if (!player || !player.src) {
+    toggleVideoPlaceholder(true);
+  }
 
   initializeTrimFeature();
 };
@@ -1904,6 +1926,57 @@ document.addEventListener("DOMContentLoaded", () => {
               showToast("Failed to load video file.", "error");
             }
           }
+        } else {
+          // If a session has already been restored, do not clear the workspace
+          if ((videoQueue && videoQueue.length > 0 && videoQueue[0].videoFilePath) || player.src) {
+            return;
+          }
+          // Only clear/reset the workspace if we are starting completely fresh
+          window.resetClosedCaptions();
+          player.pause();
+          player.src = "";
+          player.removeAttribute("src");
+          player.load();
+
+          markers = [];
+          videoFileName = "";
+          preserveProcessTimes = false;
+
+          for (const key in videoBlobCache) {
+            URL.revokeObjectURL(videoBlobCache[key]);
+            delete videoBlobCache[key];
+          }
+          videoFilePath = "";
+          projectFilePath = "";
+          localStorage.removeItem("projectFilePath");
+          projectName = "";
+          projectComments = "";
+          masterParts = [];
+          masterLabour = [];
+          processStartTime = 0;
+          processEndTime = 0;
+
+          videoQueue = [
+            {
+              videoId: 1,
+              videoName: "Video 1",
+              videoFileName: "",
+              videoFilePath: "",
+              processStartTime: 0,
+              processEndTime: 0,
+              appState: { markers: [] },
+            },
+          ];
+          activeQueueIndex = 0;
+
+          if (DOM.projectNameInput) DOM.projectNameInput.value = "";
+
+          DOM.videoPlaceholder.textContent = "Load a video to get started";
+          toggleVideoPlaceholder(true);
+          updateLoadButtonColor();
+          updateMarkersList();
+          saveLocalState();
+          updateSliderTicks();
         }
       })
       .catch((e) => toConsole("Failed to check launch argument", e, debuggin));
