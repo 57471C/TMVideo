@@ -636,12 +636,68 @@ const takeSnapshot = () => {
     showToast("No video loaded.", "error");
     return;
   }
+  const video = player;
+  const container = document.getElementById("video-wrapper-id");
+  if (!container) {
+    showToast("Error taking snapshot.", "error");
+    return;
+  }
+
+  const containerWidth = container.offsetWidth;
+  const containerHeight = container.offsetHeight;
+
+  const videoRatio = video.videoWidth / video.videoHeight;
+  const containerRatio = containerWidth / containerHeight;
+
+  let baseWidth;
+  let baseHeight;
+
+  if (videoRatio > containerRatio) {
+    baseWidth = containerWidth;
+    baseHeight = containerWidth / videoRatio;
+  } else {
+    baseHeight = containerHeight;
+    baseWidth = containerHeight * videoRatio;
+  }
+
+  const baseLeft = (containerWidth - baseWidth) / 2;
+  const baseTop = (containerHeight - baseHeight) / 2;
+
+  const currentZoom = window.zoomLevel || 1.0;
+  const currentX = window.translateX || 0;
+  const currentY = window.translateY || 0;
+
+  const layoutX1 = (-currentX) / currentZoom;
+  const layoutY1 = (-currentY) / currentZoom;
+  const layoutX2 = (containerWidth - currentX) / currentZoom;
+  const layoutY2 = (containerHeight - currentY) / currentZoom;
+
+  const videoX1 = layoutX1 - baseLeft;
+  const videoY1 = layoutY1 - baseTop;
+  const videoX2 = layoutX2 - baseLeft;
+  const videoY2 = layoutY2 - baseTop;
+
+  let sx = videoX1 * (video.videoWidth / baseWidth);
+  let sy = videoY1 * (video.videoHeight / baseHeight);
+  let sw = (videoX2 - videoX1) * (video.videoWidth / baseWidth);
+  let sh = (videoY2 - videoY1) * (video.videoHeight / baseHeight);
+
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  if (sw > video.videoWidth - sx) {
+    sw = video.videoWidth - sx;
+  }
+  if (sh > video.videoHeight - sy) {
+    sh = video.videoHeight - sy;
+  }
+
   const canvas = document.createElement("canvas");
-  canvas.width = player.videoWidth;
-  canvas.height = player.videoHeight;
+  canvas.width = sw;
+  canvas.height = sh;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.drawImage(player, 0, 0, canvas.width, canvas.height);
+
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
 
   try {
     const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
@@ -652,7 +708,7 @@ const takeSnapshot = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Snapshot saved.", "success");
+    showToast("Snapshot saved in Downloads", "success");
   } catch (error) {
     toConsole("Failed to take snapshot", error, debuggin);
     showToast("Error taking snapshot.", "error");
@@ -1413,17 +1469,51 @@ const initializePlayer = () => {
   });
 
   DOM.zoomIn.addEventListener("click", () => {
-    window.zoomLevel += 0.1;
+    const container = document.getElementById("video-wrapper-id");
+    const centerX = container.offsetWidth / 2;
+    const centerY = container.offsetHeight / 2;
+
+    const oldZoom = window.zoomLevel || 1.0;
+    const oldX = window.translateX || 0;
+    const oldY = window.translateY || 0;
+
+    let targetZoom = oldZoom + 0.10;
+    targetZoom = Math.min(15.0, Math.max(1.0, targetZoom));
+
+    const scaleRatio = targetZoom / oldZoom;
+
+    window.zoomLevel = targetZoom;
+    window.translateX = centerX - (centerX - oldX) * scaleRatio;
+    window.translateY = centerY - (centerY - oldY) * scaleRatio;
+
+    const videoElement = document.querySelector("video");
     if (typeof window.updateViewportTransform === "function") {
-      window.updateViewportTransform(document.querySelector("video"));
+      window.updateViewportTransform(videoElement);
     } else {
       updateZoom();
     }
   });
   DOM.zoomOut.addEventListener("click", () => {
-    window.zoomLevel = Math.max(0.1, window.zoomLevel - 0.2);
+    const container = document.getElementById("video-wrapper-id");
+    const centerX = container.offsetWidth / 2;
+    const centerY = container.offsetHeight / 2;
+
+    const oldZoom = window.zoomLevel || 1.0;
+    const oldX = window.translateX || 0;
+    const oldY = window.translateY || 0;
+
+    let targetZoom = oldZoom - 0.10;
+    targetZoom = Math.min(15.0, Math.max(1.0, targetZoom));
+
+    const scaleRatio = targetZoom / oldZoom;
+
+    window.zoomLevel = targetZoom;
+    window.translateX = centerX - (centerX - oldX) * scaleRatio;
+    window.translateY = centerY - (centerY - oldY) * scaleRatio;
+
+    const videoElement = document.querySelector("video");
     if (typeof window.updateViewportTransform === "function") {
-      window.updateViewportTransform(document.querySelector("video"));
+      window.updateViewportTransform(videoElement);
     } else {
       updateZoom();
     }
@@ -1810,11 +1900,8 @@ const startMarquee = (event) => {
   startX = event.clientX - rect.left;
   startY = event.clientY - rect.top;
 
-  const videoElement = DOM.video;
-  const videoRect = videoElement.getBoundingClientRect();
-  const normalizedStart = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
-  selectionStart.x = normalizedStart.x;
-  selectionStart.y = normalizedStart.y;
+  selectionStart.x = event.clientX;
+  selectionStart.y = event.clientY;
 
   marqueeRect.style.left = `${startX}px`;
   marqueeRect.style.top = `${startY}px`;
@@ -1827,32 +1914,35 @@ const startMarquee = (event) => {
 const drawMarquee = (event) => {
   if (!isDrawing) return;
   const rect = marqueeOverlay.getBoundingClientRect();
-  const currentX = event.clientX - rect.left;
-  const currentY = event.clientY - rect.top;
 
-  const videoElement = DOM.video;
-  const videoRect = videoElement.getBoundingClientRect();
-  const normalizedEnd = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
-  selectionEnd.x = normalizedEnd.x;
-  selectionEnd.y = normalizedEnd.y;
+  const wrapper = document.getElementById("video-wrapper-id");
+  const aspect = wrapper.offsetHeight / wrapper.offsetWidth;
 
-  const width = currentX - startX;
-  const height = currentY - startY;
+  const widthDelta = Math.abs(event.clientX - selectionStart.x);
+  const calculatedHeightDelta = widthDelta * aspect;
 
-  if (width < 0) {
-    marqueeRect.style.left = `${currentX}px`;
-    marqueeRect.style.width = `${-width}px`;
-  } else {
-    marqueeRect.style.left = `${startX}px`;
-    marqueeRect.style.width = `${width}px`;
+  let leftStyle = selectionStart.x - rect.left;
+  let widthStyle = widthDelta;
+  if (event.clientX < selectionStart.x) {
+    leftStyle = event.clientX - rect.left;
   }
 
-  if (height < 0) {
-    marqueeRect.style.top = `${currentY}px`;
-    marqueeRect.style.height = `${-height}px`;
+  let topStyle = selectionStart.y - rect.top;
+  let heightStyle = calculatedHeightDelta;
+  if (event.clientY < selectionStart.y) {
+    topStyle = selectionStart.y - rect.top - calculatedHeightDelta;
+  }
+
+  marqueeRect.style.left = `${leftStyle}px`;
+  marqueeRect.style.width = `${widthStyle}px`;
+  marqueeRect.style.top = `${topStyle}px`;
+  marqueeRect.style.height = `${heightStyle}px`;
+
+  selectionEnd.x = event.clientX;
+  if (event.clientY >= selectionStart.y) {
+    selectionEnd.y = selectionStart.y + calculatedHeightDelta;
   } else {
-    marqueeRect.style.top = `${startY}px`;
-    marqueeRect.style.height = `${height}px`;
+    selectionEnd.y = selectionStart.y - calculatedHeightDelta;
   }
 };
 
@@ -1863,44 +1953,34 @@ const endMarquee = (event) => {
   marqueeRect.style.display = "none";
 
   const videoElement = DOM.video;
-  const videoRect = videoElement.getBoundingClientRect();
-  const normalizedEnd = window.getNormalizedVideoCoordinates(event.clientX, event.clientY, videoRect);
-  selectionEnd.x = normalizedEnd.x;
-  selectionEnd.y = normalizedEnd.y;
+  const container = document.getElementById("video-wrapper-id");
 
-  const minX = Math.min(selectionStart.x, selectionEnd.x);
-  const maxX = Math.max(selectionStart.x, selectionEnd.x);
-  const minY = Math.min(selectionStart.y, selectionEnd.y);
-  const maxY = Math.max(selectionStart.y, selectionEnd.y);
+  const screenWidth = Math.abs(event.clientX - selectionStart.x);
+  const screenHeight = Math.abs(event.clientY - selectionStart.y);
 
-  const marqueeWidth = maxX - minX;
-  const marqueeHeight = maxY - minY;
-
-  toConsole("Marquee end (normalized)", `Box: (${minX}, ${minY}) to (${maxX}, ${maxY})`, debuggin);
-
-  if (marqueeWidth < 10 || marqueeHeight < 10) {
-    toConsole("Marquee too small, ignoring zoom", null, debuggin);
+  if (screenWidth < 5 || screenHeight < 5) {
     return;
   }
 
-  const videoWrapper = DOM.videoWrapper;
-  const containerWidth = videoWrapper.clientWidth;
-  const containerHeight = videoWrapper.clientHeight;
+  const boxCenterX = Math.min(event.clientX, selectionStart.x) + screenWidth / 2;
+  const boxCenterY = Math.min(event.clientY, selectionStart.y) + screenHeight / 2;
 
-  // Compute box sizes relative to container dimensions and define the new scaling multiplier target
-  let targetZoom = Math.min(containerWidth / marqueeWidth, containerHeight / marqueeHeight);
-  targetZoom = Math.min(5.0, Math.max(1.0, targetZoom));
+  const containerRect = container.getBoundingClientRect();
+  const relativeCenterX = boxCenterX - containerRect.left;
+  const relativeCenterY = boxCenterY - containerRect.top;
 
-  // Re-multiply the normalized top-left anchor point against your updated zoom factor to prevent coordinate scaling offset drift
-  window.zoomLevel = targetZoom;
-  window.translateX = -minX * targetZoom;
-  window.translateY = -minY * targetZoom;
+  const currentZoom = window.zoomLevel || 1.0;
+  const currentX = window.translateX || 0;
+  const currentY = window.translateY || 0;
 
-  if (targetZoom <= 1.0) {
-    window.zoomLevel = 1.0;
-    window.translateX = 0;
-    window.translateY = 0;
-  }
+  const scaleMultiplier = Math.min(container.offsetWidth / screenWidth, container.offsetHeight / screenHeight);
+
+  let finalZoom = currentZoom * scaleMultiplier;
+  finalZoom = Math.min(15.0, Math.max(1.0, finalZoom));
+
+  window.zoomLevel = finalZoom;
+  window.translateX = (container.offsetWidth / 2) - ((container.offsetWidth / 2 - currentX) * scaleMultiplier + (boxCenterX - (containerRect.left + container.offsetWidth / 2)) * scaleMultiplier);
+  window.translateY = (container.offsetHeight / 2) - ((container.offsetHeight / 2 - currentY) * scaleMultiplier + (boxCenterY - (containerRect.top + container.offsetHeight / 2)) * scaleMultiplier);
 
   toConsole("New viewport settings from marquee", `Zoom: ${window.zoomLevel}, Translate: (${window.translateX}, ${window.translateY})`, debuggin);
 

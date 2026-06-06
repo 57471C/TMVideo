@@ -54,51 +54,46 @@ window.getNormalizedVideoCoordinates = (screenX, screenY, videoRect) => ({
 window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 	if (!videoElement || !containerElement) return;
 
-	// Intercept scroll event for zooming
-	videoElement.addEventListener(
+	// Intercept scroll event for zooming on containerElement
+	containerElement.addEventListener(
 		"wheel",
 		(event) => {
 			event.preventDefault();
 
-			// Pull current state
-			syncFromGlobals();
+			const containerRect = containerElement.getBoundingClientRect();
+			const mouseX = event.clientX - containerRect.left;
+			const mouseY = event.clientY - containerRect.top;
 
-			const rect = videoElement.getBoundingClientRect();
-			const mouseX = event.clientX - rect.left;
-			const mouseY = event.clientY - rect.top;
+			const oldZoom = window.zoomLevel || 1.0;
+			const oldX = window.translateX || 0;
+			const oldY = window.translateY || 0;
 
-			const oldScale = videoScale;
-
-			// Increment/decrement by +/- 0.15
+			let targetZoom = oldZoom;
 			if (event.deltaY < 0) {
-				videoScale += 0.15;
+				targetZoom += 0.04;
 			} else {
-				videoScale -= 0.15;
+				targetZoom -= 0.04;
 			}
 
-			// Strictly clamp zoom level
-			videoScale = Math.min(5.0, Math.max(1.0, videoScale));
+			// Clamp zoom level
+			targetZoom = Math.min(15.0, Math.max(1.0, targetZoom));
 
-			const newScale = videoScale;
-
-			// Apply focal point adjustments directly on local states
-			const scaleRatio = newScale / oldScale;
-			videoPanX = mouseX - (mouseX - videoPanX) * scaleRatio;
-			videoPanY = mouseY - (mouseY - videoPanY) * scaleRatio;
-
-			// Push local state to global variables
-			syncToGlobals();
+			const scaleRatio = targetZoom / oldZoom;
+			window.zoomLevel = targetZoom;
+			window.translateX = mouseX - (mouseX - oldX) * scaleRatio;
+			window.translateY = mouseY - (mouseY - oldY) * scaleRatio;
 
 			updateViewportTransform(videoElement);
 		},
 		{ passive: false },
 	);
 
-	// Handle panning triggers on containerElement
 	containerElement.addEventListener("mousedown", (event) => {
 		if (event.button === 2) {
 			event.preventDefault();
-			event.stopPropagation(); // Prevents event cross-firing or hijacking
+			event.stopPropagation();
+			translateX = window.translateX || 0;
+			translateY = window.translateY || 0;
 			isPanningVideo = true;
 			startMouseX = event.clientX;
 			startMouseY = event.clientY;
@@ -114,18 +109,17 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 
 	containerElement.addEventListener("mousemove", (event) => {
 		if (isPanningVideo) {
-			const deltaX = event.clientX - startMouseX;
-			const deltaY = event.clientY - startMouseY;
+			const rawDeltaX = event.clientX - startMouseX;
+			const rawDeltaY = event.clientY - startMouseY;
 
-			// Adjust pan coordinates in local space
-			videoPanX += deltaX;
-			videoPanY += deltaY;
+			translateX += rawDeltaX;
+			translateY += rawDeltaY;
+
+			window.translateX = translateX;
+			window.translateY = translateY;
 
 			startMouseX = event.clientX;
 			startMouseY = event.clientY;
-
-			// Push changes back to globals
-			syncToGlobals();
 
 			updateViewportTransform(videoElement);
 		}
