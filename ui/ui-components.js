@@ -184,7 +184,8 @@ const updateMarkersList = () => {
               </button>
               <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
               <div class="relative inline-block text-left marker-type-dropdown">
-                <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center justify-center p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer" id="type-btn-${i}">
+                <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center justify-center p-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer gap-1" id="type-btn-${i}">
+                  ${marker.type === 'loop' ? `<span class="px-1 py-0.5 text-[9px] sm:text-[10px] font-bold rounded bg-cyan-100 dark:bg-cyan-950/40 text-cyan-800 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 leading-none select-none">${marker.loopCount || 1}</span>` : ""}
                   ${marker.type === "standard" ? ICONS.standard : marker.type === "jump" ? ICONS.jumpType : marker.type === "loop" ? ICONS.loopType : marker.type === "in" ? ICONS.inType : ICONS.outType}
                 </button>
                 <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-40 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
@@ -195,8 +196,20 @@ const updateMarkersList = () => {
                     <button onclick="updateMarkerType(${i}, 'jump')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
                       ${ICONS.jumpType} Jump
                     </button>
-                    <button onclick="updateMarkerType(${i}, 'loop')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
-                      ${ICONS.loopType} Loop
+                    <button onclick="updateMarkerType(${i}, 'loop')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between gap-2 cursor-pointer font-semibold">
+                      <span class="flex items-center gap-2">${ICONS.loopType} Loop</span>
+                      <input type="text" 
+                             class="w-8 text-center text-xs bg-zinc-100 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded text-zinc-900 dark:text-zinc-100" 
+                             value="${String(marker.loopCount || 1).padStart(2, '0')}" 
+                             placeholder="01" 
+                             maxlength="2" 
+                             onclick="event.stopPropagation()" 
+                             onmousedown="event.stopPropagation()" 
+                             onmouseup="event.stopPropagation()" 
+                             onfocus="event.stopPropagation()" 
+                             onblur="event.stopPropagation()" 
+                             oninput="event.stopPropagation(); this.value = this.value.replace(/\D/g, ''); const parsed = parseInt(this.value, 10); if (!isNaN(parsed)) { markers[${i}].loopCount = Math.min(99, Math.max(1, parsed)); } else { markers[${i}].loopCount = 1; } saveLocalState();"
+                             onchange="event.stopPropagation(); this.value = this.value.replace(/\D/g, ''); const parsed = parseInt(this.value, 10); const finalVal = !isNaN(parsed) ? Math.min(99, Math.max(1, parsed)) : 1; markers[${i}].loopCount = finalVal; this.value = String(finalVal).padStart(2, '0'); saveLocalState(); updateMarkersList();">
                     </button>
                     <button onclick="updateMarkerType(${i}, 'in')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
                       ${ICONS.inType} Set Video Start

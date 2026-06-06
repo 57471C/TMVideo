@@ -299,7 +299,13 @@ window.joinAndCompressVideos = async (videoSegments) => {
 
   try {
     const finalPath = await window.__TAURI__.core.invoke("join_and_compress_videos", {
-      videoSegments: videoSegments,
+      videoSegments: videoSegments.map(s => ({
+        path: s.path,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        loop_count: s.loopCount || s.loop_count || 1,
+        loopCount: s.loopCount || s.loop_count || 1
+      })),
       outputFileName: outputFileName,
     });
 
@@ -994,7 +1000,22 @@ const initializePlayer = () => {
       window.playheadAnimationId = null;
     }
   });
-  player.addEventListener("ended", () => {
+  player.addEventListener("ended", (event) => {
+    seektimeupdate();
+
+    let isCurrentlyLooping = false;
+    if (window.markerLoopRegistry) {
+      isCurrentlyLooping = Object.values(window.markerLoopRegistry).some(state => state.isSeeking);
+    }
+    if (window.activeLoopId !== null && !String(window.activeLoopId).startsWith("exhausted_")) {
+      isCurrentlyLooping = true;
+    }
+
+    if (isCurrentlyLooping) {
+      if (event) event.preventDefault();
+      return;
+    }
+
     if (window.playheadAnimationId) {
       cancelAnimationFrame(window.playheadAnimationId);
       window.playheadAnimationId = null;
@@ -2053,10 +2074,40 @@ const seektimeupdate = () => {
             return;
           }
         } else if (currentMarker.type === "loop") {
-          const threshold = Math.max(0.5, player.playbackRate * 0.3);
-          if (currentTime >= boundaryTime && currentTime - boundaryTime < threshold) {
-            player.currentTime = currentMarker.startTime;
-            return;
+          const video = player;
+          const marker = currentMarker;
+
+          const subsequentMarkers = markers
+            .filter(m => m.startTime > marker.startTime)
+            .sort((a, b) => a.startTime - b.startTime);
+
+          const computedLoopEnd = subsequentMarkers.length > 0 ? subsequentMarkers[0].startTime : video.duration;
+          const loopEndThreshold = computedLoopEnd - 0.3;
+
+          if (video.currentTime >= marker.startTime && video.currentTime < loopEndThreshold) {
+            if (window.activeLoopId !== marker.id && window.activeLoopId !== "exhausted_" + marker.id) {
+              window.activeLoopId = marker.id;
+              window.activeLoopCount = 0;
+            }
+          }
+
+          if (video.currentTime >= loopEndThreshold) {
+            if (window.activeLoopId === marker.id) {
+              if (window.activeLoopCount + 1 < (marker.loopCount || 1)) {
+                window.activeLoopCount++;
+                video.currentTime = marker.startTime;
+                video.play();
+              } else {
+                window.activeLoopId = "exhausted_" + marker.id;
+              }
+            }
+          }
+
+          if (video.currentTime < marker.startTime - 0.5 || video.currentTime > computedLoopEnd + 0.5) {
+            if (window.activeLoopId === marker.id || window.activeLoopId === "exhausted_" + marker.id) {
+              window.activeLoopId = null;
+              window.activeLoopCount = 0;
+            }
           }
         }
       }
@@ -2293,6 +2344,8 @@ const jumpToMarkerTime = (markerIndexOrTime, type) => {
     alert("Please load a video first.");
     return;
   }
+  window.currentLoopCount = 0;
+  window.activeLoopMarkerId = null;
   let time;
   if (type === undefined) {
     time = Number.parseFloat(markerIndexOrTime);
@@ -2313,6 +2366,8 @@ const playFromMarkerTime = (markerIndexOrTime, type) => {
     alert("Please load a video first.");
     return;
   }
+  window.currentLoopCount = 0;
+  window.activeLoopMarkerId = null;
   let time;
   if (type === undefined) {
     time = Number.parseFloat(markerIndexOrTime);
@@ -2486,10 +2541,13 @@ const initializeTrimFeature = () => {
             const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
             const vid = videoQueue[idx];
             if (vid?.videoFilePath) {
+              const activeMarkers = vid.appState?.markers || [];
+              const loopMarker = activeMarkers.find(m => m.type === "loop");
               checkedSegments.push({
                 path: vid.videoFilePath,
                 start_time: vid.processStartTime || 0.0,
                 end_time: vid.processEndTime || 0.0,
+                loopCount: loopMarker ? (loopMarker.loopCount || 1) : 1,
               });
             }
           }
@@ -2580,15 +2638,29 @@ const getExportSegments = (markersList, videoDuration) => {
 
   for (let i = 0; i < sortedMarkers.length; i += 1) {
     const marker = sortedMarkers[i];
-    if (marker.type === "loop") {
-      continue;
-    }
     if (marker.startTime <= inTime || marker.startTime >= outTime) {
       continue;
     }
 
-    if (keeping && marker.type === "jump") {
-      segmentsToKeep.push({ start: currentStart, end: marker.startTime });
+    if (marker.type === "loop") {
+      if (keeping && marker.startTime > currentStart) {
+        segmentsToKeep.push({ start: currentStart, end: marker.startTime, loopCount: 1 });
+      }
+      const nextMarker = sortedMarkers.slice(i + 1).find(m => m.startTime > marker.startTime && m.startTime < outTime);
+      const boundaryTime = nextMarker ? nextMarker.startTime : outTime;
+
+      segmentsToKeep.push({
+        start: marker.startTime,
+        end: boundaryTime,
+        loopCount: marker.loopCount !== undefined ? marker.loopCount : 1
+      });
+
+      keeping = true;
+      currentStart = boundaryTime;
+    } else if (keeping && marker.type === "jump") {
+      if (marker.startTime > currentStart) {
+        segmentsToKeep.push({ start: currentStart, end: marker.startTime, loopCount: 1 });
+      }
       keeping = false;
     } else if (!keeping && marker.type !== "jump") {
       keeping = true;
@@ -2597,7 +2669,7 @@ const getExportSegments = (markersList, videoDuration) => {
   }
 
   if (keeping && outTime > currentStart) {
-    segmentsToKeep.push({ start: currentStart, end: outTime });
+    segmentsToKeep.push({ start: currentStart, end: outTime, loopCount: 1 });
   }
 
   return segmentsToKeep;
@@ -2712,14 +2784,17 @@ async function processBatchQueue(presetType) {
           throw new Error("No segments to export.");
         }
 
-        const exportDuration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+        const exportDuration = segments.reduce((sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1), 0);
 
         const safePath = video.videoFilePath.replace(/\\/g, "/");
         let listContent = "";
         for (const seg of segments) {
-          listContent += `file '${safePath}'\n`;
-          listContent += `inpoint ${seg.start}\n`;
-          listContent += `outpoint ${seg.end}\n`;
+          const loopCount = seg.loopCount || 1;
+          for (let l = 0; l < loopCount; l++) {
+            listContent += `file '${safePath}'\n`;
+            listContent += `inpoint ${seg.start}\n`;
+            listContent += `outpoint ${seg.end}\n`;
+          }
         }
 
         if (tempdir && join) {
@@ -2958,9 +3033,12 @@ async function executeExport(presetType) {
     // Build the demuxer list string
     let listContent = "";
     for (const seg of segments) {
-      listContent += `file '${safePath}'\n`;
-      listContent += `inpoint ${seg.start}\n`;
-      listContent += `outpoint ${seg.end}\n`;
+      const loopCount = seg.loopCount || 1;
+      for (let l = 0; l < loopCount; l++) {
+        listContent += `file '${safePath}'\n`;
+        listContent += `inpoint ${seg.start}\n`;
+        listContent += `outpoint ${seg.end}\n`;
+      }
     }
 
     // Write the list file to tempdir (or fallback to output dir if os/path plugins are not loaded)
@@ -3056,7 +3134,7 @@ async function executeExport(presetType) {
     progressBar.style.width = "0%";
     progressText.textContent = "0%";
 
-    const duration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0);
+    const duration = segments.reduce((sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1), 0);
     let lastPct = -1;
 
     const WATCHDOG_MS = 30_000;

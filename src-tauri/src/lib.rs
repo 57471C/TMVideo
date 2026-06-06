@@ -426,6 +426,8 @@ struct VideoSegment {
     path: String,
     start_time: f64,
     end_time: f64,
+    #[serde(alias = "loopCount")]
+    loop_count: Option<i32>,
 }
 
 #[tauri::command]
@@ -508,10 +510,10 @@ async fn join_and_compress_videos(
                 }
             }
 
-            if needs_trim {
-                let temp_output_path = temp_dir.join(format!("temp_seg_{}_{}.mp4", i, unique_id));
-                let temp_output_str = temp_output_path.to_str().ok_or("Invalid temp segment path")?;
+            let temp_output_path = temp_dir.join(format!("temp_seg_{}_{}.mp4", i, unique_id));
+            let temp_output_str = temp_output_path.to_str().ok_or("Invalid temp segment path")?;
 
+            if needs_trim {
                 let ffmpeg_sidecar = app_handle_clone
                     .shell()
                     .sidecar("ffmpeg")
@@ -542,9 +544,15 @@ async fn join_and_compress_videos(
                 }
 
                 temp_clips.push(temp_output_path.clone());
-                final_paths_to_concat.push(temp_output_str.to_string());
-            } else {
-                final_paths_to_concat.push(segment.path.clone());
+            }
+
+            let loop_count = segment.loop_count.unwrap_or(1).max(1);
+            for _ in 0..loop_count {
+                if needs_trim {
+                    final_paths_to_concat.push(temp_output_str.to_string());
+                } else {
+                    final_paths_to_concat.push(segment.path.clone());
+                }
             }
         }
 

@@ -210,6 +210,28 @@ const loadLocalState = () => {
   // Sync UI
   if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
   if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
+
+  if (videoQueue && videoQueue.length > 0) {
+    const currentVideo = videoQueue[activeQueueIndex];
+    if (currentVideo && currentVideo.videoFilePath) {
+      const isTauri = window.TAURI !== undefined || window.__TAURI__ !== undefined;
+      const tauriObj = window.TAURI || window.__TAURI__;
+      if (isTauri && tauriObj && tauriObj.core && tauriObj.core.convertFileSrc) {
+        const assetUrl = tauriObj.core.convertFileSrc(currentVideo.videoFilePath);
+        player.src = assetUrl;
+        player.preload = "auto";
+        toggleVideoPlaceholder(false);
+        player.load();
+
+        if (typeof window.loadSubtitleTrack === "function") {
+          window.loadSubtitleTrack(currentVideo.videoFilePath);
+        }
+        if (typeof window.loadWaveformTimeline === "function") {
+          window.loadWaveformTimeline();
+        }
+      }
+    }
+  }
 };
 
 const exportToJSON = async (isSaveAs = false) => {
@@ -362,12 +384,12 @@ const importFromJSON = (jsonText) => {
     }
 
     if (typeof updateMarkersList === "function") updateMarkersList();
-    saveLocalState();
     if (typeof drawTable === "function") drawTable();
     if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
 
     toConsole("Project imported successfully", `Loaded Video: ${currentVideo.videoName}`, debuggin);
     showToast("Project loaded successfully.", "success");
+    saveLocalState();
   } catch (e) {
     toConsole("Error importing JSON", e, debuggin);
     alert(`Error reading project file. It may be corrupted or in an invalid format. Details: ${e.message || e}`);
