@@ -245,16 +245,11 @@ const loadLocalState = () => {
 
 	if (videoQueue && videoQueue.length > 0) {
 		const currentVideo = videoQueue[activeQueueIndex];
-		if (currentVideo && currentVideo.videoFilePath) {
+		if (currentVideo?.videoFilePath) {
 			const isTauri =
 				window.TAURI !== undefined || window.__TAURI__ !== undefined;
 			const tauriObj = window.TAURI || window.__TAURI__;
-			if (
-				isTauri &&
-				tauriObj &&
-				tauriObj.core &&
-				tauriObj.core.convertFileSrc
-			) {
+			if (isTauri && tauriObj?.core?.convertFileSrc) {
 				const assetUrl = tauriObj.core.convertFileSrc(
 					currentVideo.videoFilePath,
 				);

@@ -87,6 +87,23 @@ document.addEventListener("DOMContentLoaded", () => {
 		expandBtn.addEventListener("click", disableMiniPlayerMode);
 	}
 
+	const timelineToggleBtn = document.getElementById("timeline-toggle-btn");
+	if (timelineToggleBtn) {
+		timelineToggleBtn.addEventListener("click", () => {
+			const mainGrid = document.getElementById("mainLayoutGrid");
+			if (mainGrid) {
+				mainGrid.classList.toggle("timeline-expanded");
+			}
+		});
+	}
+
+	const generateCaptionsBtn = document.getElementById("generate-captions-btn");
+	if (generateCaptionsBtn) {
+		generateCaptionsBtn.addEventListener("click", () => {
+			window.triggerVttGeneration();
+		});
+	}
+
 	const isTauri = window.__TAURI__ !== undefined;
 	if (isTauri) {
 		window.__TAURI__.core
@@ -3911,3 +3928,179 @@ window.renderSidebarPlaylist = () => {
 };
 
 // 5. Central LocalStorage Serialization Triggers
+
+// Helper to transform raw seconds into valid WebVTT time syntax (HH:MM:SS.mmm)
+window.formatVttTimestamp = (seconds) => {
+	const h = Math.floor(seconds / 3600)
+		.toString()
+		.padStart(2, "0");
+	const m = Math.floor((seconds % 3600) / 60)
+		.toString()
+		.padStart(2, "0");
+	const s = Math.floor(seconds % 60)
+		.toString()
+		.padStart(2, "0");
+	const ms = Math.floor((seconds % 1) * 1000)
+		.toString()
+		.padStart(3, "0");
+	return `${h}:${m}:${s}.${ms}`;
+};
+
+// Main script generator sequence
+window.triggerVttGeneration = async () => {
+	// Grab current video tracking data from active target queue
+	const currentVideo = videoQueue[activeQueueIndex];
+	if (!currentVideo?.videoFilePath) {
+		showToast("No active video found to generate subtitles for", "error");
+		return;
+	}
+
+	// Confirm markers data cache is populated (adjust array variable name to match your system state)
+	const targetMarkers = typeof markers !== "undefined" ? markers : [];
+	if (targetMarkers.length === 0) {
+		showToast("Please add at least one marker to compile captions", "error");
+		return;
+	}
+
+	// Sort chronologically to maintain caption reading order flow
+	const sortedMarkers = [...targetMarkers].sort(
+		(a, b) => a.startTime - b.startTime,
+	);
+
+	// Initialize standard WebVTT syntax header string block
+	let vttContent = "WEBVTT\n\n";
+
+	// Loop segments to assemble sequential tracking boxes
+	sortedMarkers.forEach((marker, idx) => {
+		const startTime = window.formatVttTimestamp(marker.startTime);
+		let endTime;
+
+		if (idx < sortedMarkers.length - 1) {
+			// End caption text right when the next sequential marker begins
+			endTime = window.formatVttTimestamp(sortedMarkers[idx + 1].startTime);
+		} else {
+			// Terminal marker hold rule: last default screen duration is set to +4 seconds
+			endTime = window.formatVttTimestamp(marker.startTime + 4);
+		}
+
+		const cueText = marker.name || `Marker Segment ${idx + 1}`;
+		vttContent += `${startTime} --> ${endTime}\n${cueText}\n\n`;
+	});
+
+	try {
+		// Fire string buffer to Rust backend command processor to handle absolute filesystem overwrite execution
+		if (window.__TAURI__) {
+			await window.__TAURI__.core.invoke("save_vtt_file", {
+				videoPath: currentVideo.videoFilePath,
+				vttText: vttContent,
+			});
+			showToast("Closed captions generated and saved successfully!", "success");
+		} else {
+			console.log("Mock VTT Engine Payload:\n", vttContent);
+		}
+
+		// 1. Compute and print absolute VTT destination path
+		const vttFilePath = `${currentVideo.videoFilePath.replace(/\.[^/.]+$/, "")}.vtt`;
+		console.log("[CC Debug] Target VTT file absolute path:", vttFilePath);
+
+		// 2. Select and verify core video container element
+		const videoElement = player || document.getElementById("my_video");
+		if (!videoElement) {
+			console.error(
+				"[CC Debug] CRITICAL: Video element container not found in the DOM!",
+			);
+			showToast("Video player element missing", "error");
+			return;
+		}
+
+		// Purge any pre-existing caption tracks to prevent subtitle overlap ghosts
+		const oldTrack = videoElement.querySelector(
+			"track[label='Generated Captions']",
+		);
+		if (oldTrack) {
+			console.log("[CC Debug] Removing stale caption track node.");
+			oldTrack.remove();
+		}
+
+		// 3. Build the new track node with explicit asynchronous error catching
+		const track = document.createElement("track");
+		track.kind = "subtitles";
+		track.label = "Generated Captions";
+		track.srclang = "en";
+
+		// Hook into the native DOM error event to catch hidden browser protocol rejections
+		track.onerror = (e) => {
+			console.error(
+				"[CC Debug] DOM Track Element failed to load source URL cleanly:",
+				track.src,
+				e,
+			);
+			showToast("Browser blocked subtitle resource stream path", "error");
+		};
+
+		track.onload = () => {
+			console.log(
+				"[CC Debug] Success! HTML5 Video Track successfully loaded and parsed WebVTT resource.",
+			);
+		};
+
+		// Resolve the Tauri asset stream path using multiple validation fallbacks
+		let resolvedSrc = "";
+		if (window.__TAURI__?.core?.convertFileSrc) {
+			resolvedSrc = window.__TAURI__.core.convertFileSrc(vttFilePath);
+		} else if (window.__TAURI__?.tauri?.convertFileSrc) {
+			resolvedSrc = window.__TAURI__.tauri.convertFileSrc(vttFilePath);
+		} else {
+			resolvedSrc = `https://asset.localhost/${encodeURIComponent(vttFilePath)}`;
+		}
+
+		console.log(
+			"[CC Debug] Tauri convertFileSrc converted protocol path to:",
+			resolvedSrc,
+		);
+		track.src = resolvedSrc;
+		track.default = true;
+
+		// Append track to the live viewport container stream
+		videoElement.appendChild(track);
+
+		// 4. Force browser track state selection layout sync
+		setTimeout(() => {
+			console.log(
+				"[CC Debug] Syncing player textTracks list states. Total tracks available:",
+				videoElement.textTracks.length,
+			);
+			let syncSuccess = false;
+			for (let i = 0; i < videoElement.textTracks.length; i++) {
+				const currentTrack = videoElement.textTracks[i];
+				if (currentTrack.label === "Generated Captions") {
+					currentTrack.mode = "showing";
+					syncSuccess = true;
+					console.log(
+						"[CC Debug] Successfully forced 'Generated Captions' track mode to 'showing'.",
+					);
+				} else {
+					currentTrack.mode = "disabled";
+				}
+			}
+			if (!syncSuccess) {
+				console.warn(
+					"[CC Debug] Warning: Could not find 'Generated Captions' inside the active video textTracks array.",
+				);
+			}
+		}, 100);
+
+		// 5. Illuminate your player's CC toggle switch icon badge
+		const ccToggleBtn = document.getElementById("ccToggleBtn");
+		if (ccToggleBtn) {
+			ccToggleBtn.removeAttribute("disabled");
+			ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
+			ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
+			console.log("[CC Debug] Visual CC dashboard button illuminated.");
+			window.captionsVisible = true;
+		}
+	} catch (error) {
+		console.error("VTT Export Failed:", error);
+		showToast("Failed to write subtitle track file to disk", "error");
+	}
+};

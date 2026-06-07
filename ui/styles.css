@@ -286,3 +286,47 @@ body.cinema-active #toastContainer {
 /* ==========================================================================
    END OF PROTECTED SIDEBAR MECHANICS ZONE
    ========================================================================== */
+
+/* Timeline Collapsible Layout Engine */
+#mainLayoutGrid {
+	grid-template-rows: auto 1fr 0px;
+	transition:
+		grid-template-columns 0.2s cubic-bezier(0, 0, 0.2, 1),
+		grid-template-rows 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#mainLayoutGrid.timeline-expanded {
+	grid-template-rows: auto 1fr 240px;
+}
+
+#peaks-timeline-wrapper {
+	grid-column: 1 / -1;
+	grid-row: 3;
+	height: 0 !important;
+	min-height: 0 !important;
+	max-height: 0 !important;
+	padding-top: 0 !important;
+	padding-bottom: 0 !important;
+	margin-top: 0 !important;
+	margin-bottom: 0 !important;
+	border: none !important;
+	overflow: hidden !important;
+	visibility: hidden !important;
+	transition:
+		height 0.25s ease,
+		padding 0.25s ease,
+		visibility 0.25s ease;
+}
+
+.timeline-expanded #peaks-timeline-wrapper {
+	height: 240px !important;
+	max-height: none !important;
+	padding: 16px !important;
+	visibility: visible !important;
+	border-top: 1px solid #27272a !important;
+}
+
+/* Rotational animation for toggle chevron */
+.timeline-expanded #timeline-toggle-btn svg {
+	transform: rotate(180deg);
+}

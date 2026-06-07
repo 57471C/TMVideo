@@ -894,6 +894,16 @@ async fn generate_timeline_thumbnails(
     .map_err(|e| format!("Task panicked: {}", e))?
 }
 
+#[tauri::command]
+fn save_vtt_file(video_path: String, vtt_text: String) -> Result<(), String> {
+    use std::path::Path;
+    use std::fs;
+    let path = Path::new(&video_path);
+    let vtt_path = path.with_extension("vtt");
+    fs::write(vtt_path, vtt_text)
+        .map_err(|err| format!("Failed to write VTT subtitle file to disk: {}", err))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -921,7 +931,8 @@ pub fn run() {
         resolve_subtitles,
         join_and_compress_videos,
         get_waveform_data,
-        generate_timeline_thumbnails
+        generate_timeline_thumbnails,
+        save_vtt_file
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

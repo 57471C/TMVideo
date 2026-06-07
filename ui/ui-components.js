@@ -134,7 +134,18 @@ const updateMarkersList = () => {
              </th>
              <th scope="col" class="text-center w-[155px] whitespace-nowrap px-1">Start Time</th>
              <th scope="col" class="text-center w-24 whitespace-nowrap px-1">Duration</th>
-             <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">Actions</th>
+              <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">
+                <div class="flex items-center justify-between gap-2 w-full">
+                  <span>Actions</span>
+                  <button type="button" id="generate-captions-btn" class="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 transition-colors tooltip" title="Generate Closed Captions from Markers">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M7 10h2M7 14h2M13 10h2M13 14h2" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5L10 19H5v-5L16 3z" />
+                    </svg>
+                  </button>
+                </div>
+              </th>
            </tr>
          </thead>`,
 		];
