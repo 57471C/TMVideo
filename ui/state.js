@@ -1,3 +1,22 @@
+/**
+ * @markdown
+ * # AI CONTEXT MAP
+ *
+ * ## GLOBAL STATE STRUCTURE
+ * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `processStartTime`, `processEndTime`, and `appState` (which holds `markers`).
+ * - `activeQueueIndex`: Integer representing the currently selected video slot in `videoQueue`.
+ * - `markers`: Array of current active video markers (syncs back to `videoQueue[activeQueueIndex].appState.markers`).
+ *
+ * ## PERSISTENCE & LIFECYCLE
+ * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `processStartTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
+ * - `loadLocalState()`: Rehydrates memory from `localStorage` on application mount, resolving `videoQueue` references to initialize the player.
+ *
+ * ## LEFT SIDEBAR ARCHITECTURE (Playlist UI)
+ * - The new layout shifts away from modal drag-and-drop to a unified persistent side panel (`#playlist-queue-sidebar`).
+ * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
+ * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
+ */
+
 const debuggin = 1;
 let videoFileName = "";
 let videoFilePath = "";

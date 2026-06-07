@@ -1,3 +1,23 @@
+/**
+ * @markdown
+ * # AI CONTEXT MAP
+ *
+ * ## GLOBAL STATE STRUCTURE
+ * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `processStartTime`, `processEndTime`, and `appState` (which holds `markers`).
+ * - `activeQueueIndex`: Integer representing the currently selected video slot in `videoQueue`.
+ * - `markers`: Array of current active video markers (syncs back to `videoQueue[activeQueueIndex].appState.markers`).
+ *
+ * ## PERSISTENCE & LIFECYCLE
+ * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `processStartTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
+ * - `loadLocalState()`: Rehydrates memory from `localStorage` on application mount, resolving `videoQueue` references to initialize the player.
+ *
+ * ## LEFT SIDEBAR ARCHITECTURE (Playlist UI)
+ * - The new layout shifts away from modal drag-and-drop to a unified persistent side panel (`#playlist-queue-sidebar`).
+ * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
+ * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
+ */
+
+// 1. Global State Configuration & Element Cache Registries
 const appWindow =
 	window.__TAURI__?.window?.appWindow ||
 	window.__TAURI__?.window?.getCurrentWindow?.() ||
@@ -15,7 +35,6 @@ const openDialog = window.__TAURI__?.dialog?.open || null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
-
 let loadVideoButton;
 let addMarkerBtn;
 let projectExportButton;
@@ -35,10 +54,211 @@ let muteButton;
 let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
-
 window.currentWaveformDataPath = null;
 window.peaksInstance = null;
+const selectionStart = { x: 0, y: 0 };
+const selectionEnd = { x: 0, y: 0 };
 
+// 2. Early Lifecycle Hooks (DOMContentLoaded, window.onload, and Tauri Launch Argument Handlers)
+/** Single-line descriptor for onload. */
+window.onload = () => {
+	// Prevent horizontal scrolling/panning of the page in the Windows app
+	document.documentElement.style.overflowX = "hidden";
+	document.body.style.overflowX = "hidden";
+
+	if (!playerReady) {
+		initializePlayer();
+	}
+
+	if (!player?.src) {
+		toggleVideoPlaceholder(true);
+	}
+
+	initializeTrimFeature();
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+	if (!playerReady) {
+		initializePlayer();
+	}
+
+	const expandBtn = document.getElementById("expandToEditorBtn");
+	if (expandBtn) {
+		expandBtn.addEventListener("click", disableMiniPlayerMode);
+	}
+
+	const isTauri = window.__TAURI__ !== undefined;
+	if (isTauri) {
+		window.__TAURI__.core
+			.invoke("get_launch_argument")
+			.then(async (filePath) => {
+				if (filePath) {
+					const lower = filePath.toLowerCase();
+					if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
+						try {
+							projectFilePath = filePath;
+							localStorage.setItem("projectFilePath", projectFilePath);
+							const jsonText = await window.__TAURI__.fs.readTextFile(filePath);
+							importFromJSON(jsonText);
+							toConsole(
+								"Auto-loaded project from launch argument",
+								filePath,
+								debuggin,
+							);
+						} catch (e) {
+							toConsole("Error auto-loading project file", e, debuggin);
+							showToast("Failed to auto-load project.", "error");
+						}
+					} else if (
+						lower.endsWith(".mp4") ||
+						lower.endsWith(".mkv") ||
+						lower.endsWith(".avi") ||
+						lower.endsWith(".mov") ||
+						lower.endsWith(".mpg") ||
+						lower.endsWith(".mpeg")
+					) {
+						try {
+							// Initialize blank project state
+							window.resetClosedCaptions();
+							player.pause();
+							player.src = "";
+							player.removeAttribute("src");
+							player.load();
+
+							markers = [];
+							videoFileName = "";
+							preserveProcessTimes = false;
+
+							// Free memory by revoking old video blob URLs
+							for (const key in videoBlobCache) {
+								URL.revokeObjectURL(videoBlobCache[key]);
+								delete videoBlobCache[key];
+							}
+							videoFilePath = "";
+							projectFilePath = "";
+							localStorage.removeItem("projectFilePath");
+							projectName = "";
+							projectComments = "";
+							masterParts = [];
+							masterLabour = [];
+							processStartTime = 0;
+							processEndTime = 0;
+
+							videoQueue = [
+								{
+									videoId: 1,
+									videoName: "Video 1",
+									videoFileName: "",
+									videoFilePath: "",
+									processStartTime: 0,
+									processEndTime: 0,
+									appState: { markers: [] },
+								},
+							];
+							activeQueueIndex = 0;
+
+							if (DOM.projectNameInput) DOM.projectNameInput.value = "";
+
+							// Load media file
+							const extractedFileName = filePath.split(/[/\\]/).pop();
+							videoFileName = extractedFileName;
+							videoFilePath = filePath;
+
+							videoQueue[0].videoFileName = videoFileName;
+							videoQueue[0].videoFilePath = videoFilePath;
+							videoQueue[0].videoName = videoFileName;
+
+							const tauriAssetUrl =
+								window.__TAURI__.core.convertFileSrc(videoFilePath);
+							player.src = tauriAssetUrl;
+							player.preload = "auto";
+							player.load();
+							toggleVideoPlaceholder(false);
+							window.loadSubtitleTrack(videoFilePath);
+
+							renderVideoQueueSelect();
+							updateLoadButtonColor();
+							updateMarkersList();
+							saveLocalState();
+							updateSliderTicks();
+
+							await enableMiniPlayerMode();
+
+							toConsole(
+								"Auto-loaded video from launch argument",
+								filePath,
+								debuggin,
+							);
+							showToast("Video loaded.", "success");
+						} catch (e) {
+							toConsole("Error auto-loading video file", e, debuggin);
+							showToast("Failed to load video file.", "error");
+						}
+					}
+				} else {
+					// If a session has already been restored, do not clear the workspace
+					if (
+						(videoQueue &&
+							videoQueue.length > 0 &&
+							videoQueue[0].videoFilePath) ||
+						player.src
+					) {
+						return;
+					}
+					// Only clear/reset the workspace if we are starting completely fresh
+					window.resetClosedCaptions();
+					player.pause();
+					player.src = "";
+					player.removeAttribute("src");
+					player.load();
+
+					markers = [];
+					videoFileName = "";
+					preserveProcessTimes = false;
+
+					for (const key in videoBlobCache) {
+						URL.revokeObjectURL(videoBlobCache[key]);
+						delete videoBlobCache[key];
+					}
+					videoFilePath = "";
+					projectFilePath = "";
+					localStorage.removeItem("projectFilePath");
+					projectName = "";
+					projectComments = "";
+					masterParts = [];
+					masterLabour = [];
+					processStartTime = 0;
+					processEndTime = 0;
+
+					videoQueue = [
+						{
+							videoId: 1,
+							videoName: "Video 1",
+							videoFileName: "",
+							videoFilePath: "",
+							processStartTime: 0,
+							processEndTime: 0,
+							appState: { markers: [] },
+						},
+					];
+					activeQueueIndex = 0;
+
+					if (DOM.projectNameInput) DOM.projectNameInput.value = "";
+
+					DOM.videoPlaceholder.textContent = "Load a video to get started";
+					toggleVideoPlaceholder(true);
+					updateLoadButtonColor();
+					updateMarkersList();
+					saveLocalState();
+					updateSliderTicks();
+				}
+			})
+			.catch((e) => toConsole("Failed to check launch argument", e, debuggin));
+	}
+});
+
+// 3. Media Initialization & Streaming Event Subsystems
+/** Resets closed captions and destroys peaks instance. */
 window.resetClosedCaptions = () => {
 	window.currentCaptions = [];
 	window.captionsVisible = true;
@@ -160,6 +380,7 @@ window.resetClosedCaptions = () => {
 	}
 };
 
+/** Loads a subtitle track for the provided video path. */
 window.loadSubtitleTrack = async (filePath) => {
 	let ccTrack = document.getElementById("ccTrack");
 	if (!ccTrack) {
@@ -203,6 +424,7 @@ window.loadSubtitleTrack = async (filePath) => {
 	}
 };
 
+/** Generates and loads the waveform timeline and thumbnails. */
 window.loadWaveformTimeline = async () => {
 	const isTauri = window.__TAURI__ !== undefined;
 	if (!isTauri || !videoFilePath) return;
@@ -291,6 +513,7 @@ window.loadWaveformTimeline = async () => {
 	}
 };
 
+/** Joins and compresses the selected video segments. */
 window.joinAndCompressVideos = async (videoSegments) => {
 	const proceed = await asyncConfirm(
 		"Joining these videos will clear all active timeline markers upon success. Do you want to proceed?",
@@ -365,337 +588,7 @@ window.joinAndCompressVideos = async (videoSegments) => {
 	}
 };
 
-const renderVideoQueueSelect = () => {
-	if (!DOM.videoQueueSelect) return;
-	DOM.videoQueueSelect.innerHTML = "";
-	for (const [index, video] of videoQueue.entries()) {
-		const option = document.createElement("option");
-		option.value = index;
-		option.textContent = video.videoFileName || "Unknown File";
-		option.className =
-			"bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white";
-		DOM.videoQueueSelect.appendChild(option);
-	}
-	DOM.videoQueueSelect.selectedIndex = activeQueueIndex;
-};
-
-const switchVideoInQueue = async (index) => {
-	if (index === activeQueueIndex) return;
-
-	if (typeof window.resetVideoViewport === "function") {
-		window.resetVideoViewport(player);
-	}
-	preserveProcessTimes = true;
-	saveLocalState();
-
-	activeQueueIndex = index;
-	const currentVideo = videoQueue[activeQueueIndex];
-
-	videoFileName = currentVideo.videoFileName || "";
-	videoFilePath = currentVideo.videoFilePath || "";
-	processStartTime = currentVideo.processStartTime || 0;
-	processEndTime = currentVideo.processEndTime || 0;
-
-	markers = currentVideo.appState?.markers || [];
-	for (const m of markers) {
-		if (!m.type) m.type = "standard";
-	}
-
-	renderVideoQueueSelect();
-	updateMarkersList();
-
-	player.pause();
-	window.resetClosedCaptions();
-	const isTauri = window.__TAURI__ !== undefined;
-
-	if (isTauri && videoFilePath) {
-		const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-		player.src = tauriAssetUrl;
-		player.preload = "auto";
-		toggleVideoPlaceholder(false);
-		window.loadSubtitleTrack(videoFilePath);
-	} else if (videoFileName && videoBlobCache[videoFileName]) {
-		player.src = videoBlobCache[videoFileName];
-		player.preload = "metadata";
-		toggleVideoPlaceholder(false);
-		const ccTrack = document.getElementById("ccTrack");
-		if (ccTrack) ccTrack.src = "";
-	} else {
-		player.src = "";
-		player.removeAttribute("src");
-		DOM.videoPlaceholder.textContent = videoFileName
-			? `Video switched. Click here to locate video: ${videoFileName}`
-			: "Load a video to get started";
-		toggleVideoPlaceholder(true);
-	}
-	updateLoadButtonColor();
-
-	if (!DOM.settingsPanel.classList.contains("translate-x-full")) {
-		toggleSettings(true);
-	}
-
-	showToast(`Switched to: ${currentVideo.videoName}`, "success");
-	updateSliderTicks();
-};
-
-const removeCurrentVideo = async () => {
-	if (typeof window.resetVideoViewport === "function") {
-		window.resetVideoViewport(player);
-	}
-	if (videoQueue.length === 0) return;
-
-	const confirmRemove = await asyncConfirm(
-		"Are you sure you want to remove this video from the project?",
-		"Remove Video",
-	);
-	if (!confirmRemove) return;
-
-	videoQueue.splice(activeQueueIndex, 1);
-
-	if (videoQueue.length === 0) {
-		activeQueueIndex = 0;
-		videoFileName = "";
-		videoFilePath = "";
-		processStartTime = 0;
-		processEndTime = 0;
-		markers = [];
-
-		player.src = "";
-		player.removeAttribute("src");
-		toggleVideoPlaceholder(true);
-		DOM.videoPlaceholder.textContent = "Load a video to get started";
-
-		renderVideoQueueSelect();
-		updateMarkersList();
-		updateSliderTicks();
-		saveLocalState();
-		showToast("Video removed from queue.", "info");
-	} else {
-		if (activeQueueIndex >= videoQueue.length) {
-			activeQueueIndex = videoQueue.length - 1;
-		}
-
-		const currentVideo = videoQueue[activeQueueIndex];
-		videoFileName = currentVideo.videoFileName || "";
-		videoFilePath = currentVideo.videoFilePath || "";
-		processStartTime = currentVideo.processStartTime || 0;
-		processEndTime = currentVideo.processEndTime || 0;
-		markers = currentVideo.appState?.markers || [];
-		for (const m of markers) {
-			if (!m.type) m.type = "standard";
-		}
-
-		renderVideoQueueSelect();
-		updateMarkersList();
-
-		player.pause();
-		window.resetClosedCaptions();
-		const isTauri = window.__TAURI__ !== undefined;
-		if (isTauri && videoFilePath) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-			player.preload = "auto";
-			toggleVideoPlaceholder(false);
-			window.loadSubtitleTrack(videoFilePath);
-		} else if (videoFileName && videoBlobCache[videoFileName]) {
-			player.src = videoBlobCache[videoFileName];
-			player.preload = "metadata";
-			toggleVideoPlaceholder(false);
-			const ccTrack = document.getElementById("ccTrack");
-			if (ccTrack) ccTrack.src = "";
-		} else {
-			player.src = "";
-			player.removeAttribute("src");
-			DOM.videoPlaceholder.textContent = videoFileName
-				? `Video switched. Click here to locate video: ${videoFileName}`
-				: "Load a video to get started";
-			toggleVideoPlaceholder(true);
-		}
-		updateLoadButtonColor();
-		updateSliderTicks();
-		saveLocalState();
-		showToast(`Switched to: ${currentVideo.videoName}`, "success");
-	}
-};
-window.removeCurrentVideo = removeCurrentVideo;
-
-const addVideoToQueue = async () => {
-	const videoName = await asyncPrompt(
-		"Enter a name for the new video:",
-		`Video ${videoQueue.length + 1}`,
-		"New Video",
-	);
-	if (!videoName) return;
-	const duplicate = await asyncConfirm(
-		"Would you like to duplicate the current video's data? (Click 'Cancel' to create a blank video slot)",
-		"Duplicate Data?",
-	);
-
-	saveLocalState();
-	const newVideoId =
-		videoQueue.length > 0
-			? Math.max(...videoQueue.map((v) => v.videoId)) + 1
-			: 1;
-
-	const newVideo = duplicate
-		? {
-				...JSON.parse(JSON.stringify(videoQueue[activeQueueIndex])),
-				videoId: newVideoId,
-				videoName,
-			}
-		: {
-				videoId: newVideoId,
-				videoName,
-				videoFileName: "",
-				videoFilePath: "",
-				processStartTime: 0,
-				processEndTime: 0,
-				appState: { markers: [] },
-			};
-
-	videoQueue.push(newVideo);
-	await switchVideoInQueue(videoQueue.length - 1);
-};
-
-const addNewVideoToQueue = async () => {
-	if (!openDialog) {
-		alert("Loading local files requires the desktop app.");
-		return;
-	}
-
-	const selected = await openDialog({
-		multiple: false,
-		filters: [
-			{ name: "Video Files", extensions: ["mp4", "mkv", "avi", "webm"] },
-		],
-	});
-
-	if (!selected) return;
-
-	const filePath = typeof selected === "object" ? selected.path : selected;
-	if (!filePath) return;
-
-	const extractedFileName = filePath.split(/[/\\]/).pop();
-
-	const newItem = {
-		videoId: Date.now(),
-		videoName: extractedFileName,
-		videoFileName: extractedFileName,
-		videoFilePath: filePath,
-		processStartTime: 0,
-		processEndTime: 0,
-		appState: { markers: [] },
-	};
-
-	saveLocalState();
-	videoQueue.push(newItem);
-
-	renderVideoQueueSelect();
-	await switchVideoInQueue(videoQueue.length - 1);
-};
-
-const editVideoInQueue = async () => {
-	const currentName = videoQueue[activeQueueIndex].videoName;
-	const newName = await asyncPrompt(
-		"Rename Video:",
-		currentName,
-		"Edit Video Name",
-	);
-	if (!newName || newName.trim() === "") return;
-
-	videoQueue[activeQueueIndex].videoName = newName.trim();
-	saveLocalState();
-	renderVideoQueueSelect();
-	showToast("Video renamed successfully.", "success");
-};
-
-window.openReorderModal = () => {
-	const modal = document.getElementById("reorder-videos-modal");
-	const listContainer = document.getElementById("modal-queue-list");
-	if (!modal || !listContainer) return;
-
-	listContainer.innerHTML = "";
-	modal.style.display = "block";
-
-	videoQueue.forEach((video, index) => {
-		const item = document.createElement("div");
-		item.className =
-			"modal-queue-item flex items-center justify-between gap-4 p-3 border border-zinc-200 dark:border-zinc-700 rounded mb-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white select-none shadow-sm";
-		item.setAttribute("data-original-index", index);
-
-		// Create item body info
-		const labelSpan = document.createElement("span");
-		labelSpan.className = "font-medium truncate flex-1";
-		labelSpan.textContent = `${index + 1}. ${video.videoFileName || "Untitled Video Slot"}`;
-		item.appendChild(labelSpan);
-
-		// Create action control container
-		const actionsDiv = document.createElement("div");
-		actionsDiv.className = "flex items-center gap-1.5 shrink-0";
-
-		// Move Up Button Component
-		const upBtn = document.createElement("button");
-		upBtn.type = "button";
-		upBtn.className =
-			"p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 disabled:opacity-30 disabled:pointer-events-none transition-colors border border-zinc-200 dark:border-zinc-600";
-		upBtn.innerHTML =
-			"<svg class='w-4 h-4' fill='none' stroke='currentColor' stroke-width='2.5' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M4.5 15.75l7.5-7.5 7.5 7.5'></path></svg>";
-		if (index === 0) upBtn.disabled = true;
-		upBtn.addEventListener("click", () => {
-			const prevSibling = item.previousElementSibling;
-			if (prevSibling) {
-				listContainer.insertBefore(item, prevSibling);
-				window.reindexReorderModalLabels();
-			}
-		});
-		actionsDiv.appendChild(upBtn);
-
-		// Move Down Button Component
-		const downBtn = document.createElement("button");
-		downBtn.type = "button";
-		downBtn.className =
-			"p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 disabled:opacity-30 disabled:pointer-events-none transition-colors border border-zinc-200 dark:border-zinc-600";
-		downBtn.innerHTML =
-			"<svg class='w-4 h-4' fill='none' stroke='currentColor' stroke-width='2.5' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'></path></svg>";
-		if (index === videoQueue.length - 1) downBtn.disabled = true;
-		downBtn.addEventListener("click", () => {
-			const nextSibling = item.nextElementSibling;
-			if (nextSibling) {
-				listContainer.insertBefore(nextSibling, item);
-				window.reindexReorderModalLabels();
-			}
-		});
-		actionsDiv.appendChild(downBtn);
-
-		item.appendChild(actionsDiv);
-		listContainer.appendChild(item);
-	});
-
-	modal.showModal();
-};
-
-window.reindexReorderModalLabels = () => {
-	const listContainer = document.getElementById("modal-queue-list");
-	if (!listContainer) return;
-	const items = [...listContainer.querySelectorAll(".modal-queue-item")];
-
-	items.forEach((item, idx) => {
-		// Correct row string numbering label
-		const label = item.querySelector("span");
-		if (label) {
-			const cleanName = label.textContent.replace(/^\d+\.\s+/, "");
-			label.textContent = `${idx + 1}. ${cleanName}`;
-		}
-
-		// Manage state constraints on up/down triggers
-		const buttons = item.querySelectorAll("button");
-		if (buttons.length === 2) {
-			buttons[0].disabled = idx === 0;
-			buttons[1].disabled = idx === items.length - 1;
-		}
-	});
-};
-
+/** Processes and loads a new video file into the active project slot. */
 const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	if (typeof window.resetVideoViewport === "function") {
 		window.resetVideoViewport(player);
@@ -785,6 +678,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	updateLoadButtonColor();
 };
 
+/** Captures a snapshot of the current video frame. */
 const takeSnapshot = () => {
 	if (!player?.src) {
 		showToast("No video loaded.", "error");
@@ -869,6 +763,7 @@ const takeSnapshot = () => {
 	}
 };
 
+/** Toggles cinema mode layout and fullscreen state. */
 async function toggleCinemaMode() {
 	isCinemaMode = !isCinemaMode;
 
@@ -929,6 +824,7 @@ async function toggleCinemaMode() {
 	toConsole("Cinema mode toggled", isCinemaMode, debuggin);
 }
 
+/** Resets the inactivity timer for hiding controls in cinema mode. */
 function resetCinemaIdleTimer() {
 	if (!isCinemaMode) return; // Only run in Cinema Mode
 
@@ -947,6 +843,7 @@ function resetCinemaIdleTimer() {
 	}, 5000);
 }
 
+/** Initializes the primary video player events, controls, and UI state. */
 const initializePlayer = () => {
 	player = DOM.video;
 	player.preservesPitch = true;
@@ -1014,72 +911,6 @@ const initializePlayer = () => {
 		});
 	}
 
-	const saveReorderBtn = document.getElementById("save-reorder-btn");
-	if (saveReorderBtn) {
-		saveReorderBtn.addEventListener("click", () => {
-			const items = [
-				...document.querySelectorAll("#modal-queue-list .modal-queue-item"),
-			];
-			if (items.length === 0) {
-				const reorderModal = document.getElementById("reorder-videos-modal");
-				reorderModal.close();
-				reorderModal.style.display = "none";
-				return;
-			}
-
-			const newQueue = [];
-			let newActiveIndex = activeQueueIndex;
-
-			items.forEach((item, newIdx) => {
-				const oldIdx = parseInt(item.getAttribute("data-original-index"), 10);
-				newQueue.push(videoQueue[oldIdx]);
-				if (oldIdx === activeQueueIndex) {
-					newActiveIndex = newIdx;
-				}
-			});
-
-			videoQueue = newQueue;
-			activeQueueIndex = newActiveIndex;
-
-			saveLocalState();
-			renderVideoQueueSelect();
-
-			const reorderModal = document.getElementById("reorder-videos-modal");
-			if (reorderModal) {
-				reorderModal.close();
-				reorderModal.style.display = "none";
-			}
-
-			showToast("Video queue reordered successfully", "success");
-		});
-	}
-
-	const reorderModal = document.getElementById("reorder-videos-modal");
-	if (reorderModal) {
-		reorderModal.addEventListener("cancel", () => {
-			reorderModal.style.display = "none";
-		});
-	}
-
-	const closeReorderModalX = document.getElementById("close-reorder-modal-x");
-	if (closeReorderModalX) {
-		closeReorderModalX.addEventListener("click", () => {
-			const reorderModal = document.getElementById("reorder-videos-modal");
-			reorderModal.close();
-			reorderModal.style.display = "none";
-		});
-	}
-
-	const closeReorderVideosBtn = document.getElementById(
-		"closeReorderVideosBtn",
-	);
-	if (closeReorderVideosBtn) {
-		closeReorderVideosBtn.addEventListener("click", () => {
-			const reorderModal = document.getElementById("reorder-videos-modal");
-			reorderModal.close();
-			reorderModal.style.display = "none";
-		});
-	}
 	const toggleMiniPlayerBtn = document.getElementById("toggleMiniPlayerBtn");
 	if (toggleMiniPlayerBtn) {
 		toggleMiniPlayerBtn.addEventListener("click", () => {
@@ -2081,22 +1912,7 @@ const initializePlayer = () => {
 	updateLoadButtonColor();
 };
 
-window.onload = () => {
-	// Prevent horizontal scrolling/panning of the page in the Windows app
-	document.documentElement.style.overflowX = "hidden";
-	document.body.style.overflowX = "hidden";
-
-	if (!playerReady) {
-		initializePlayer();
-	}
-
-	if (!player?.src) {
-		toggleVideoPlaceholder(true);
-	}
-
-	initializeTrimFeature();
-};
-
+/** Activates mini-player mode layout. */
 const enableMiniPlayerMode = async () => {
 	if (appWindow) {
 		try {
@@ -2118,6 +1934,7 @@ const enableMiniPlayerMode = async () => {
 	if (seekBarContainer) seekBarContainer.style.display = "block";
 };
 
+/** Deactivates mini-player mode and restores full interface. */
 const disableMiniPlayerMode = async () => {
 	document.body.classList.remove("mini-player");
 	const expandBtn = document.getElementById("expandToEditorBtn");
@@ -2138,189 +1955,7 @@ const disableMiniPlayerMode = async () => {
 	window.loadWaveformTimeline();
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-	if (!playerReady) {
-		initializePlayer();
-	}
-
-	const expandBtn = document.getElementById("expandToEditorBtn");
-	if (expandBtn) {
-		expandBtn.addEventListener("click", disableMiniPlayerMode);
-	}
-
-	const isTauri = window.__TAURI__ !== undefined;
-	if (isTauri) {
-		window.__TAURI__.core
-			.invoke("get_launch_argument")
-			.then(async (filePath) => {
-				if (filePath) {
-					const lower = filePath.toLowerCase();
-					if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
-						try {
-							projectFilePath = filePath;
-							localStorage.setItem("projectFilePath", projectFilePath);
-							const jsonText = await window.__TAURI__.fs.readTextFile(filePath);
-							importFromJSON(jsonText);
-							toConsole(
-								"Auto-loaded project from launch argument",
-								filePath,
-								debuggin,
-							);
-						} catch (e) {
-							toConsole("Error auto-loading project file", e, debuggin);
-							showToast("Failed to auto-load project.", "error");
-						}
-					} else if (
-						lower.endsWith(".mp4") ||
-						lower.endsWith(".mkv") ||
-						lower.endsWith(".avi") ||
-						lower.endsWith(".mov") ||
-						lower.endsWith(".mpg") ||
-						lower.endsWith(".mpeg")
-					) {
-						try {
-							// Initialize blank project state
-							window.resetClosedCaptions();
-							player.pause();
-							player.src = "";
-							player.removeAttribute("src");
-							player.load();
-
-							markers = [];
-							videoFileName = "";
-							preserveProcessTimes = false;
-
-							// Free memory by revoking old video blob URLs
-							for (const key in videoBlobCache) {
-								URL.revokeObjectURL(videoBlobCache[key]);
-								delete videoBlobCache[key];
-							}
-							videoFilePath = "";
-							projectFilePath = "";
-							localStorage.removeItem("projectFilePath");
-							projectName = "";
-							projectComments = "";
-							masterParts = [];
-							masterLabour = [];
-							processStartTime = 0;
-							processEndTime = 0;
-
-							videoQueue = [
-								{
-									videoId: 1,
-									videoName: "Video 1",
-									videoFileName: "",
-									videoFilePath: "",
-									processStartTime: 0,
-									processEndTime: 0,
-									appState: { markers: [] },
-								},
-							];
-							activeQueueIndex = 0;
-
-							if (DOM.projectNameInput) DOM.projectNameInput.value = "";
-
-							// Load media file
-							const extractedFileName = filePath.split(/[/\\]/).pop();
-							videoFileName = extractedFileName;
-							videoFilePath = filePath;
-
-							videoQueue[0].videoFileName = videoFileName;
-							videoQueue[0].videoFilePath = videoFilePath;
-							videoQueue[0].videoName = videoFileName;
-
-							const tauriAssetUrl =
-								window.__TAURI__.core.convertFileSrc(videoFilePath);
-							player.src = tauriAssetUrl;
-							player.preload = "auto";
-							player.load();
-							toggleVideoPlaceholder(false);
-							window.loadSubtitleTrack(videoFilePath);
-
-							renderVideoQueueSelect();
-							updateLoadButtonColor();
-							updateMarkersList();
-							saveLocalState();
-							updateSliderTicks();
-
-							await enableMiniPlayerMode();
-
-							toConsole(
-								"Auto-loaded video from launch argument",
-								filePath,
-								debuggin,
-							);
-							showToast("Video loaded.", "success");
-						} catch (e) {
-							toConsole("Error auto-loading video file", e, debuggin);
-							showToast("Failed to load video file.", "error");
-						}
-					}
-				} else {
-					// If a session has already been restored, do not clear the workspace
-					if (
-						(videoQueue &&
-							videoQueue.length > 0 &&
-							videoQueue[0].videoFilePath) ||
-						player.src
-					) {
-						return;
-					}
-					// Only clear/reset the workspace if we are starting completely fresh
-					window.resetClosedCaptions();
-					player.pause();
-					player.src = "";
-					player.removeAttribute("src");
-					player.load();
-
-					markers = [];
-					videoFileName = "";
-					preserveProcessTimes = false;
-
-					for (const key in videoBlobCache) {
-						URL.revokeObjectURL(videoBlobCache[key]);
-						delete videoBlobCache[key];
-					}
-					videoFilePath = "";
-					projectFilePath = "";
-					localStorage.removeItem("projectFilePath");
-					projectName = "";
-					projectComments = "";
-					masterParts = [];
-					masterLabour = [];
-					processStartTime = 0;
-					processEndTime = 0;
-
-					videoQueue = [
-						{
-							videoId: 1,
-							videoName: "Video 1",
-							videoFileName: "",
-							videoFilePath: "",
-							processStartTime: 0,
-							processEndTime: 0,
-							appState: { markers: [] },
-						},
-					];
-					activeQueueIndex = 0;
-
-					if (DOM.projectNameInput) DOM.projectNameInput.value = "";
-
-					DOM.videoPlaceholder.textContent = "Load a video to get started";
-					toggleVideoPlaceholder(true);
-					updateLoadButtonColor();
-					updateMarkersList();
-					saveLocalState();
-					updateSliderTicks();
-				}
-			})
-			.catch((e) => toConsole("Failed to check launch argument", e, debuggin));
-	}
-});
-
-const selectionStart = { x: 0, y: 0 };
-const selectionEnd = { x: 0, y: 0 };
-
+/** Begins drawing the marquee selection box for zooming. */
 const startMarquee = (event) => {
 	if (event.button !== 0) return;
 	if (event.target.closest(".zoom-controls")) return;
@@ -2340,6 +1975,7 @@ const startMarquee = (event) => {
 	toConsole("Marquee start", `(${startX}, ${startY})`, debuggin);
 };
 
+/** Updates the dimensions of the marquee selection box while dragging. */
 const drawMarquee = (event) => {
 	if (!isDrawing) return;
 	const rect = marqueeOverlay.getBoundingClientRect();
@@ -2375,6 +2011,7 @@ const drawMarquee = (event) => {
 	}
 };
 
+/** Finalizes the marquee selection box and executes viewport zoom. */
 const endMarquee = (event) => {
 	if (!isDrawing) return;
 	if (event.button !== 0) return;
@@ -2438,6 +2075,7 @@ const endMarquee = (event) => {
 	}
 };
 
+/** Applies the current zoom and translation transform to the video element. */
 const updateZoom = () => {
 	const video = DOM.video;
 	if (typeof window.updateViewportTransform === "function") {
@@ -2455,6 +2093,7 @@ const updateZoom = () => {
 	);
 };
 
+/** Synchronizes timeline playheads, looping state, and UI on video time update. */
 const seektimeupdate = () => {
 	if (player && playerReady) {
 		// Absolute DOM Overwrite Container Protection
@@ -2580,6 +2219,7 @@ const seektimeupdate = () => {
 	}
 };
 
+/** Redraws visual ticks for markers and process boundaries on the seek bar. */
 const updateSliderTicks = () => {
 	if (!DOM.startTick || !DOM.endTick) return;
 
@@ -2636,10 +2276,12 @@ const updateSliderTicks = () => {
 	}
 };
 
+/** Formats and outputs the video time to the specified DOM element. */
 const updateTimeDisplay = (seconds, elementId) => {
 	DOM[elementId].textContent = formatTimeToHHMMSSMS(seconds);
 };
 
+/** Repositions control bar dynamically based on video dimensions. */
 const positionControls = () => {
 	const controlsBar = document.getElementById("video_controls_bar");
 	if (controlsBar) {
@@ -2648,6 +2290,7 @@ const positionControls = () => {
 	}
 };
 
+/** Updates the load video button visual styling based on player load state. */
 const updateLoadButtonColor = () => {
 	if (loadVideoButton && player && playPauseButton) {
 		const src = player.getAttribute("src");
@@ -2677,6 +2320,7 @@ const updateLoadButtonColor = () => {
 	}
 };
 
+/** Toggles the visibility of the "no video loaded" placeholder element. */
 const toggleVideoPlaceholder = (show) => {
 	try {
 		if (!DOM.videoPlaceholder || !DOM.videoWrapper) {
@@ -2699,6 +2343,7 @@ const toggleVideoPlaceholder = (show) => {
 	}
 };
 
+/** Opens or closes the settings side panel. */
 const toggleSettings = (show) => {
 	if (!DOM.settingsPanel || !DOM.settingsBackdrop) return;
 	if (show) {
@@ -2716,6 +2361,7 @@ const toggleSettings = (show) => {
 	}
 };
 
+/** Inserts a new standard marker at the current video playback time. */
 const addMarker = () => {
 	if (!player.src) {
 		alert("Please load a video first.");
@@ -2747,6 +2393,7 @@ const addMarker = () => {
 	updateMarkersList();
 };
 
+/** Renames an existing marker at the given index. */
 const updateMarkerName = (markerIndex, newName) => {
 	const trimmed = newName.trim();
 	if (!trimmed) {
@@ -2771,6 +2418,7 @@ const updateMarkerName = (markerIndex, newName) => {
 	saveLocalState();
 };
 
+/** Updates the behavioral type of an existing marker. */
 const updateMarkerType = (markerIndex, newType) => {
 	markers[markerIndex].type = newType;
 	saveLocalState();
@@ -2778,6 +2426,7 @@ const updateMarkerType = (markerIndex, newType) => {
 	updateMarkersList();
 };
 
+/** Prompts for confirmation and deletes the specified marker. */
 const deleteMarker = async (markerIndex) => {
 	if (
 		await asyncConfirm(
@@ -2796,6 +2445,7 @@ const deleteMarker = async (markerIndex) => {
 	}
 };
 
+/** Seeks the video player to the target marker start or end time and pauses. */
 const jumpToMarkerTime = (markerIndexOrTime, type) => {
 	if (!player.src) {
 		alert("Please load a video first.");
@@ -2818,6 +2468,7 @@ const jumpToMarkerTime = (markerIndexOrTime, type) => {
 	}
 };
 
+/** Seeks the video player to the target marker time and initiates playback. */
 const playFromMarkerTime = (markerIndexOrTime, type) => {
 	if (!player.src) {
 		alert("Please load a video first.");
@@ -2840,6 +2491,7 @@ const playFromMarkerTime = (markerIndexOrTime, type) => {
 	}
 };
 
+/** Updates the start time of the specified marker to the current playhead. */
 const syncMarkerToPlayhead = (markerIndex) => {
 	if (!player.src) {
 		alert("Please load a video first.");
@@ -2852,6 +2504,7 @@ const syncMarkerToPlayhead = (markerIndex) => {
 	updateMarkersList();
 };
 
+/** Parses the FFmpeg log output to extract timestamp and update progress. */
 function parseFFmpegTime(line, totalSeconds, progressBar) {
 	if (!line) return;
 	const match = line.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
@@ -2867,6 +2520,7 @@ function parseFFmpegTime(line, totalSeconds, progressBar) {
 	}
 }
 
+/** Binds events and logic for video trimming modal and batch export. */
 // Video Trimming & Compression Feature
 const initializeTrimFeature = () => {
 	const isTauri = window.__TAURI__ !== undefined;
@@ -3093,6 +2747,7 @@ const initializeTrimFeature = () => {
 	}
 };
 
+/** Calculates contiguous logical segments to retain based on marker states. */
 const getExportSegments = (markersList, videoDuration) => {
 	const sortedMarkers = [...markersList].sort(
 		(a, b) => a.startTime - b.startTime,
@@ -3164,6 +2819,7 @@ const getExportSegments = (markersList, videoDuration) => {
 	return segmentsToKeep;
 };
 
+/** Executes the FFmpeg export pipeline across all selected videos in the queue. */
 async function processBatchQueue(presetType) {
 	const isTauri = window.__TAURI__ !== undefined;
 	if (!isTauri) {
@@ -3470,6 +3126,7 @@ async function processBatchQueue(presetType) {
 	}
 }
 
+/** Triggers the single-video FFmpeg compression and trim export routine. */
 async function executeExport(presetType) {
 	const batchExportToggle = document.getElementById("batchExportToggle");
 	const batchMode = batchExportToggle ? batchExportToggle.checked : false;
@@ -3884,6 +3541,259 @@ async function executeExport(presetType) {
 	}
 }
 
+// 4. Left Sidebar Playlist Interface Utilities (Populators, Row Re-indexers, Shuffling Loops)
+/** Renders the video queue options in the DOM select. */
+const renderVideoQueueSelect = () => {
+	if (!DOM.videoQueueSelect) return;
+	DOM.videoQueueSelect.innerHTML = "";
+	for (const [index, video] of videoQueue.entries()) {
+		const option = document.createElement("option");
+		option.value = index;
+		option.textContent = video.videoFileName || "Unknown File";
+		option.className =
+			"bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white";
+		DOM.videoQueueSelect.appendChild(option);
+	}
+	DOM.videoQueueSelect.selectedIndex = activeQueueIndex;
+};
+
+/** Switches the active video to the specified index in the queue. */
+const switchVideoInQueue = async (index) => {
+	if (index === activeQueueIndex) return;
+
+	if (typeof window.resetVideoViewport === "function") {
+		window.resetVideoViewport(player);
+	}
+	preserveProcessTimes = true;
+	saveLocalState();
+
+	activeQueueIndex = index;
+	const currentVideo = videoQueue[activeQueueIndex];
+
+	videoFileName = currentVideo.videoFileName || "";
+	videoFilePath = currentVideo.videoFilePath || "";
+	processStartTime = currentVideo.processStartTime || 0;
+	processEndTime = currentVideo.processEndTime || 0;
+
+	markers = currentVideo.appState?.markers || [];
+	for (const m of markers) {
+		if (!m.type) m.type = "standard";
+	}
+
+	renderVideoQueueSelect();
+	updateMarkersList();
+
+	player.pause();
+	window.resetClosedCaptions();
+	const isTauri = window.__TAURI__ !== undefined;
+
+	if (isTauri && videoFilePath) {
+		const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+		player.src = tauriAssetUrl;
+		player.preload = "auto";
+		toggleVideoPlaceholder(false);
+		window.loadSubtitleTrack(videoFilePath);
+	} else if (videoFileName && videoBlobCache[videoFileName]) {
+		player.src = videoBlobCache[videoFileName];
+		player.preload = "metadata";
+		toggleVideoPlaceholder(false);
+		const ccTrack = document.getElementById("ccTrack");
+		if (ccTrack) ccTrack.src = "";
+	} else {
+		player.src = "";
+		player.removeAttribute("src");
+		DOM.videoPlaceholder.textContent = videoFileName
+			? `Video switched. Click here to locate video: ${videoFileName}`
+			: "Load a video to get started";
+		toggleVideoPlaceholder(true);
+	}
+	updateLoadButtonColor();
+
+	if (!DOM.settingsPanel.classList.contains("translate-x-full")) {
+		toggleSettings(true);
+	}
+
+	showToast(`Switched to: ${currentVideo.videoName}`, "success");
+	updateSliderTicks();
+};
+
+/** Removes the currently active video from the project queue. */
+const removeCurrentVideo = async () => {
+	if (typeof window.resetVideoViewport === "function") {
+		window.resetVideoViewport(player);
+	}
+	if (videoQueue.length === 0) return;
+
+	const confirmRemove = await asyncConfirm(
+		"Are you sure you want to remove this video from the project?",
+		"Remove Video",
+	);
+	if (!confirmRemove) return;
+
+	videoQueue.splice(activeQueueIndex, 1);
+
+	if (videoQueue.length === 0) {
+		activeQueueIndex = 0;
+		videoFileName = "";
+		videoFilePath = "";
+		processStartTime = 0;
+		processEndTime = 0;
+		markers = [];
+
+		player.src = "";
+		player.removeAttribute("src");
+		toggleVideoPlaceholder(true);
+		DOM.videoPlaceholder.textContent = "Load a video to get started";
+
+		renderVideoQueueSelect();
+		updateMarkersList();
+		updateSliderTicks();
+		saveLocalState();
+		showToast("Video removed from queue.", "info");
+	} else {
+		if (activeQueueIndex >= videoQueue.length) {
+			activeQueueIndex = videoQueue.length - 1;
+		}
+
+		const currentVideo = videoQueue[activeQueueIndex];
+		videoFileName = currentVideo.videoFileName || "";
+		videoFilePath = currentVideo.videoFilePath || "";
+		processStartTime = currentVideo.processStartTime || 0;
+		processEndTime = currentVideo.processEndTime || 0;
+		markers = currentVideo.appState?.markers || [];
+		for (const m of markers) {
+			if (!m.type) m.type = "standard";
+		}
+
+		renderVideoQueueSelect();
+		updateMarkersList();
+
+		player.pause();
+		window.resetClosedCaptions();
+		const isTauri = window.__TAURI__ !== undefined;
+		if (isTauri && videoFilePath) {
+			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+			player.src = tauriAssetUrl;
+			player.preload = "auto";
+			toggleVideoPlaceholder(false);
+			window.loadSubtitleTrack(videoFilePath);
+		} else if (videoFileName && videoBlobCache[videoFileName]) {
+			player.src = videoBlobCache[videoFileName];
+			player.preload = "metadata";
+			toggleVideoPlaceholder(false);
+			const ccTrack = document.getElementById("ccTrack");
+			if (ccTrack) ccTrack.src = "";
+		} else {
+			player.src = "";
+			player.removeAttribute("src");
+			DOM.videoPlaceholder.textContent = videoFileName
+				? `Video switched. Click here to locate video: ${videoFileName}`
+				: "Load a video to get started";
+			toggleVideoPlaceholder(true);
+		}
+		updateLoadButtonColor();
+		updateSliderTicks();
+		saveLocalState();
+		showToast(`Switched to: ${currentVideo.videoName}`, "success");
+	}
+};
+
+window.removeCurrentVideo = removeCurrentVideo;
+
+/** Prompts for a new video name and adds a slot to the queue. */
+const addVideoToQueue = async () => {
+	const videoName = await asyncPrompt(
+		"Enter a name for the new video:",
+		`Video ${videoQueue.length + 1}`,
+		"New Video",
+	);
+	if (!videoName) return;
+	const duplicate = await asyncConfirm(
+		"Would you like to duplicate the current video's data? (Click 'Cancel' to create a blank video slot)",
+		"Duplicate Data?",
+	);
+
+	saveLocalState();
+	const newVideoId =
+		videoQueue.length > 0
+			? Math.max(...videoQueue.map((v) => v.videoId)) + 1
+			: 1;
+
+	const newVideo = duplicate
+		? {
+				...JSON.parse(JSON.stringify(videoQueue[activeQueueIndex])),
+				videoId: newVideoId,
+				videoName,
+			}
+		: {
+				videoId: newVideoId,
+				videoName,
+				videoFileName: "",
+				videoFilePath: "",
+				processStartTime: 0,
+				processEndTime: 0,
+				appState: { markers: [] },
+			};
+
+	videoQueue.push(newVideo);
+	await switchVideoInQueue(videoQueue.length - 1);
+};
+
+/** Opens a file dialog and adds a newly selected video to the queue. */
+const addNewVideoToQueue = async () => {
+	if (!openDialog) {
+		alert("Loading local files requires the desktop app.");
+		return;
+	}
+
+	const selected = await openDialog({
+		multiple: false,
+		filters: [
+			{ name: "Video Files", extensions: ["mp4", "mkv", "avi", "webm"] },
+		],
+	});
+
+	if (!selected) return;
+
+	const filePath = typeof selected === "object" ? selected.path : selected;
+	if (!filePath) return;
+
+	const extractedFileName = filePath.split(/[/\\]/).pop();
+
+	const newItem = {
+		videoId: Date.now(),
+		videoName: extractedFileName,
+		videoFileName: extractedFileName,
+		videoFilePath: filePath,
+		processStartTime: 0,
+		processEndTime: 0,
+		appState: { markers: [] },
+	};
+
+	saveLocalState();
+	videoQueue.push(newItem);
+
+	renderVideoQueueSelect();
+	await switchVideoInQueue(videoQueue.length - 1);
+};
+
+/** Renames the current video in the queue based on user input. */
+const editVideoInQueue = async () => {
+	const currentName = videoQueue[activeQueueIndex].videoName;
+	const newName = await asyncPrompt(
+		"Rename Video:",
+		currentName,
+		"Edit Video Name",
+	);
+	if (!newName || newName.trim() === "") return;
+
+	videoQueue[activeQueueIndex].videoName = newName.trim();
+	saveLocalState();
+	renderVideoQueueSelect();
+	showToast("Video renamed successfully.", "success");
+};
+
+/** Rebuilds the DOM list of videos for the left playlist sidebar. */
 window.renderSidebarPlaylist = () => {
 	const container = document.getElementById("sidebar-queue-list");
 	if (!container) return;
@@ -3999,3 +3909,5 @@ window.renderSidebarPlaylist = () => {
 		container.appendChild(div);
 	}
 };
+
+// 5. Central LocalStorage Serialization Triggers

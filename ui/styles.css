@@ -139,6 +139,9 @@ html {
 	pointer-events: auto;
 }
 
+/* ==========================================================================
+   PROTECTED LAYOUT CALIBRATION ZONE (DO NOT MODIFY BY AUTOMATED SWEEPS)
+   ========================================================================== */
 #mainLayoutGrid {
 	row-gap: 1.5rem;
 	column-gap: 1.5rem;
@@ -165,6 +168,9 @@ html {
 		grid-template-columns: 320px 1fr 1fr;
 	}
 }
+/* ==========================================================================
+   END OF PROTECTED LAYOUT CALIBRATION ZONE
+   ========================================================================== */
 
 /* Mini-player Mode styles */
 body.mini-player {
@@ -239,43 +245,9 @@ body.cinema-active #toastContainer {
 	align-items: center !important;
 }
 
-/* Drag and Drop styling for Reorder Modal */
-.modal-queue-item {
-	display: flex;
-	align-items: center;
-	gap: 0.75rem;
-	padding: 0.75rem 1rem;
-	background-color: #f4f4f5; /* zinc-100 */
-	border: 1px solid #e4e4e7; /* zinc-200 */
-	border-radius: 0.375rem;
-	cursor: grab;
-	user-select: none;
-	transition:
-		opacity 0.2s,
-		background-color 0.2s,
-		border-color 0.2s;
-}
-
-.dark .modal-queue-item {
-	background-color: #27272a; /* zinc-800 */
-	border-color: #3f3f46; /* zinc-700 */
-}
-
-.modal-queue-item:hover {
-	background-color: #e4e4e7; /* zinc-200 */
-	border-color: #d4d4d8; /* zinc-300 */
-}
-
-.dark .modal-queue-item:hover {
-	background-color: #3f3f46; /* zinc-700 */
-	border-color: #52525b; /* zinc-600 */
-}
-
-.modal-queue-item.item-dragging {
-	opacity: 0.4;
-	border-style: dashed;
-}
-
+/* ==========================================================================
+   PROTECTED SIDEBAR MECHANICS ZONE (DO NOT MODIFY BY AUTOMATED SWEEPS)
+   ========================================================================== */
 #playlist-queue-sidebar {
 	width: 320px !important;
 	min-width: 320px !important;
@@ -311,3 +283,6 @@ body.cinema-active #toastContainer {
 .dark .playlist-sidebar-open #playlist-queue-sidebar {
 	border-right: 1px solid #27272a !important;
 }
+/* ==========================================================================
+   END OF PROTECTED SIDEBAR MECHANICS ZONE
+   ========================================================================== */
