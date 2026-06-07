@@ -97,13 +97,6 @@ document.addEventListener("DOMContentLoaded", () => {
 		});
 	}
 
-	const generateCaptionsBtn = document.getElementById("generate-captions-btn");
-	if (generateCaptionsBtn) {
-		generateCaptionsBtn.addEventListener("click", () => {
-			window.triggerVttGeneration();
-		});
-	}
-
 	const isTauri = window.__TAURI__ !== undefined;
 	if (isTauri) {
 		window.__TAURI__.core
@@ -941,22 +934,7 @@ const initializePlayer = () => {
 
 	const ccToggleBtn = document.getElementById("ccToggleBtn");
 	if (ccToggleBtn) {
-		ccToggleBtn.addEventListener("click", () => {
-			if (ccToggleBtn.hasAttribute("disabled")) return;
-			window.captionsVisible = !window.captionsVisible;
-			if (player?.textTracks && player.textTracks.length > 0) {
-				player.textTracks[0].mode = window.captionsVisible
-					? "showing"
-					: "hidden";
-			}
-			if (window.captionsVisible) {
-				ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
-				ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
-			} else {
-				ccToggleBtn.classList.remove("text-yellow-500", "dark:text-yellow-400");
-				ccToggleBtn.classList.add("text-zinc-400", "dark:text-zinc-600");
-			}
-		});
+		ccToggleBtn.addEventListener("click", window.toggleClosedCaptions);
 	}
 
 	if (DOM.projectNameInput) {
@@ -3946,6 +3924,70 @@ window.formatVttTimestamp = (seconds) => {
 	return `${h}:${m}:${s}.${ms}`;
 };
 
+window.toggleClosedCaptions = () => {
+	// 1. Establish or default your tracking toggle state variable
+	if (typeof window.isCcActive === "undefined") {
+		window.isCcActive = false;
+	}
+
+	// Flip the operational toggle switch
+	window.isCcActive = !window.isCcActive;
+
+	const videoElement = player || document.getElementById("my_video");
+	const ccToggleBtn = document.getElementById("ccToggleBtn");
+
+	if (!videoElement) return;
+
+	if (window.isCcActive) {
+		console.log("[CC System] Turning subtitles ON...");
+
+		// If tracks exist, force them into showing mode
+		let trackFound = false;
+		for (let i = 0; i < videoElement.textTracks.length; i++) {
+			if (videoElement.textTracks[i].label === "Generated Captions") {
+				videoElement.textTracks[i].mode = "showing";
+				trackFound = true;
+			}
+		}
+
+		// If no active track is loaded in the DOM container yet, fall back to compiling fresh ones
+		if (!trackFound && typeof window.triggerVttGeneration === "function") {
+			window.triggerVttGeneration();
+			return; // The generator function will handle illuminating the button state
+		}
+
+		// Illuminate the toggle button badge with active theme colors
+		if (ccToggleBtn) {
+			ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
+			ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
+		}
+	} else {
+		console.log(
+			"[CC System] Nuking subtitles from active player memory (ON -> OFF)...",
+		);
+
+		// 2. Disable browser level tracks immediately to clear rendering buffers
+		for (let i = 0; i < videoElement.textTracks.length; i++) {
+			videoElement.textTracks[i].mode = "disabled";
+		}
+
+		// 3. Surgically extract all track elements entirely from the DOM tree
+		const activeTrackElements = videoElement.querySelectorAll("track");
+		activeTrackElements.forEach((trackNode) => {
+			trackNode.remove();
+			console.log("[CC System] Track node purged from DOM.");
+		});
+
+		// 4. Strip out active highlights from the toolbar widget button container
+		if (ccToggleBtn) {
+			ccToggleBtn.classList.remove("text-yellow-500", "dark:text-yellow-400");
+			ccToggleBtn.classList.add("text-zinc-400", "dark:text-zinc-600");
+		}
+
+		showToast("Closed captions deactivated", "info");
+	}
+};
+
 // Main script generator sequence
 window.triggerVttGeneration = async () => {
 	// Grab current video tracking data from active target queue
@@ -4098,6 +4140,7 @@ window.triggerVttGeneration = async () => {
 			ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
 			console.log("[CC Debug] Visual CC dashboard button illuminated.");
 			window.captionsVisible = true;
+			window.isCcActive = true;
 		}
 	} catch (error) {
 		console.error("VTT Export Failed:", error);
