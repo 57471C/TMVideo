@@ -823,7 +823,7 @@ if (typeof window.currentViewMode === "undefined") {
 	window.currentViewMode = "normal"; // Choices: 'normal', 'cinema', 'miniplayer'
 }
 
-window.cycleViewMode = (targetMode) => {
+window.cycleViewMode = async (targetMode) => {
 	const mainGrid = document.getElementById("mainLayoutGrid");
 	const modeBtn =
 		document.getElementById("expand-player-btn") ||
@@ -934,18 +934,27 @@ window.cycleViewMode = (targetMode) => {
 			document.exitFullscreen().catch((e) => console.warn(e));
 		}
 
-		// Resize window to mini player dimensions
+		// Resize window to mini player dimensions + add 40px height buffer
 		if (appWindow) {
-			appWindow
-				.unmaximize()
-				.then(() => {
-					const size = new window.__TAURI__.window.LogicalSize(800, 600);
-					return appWindow.setSize(size);
-				})
-				.then(() => {
-					return appWindow.center();
-				})
-				.catch((e) => console.error("Error enabling mini player mode", e));
+			try {
+				await appWindow.unmaximize();
+				const size = new window.__TAURI__.window.LogicalSize(800, 600);
+				await appWindow.setSize(size);
+				await appWindow.center();
+
+				console.log(
+					"[View System] Adding 40px vertical buffer for mini-player sliders...",
+				);
+				const currentSize = await appWindow.innerSize();
+				const targetHeight = currentSize.height + 42;
+				await appWindow.setSize({
+					type: "Physical",
+					width: currentSize.width,
+					height: targetHeight,
+				});
+			} catch (e) {
+				console.error("Error enabling mini player mode", e);
+			}
 		}
 
 		if (wrapper) wrapper.style.display = "none";
@@ -970,7 +979,14 @@ window.cycleViewMode = (targetMode) => {
 
 		// Maximize window
 		if (appWindow) {
-			appWindow.maximize().catch((e) => console.error(e));
+			try {
+				console.log(
+					"[View System] Restoring standard structural scale dimensions...",
+				);
+				await appWindow.maximize();
+			} catch (e) {
+				console.error(e);
+			}
 		}
 
 		if (wrapper) wrapper.style.display = "block";
