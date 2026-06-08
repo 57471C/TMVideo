@@ -30,6 +30,17 @@
 
 /* --- Global Theme Definitions --- */
 
+/* Lock the root document wrappers to the precise physical boundaries of the screen window */
+html,
+body,
+.app-master-container {
+	height: 100vh !important;
+	max-height: 100vh !important;
+	min-height: 100vh !important;
+	overflow: hidden !important; /* Completely blocks the entire application from scrolling vertically */
+	box-sizing: border-box !important;
+}
+
 /* Standard Light Mode Defaults (Beats the launch style seamlessly) */
 html,
 body {
@@ -341,19 +352,19 @@ body.cinema-active #toastContainer {
 
 /* Timeline Collapsible Layout Engine */
 #mainLayoutGrid {
-	grid-template-rows: auto 1fr 0px;
+	grid-template-rows: auto 0px;
 	transition:
 		grid-template-columns 0.2s cubic-bezier(0, 0, 0.2, 1),
 		grid-template-rows 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 #mainLayoutGrid.timeline-expanded {
-	grid-template-rows: auto 1fr 240px;
+	grid-template-rows: auto 240px;
 }
 
 #peaks-timeline-wrapper {
 	grid-column: 1 / -1;
-	grid-row: 3;
+	grid-row: 2;
 	height: 0 !important;
 	min-height: 0 !important;
 	max-height: 0 !important;
@@ -370,12 +381,27 @@ body.cinema-active #toastContainer {
 		visibility 0.25s ease;
 }
 
+.timeline-expanded #detailed-timeline-panel,
+.timeline-expanded .detailed-timeline-wrapper,
 .timeline-expanded #peaks-timeline-wrapper {
 	height: 240px !important;
 	max-height: none !important;
-	padding: 16px !important;
+	padding-top: 12px !important;
+	padding-left: 16px !important;
+	padding-right: 16px !important;
+	padding-bottom: 6px !important; /* Tightened up to kill phantom scroll space */
+	box-sizing: border-box !important;
 	visibility: visible !important;
 	border-top: 1px solid #27272a !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 4px !important;
+}
+
+#non-linear-sequencer {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 4px !important;
 }
 
 /* Rotational animation for toggle chevron */
@@ -403,4 +429,43 @@ body.cinema-active #toastContainer {
 	padding-bottom: env(safe-area-inset-bottom, 12px) !important;
 	z-index: 50 !important;
 	box-sizing: border-box !important;
+}
+
+/* Force the right side panel area to maintain strict alignment configurations */
+.right-panel-wrapper,
+#right-sidebar-panel,
+#playlist-markers-container,
+body #mainLayoutGrid #rightPanel {
+	height: 100% !important;
+	max-height: 100% !important;
+	display: flex !important;
+	flex-direction: column !important;
+	overflow: hidden !important; /* The sidebar element container context itself cannot scroll */
+	box-sizing: border-box !important;
+}
+
+/* Route all nested vertical scrolling strictly inside your markers list table container */
+.markers-table-wrapper,
+.markers-table-scroll-area,
+#markersList,
+#markers-table-container {
+	flex-grow: 1 !important;
+	overflow-y: auto !important; /* Only the rows database body track will scroll internally */
+	position: relative !important;
+}
+
+/* Ensure the sticky table labels remain locked at the baseline top boundary line */
+.markers-table-wrapper table thead th,
+#markersList table thead th,
+#markers-table-container table thead th {
+	position: sticky !important;
+	top: 0 !important;
+	z-index: 30 !important;
+	background-color: #fafafa !important;
+}
+
+.dark .markers-table-wrapper table thead th,
+.dark #markersList table thead th,
+.dark #markers-table-container table thead th {
+	background-color: #18181b !important;
 }
