@@ -28,6 +28,24 @@
 	src: url("./fonts/inter-bold.woff2") format("woff2");
 }
 
+/* --- Global Theme Definitions --- */
+
+/* Standard Light Mode Defaults (Beats the launch style seamlessly) */
+html,
+body {
+	background-color: #fafafa !important; /* Or your preferred crisp light-mode background color */
+	color: #18181b !important;
+}
+
+/* Dark Mode Overrides (Triggered when the .dark class is present) */
+html.dark,
+body.dark,
+.dark html,
+.dark body {
+	background-color: #000000 !important; /* Retains absolute dark mode depth */
+	color: #f4f4f5 !important;
+}
+
 /* Restore native dialog centering that Tailwind's preflight resets */
 dialog:modal {
 	position: fixed;
@@ -127,16 +145,50 @@ html {
 	background: #71717a; /* zinc-500 */
 }
 
-/* Video player overlay controls hover show */
+/* Video player overlay controls hover show & idle concealment */
+#top-right-controls,
+.video-top-overlay-buttons,
+#video-actions-overlay-container,
 #videoOverlayControls {
-	opacity: 0;
-	pointer-events: none;
-	transition: opacity 0.2s ease-in-out;
+	opacity: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	transform: translateY(-20px) !important; /* Shifts up slightly when hidden */
+
+	/* High-performance fluid motion spec */
+	transition:
+		transform 0.35s cubic-bezier(0.25, 1, 0.5, 1),
+		opacity 0.35s ease,
+		visibility 0.35s ease !important;
 }
 
-.group:hover #videoOverlayControls {
-	opacity: 1;
-	pointer-events: auto;
+.group:hover #videoOverlayControls,
+.video-container-wrapper:hover #top-right-controls,
+#video-player-container:hover #top-right-controls,
+.video-container-wrapper:hover .video-top-overlay-buttons {
+	opacity: 1 !important;
+	visibility: visible !important;
+	pointer-events: auto !important;
+	transform: translateY(0) !important; /* Snaps perfectly into position */
+}
+
+.hide-controls #top-right-controls,
+.user-idle #top-right-controls,
+.controls-hidden #top-right-controls,
+.hide-controls .video-top-overlay-buttons,
+.controls-hidden .video-top-overlay-buttons,
+.hide-controls #videoOverlayControls,
+.user-idle #videoOverlayControls,
+.controls-hidden #videoOverlayControls,
+.hide-controls .group:hover #videoOverlayControls,
+.user-idle .group:hover #videoOverlayControls,
+.controls-hidden .group:hover #videoOverlayControls {
+	opacity: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	transform: translateY(
+		-100%
+	) !important; /* Smoothly scrolls off-screen upwards */
 }
 
 /* ==========================================================================
@@ -329,4 +381,26 @@ body.cinema-active #toastContainer {
 /* Rotational animation for toggle chevron */
 .timeline-expanded #timeline-toggle-btn svg {
 	transform: rotate(180deg);
+}
+
+/* Ensure the media panel locks flawlessly to the dead-center bottom in cinema mode */
+.cinema-mode #media-controls-container,
+.cinema-mode .media-controls-panel-class,
+.cinema-mode #media-controls-panel,
+.cinema-mode #mediaControlsContainer {
+	position: fixed !important;
+	bottom: 0 !important;
+
+	/* The Absolute Center Formula */
+	left: 50% !important;
+	transform: translateX(-50%) !important;
+
+	/* Width constraints: lets it breathe as a clean centered floating bar rather than stretching infinitely */
+	width: 90% !important;
+	max-width: 800px !important; /* Calibrate this to your main media player toolbar's natural width */
+
+	margin-bottom: 0 !important;
+	padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+	z-index: 50 !important;
+	box-sizing: border-box !important;
 }

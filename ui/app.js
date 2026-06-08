@@ -96,176 +96,219 @@ document.addEventListener("DOMContentLoaded", () => {
 			}
 		});
 	}
+});
 
-	const isTauri = window.__TAURI__ !== undefined;
-	if (isTauri) {
-		window.__TAURI__.core
-			.invoke("get_launch_argument")
-			.then(async (filePath) => {
-				if (filePath) {
-					const lower = filePath.toLowerCase();
-					if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
-						try {
-							projectFilePath = filePath;
-							localStorage.setItem("projectFilePath", projectFilePath);
-							const jsonText = await window.__TAURI__.fs.readTextFile(filePath);
-							importFromJSON(jsonText);
-							toConsole(
-								"Auto-loaded project from launch argument",
-								filePath,
-								debuggin,
-							);
-						} catch (e) {
-							toConsole("Error auto-loading project file", e, debuggin);
-							showToast("Failed to auto-load project.", "error");
-						}
-					} else if (
-						lower.endsWith(".mp4") ||
-						lower.endsWith(".mkv") ||
-						lower.endsWith(".avi") ||
-						lower.endsWith(".mov") ||
-						lower.endsWith(".mpg") ||
-						lower.endsWith(".mpeg")
-					) {
-						try {
-							// Initialize blank project state
-							window.resetClosedCaptions();
-							player.pause();
-							player.src = "";
-							player.removeAttribute("src");
-							player.load();
+// Helpers for project data clearance and video loading
+window.clearAllPreviousProjectData = () => {
+	window.resetClosedCaptions();
+	if (player) {
+		player.pause();
+		player.src = "";
+		player.removeAttribute("src");
+		try {
+			player.load();
+		} catch (e) {}
+	}
 
-							markers = [];
-							videoFileName = "";
-							preserveProcessTimes = false;
+	markers = [];
+	videoFileName = "";
+	preserveProcessTimes = false;
 
-							// Free memory by revoking old video blob URLs
-							for (const key in videoBlobCache) {
-								URL.revokeObjectURL(videoBlobCache[key]);
-								delete videoBlobCache[key];
-							}
-							videoFilePath = "";
-							projectFilePath = "";
-							localStorage.removeItem("projectFilePath");
-							projectName = "";
-							projectComments = "";
-							masterParts = [];
-							masterLabour = [];
-							processStartTime = 0;
-							processEndTime = 0;
+	for (const key in videoBlobCache) {
+		URL.revokeObjectURL(videoBlobCache[key]);
+		delete videoBlobCache[key];
+	}
+	videoFilePath = "";
+	projectFilePath = "";
+	localStorage.removeItem("projectFilePath");
+	localStorage.removeItem("timeStudyData");
+	localStorage.removeItem("tmvideo_markers");
+	localStorage.removeItem("tmvideo_project_metadata");
+	projectName = "";
+	projectComments = "";
+	masterParts = [];
+	masterLabour = [];
+	processStartTime = 0;
+	processEndTime = 0;
 
-							videoQueue = [
-								{
-									videoId: 1,
-									videoName: "Video 1",
-									videoFileName: "",
-									videoFilePath: "",
-									processStartTime: 0,
-									processEndTime: 0,
-									appState: { markers: [] },
-								},
-							];
-							activeQueueIndex = 0;
+	videoQueue = [
+		{
+			videoId: 1,
+			videoName: "Video 1",
+			videoFileName: "",
+			videoFilePath: "",
+			processStartTime: 0,
+			processEndTime: 0,
+			appState: { markers: [] },
+		},
+	];
+	activeQueueIndex = 0;
 
-							if (DOM.projectNameInput) DOM.projectNameInput.value = "";
+	if (DOM.projectNameInput) DOM.projectNameInput.value = "";
 
-							// Load media file
-							const extractedFileName = filePath.split(/[/\\]/).pop();
-							videoFileName = extractedFileName;
-							videoFilePath = filePath;
+	if (DOM.videoPlaceholder) {
+		DOM.videoPlaceholder.textContent = "Load a video to get started";
+	}
+	toggleVideoPlaceholder(true);
+	if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
+	if (typeof updateMarkersList === "function") updateMarkersList();
+	saveLocalState();
+	if (typeof updateSliderTicks === "function") updateSliderTicks();
+};
 
-							videoQueue[0].videoFileName = videoFileName;
-							videoQueue[0].videoFilePath = videoFilePath;
-							videoQueue[0].videoName = videoFileName;
+window.loadVideo = async (filePath) => {
+	try {
+		const extractedFileName = filePath.split(/[/\\]/).pop();
+		videoFileName = extractedFileName;
+		videoFilePath = filePath;
 
-							const tauriAssetUrl =
-								window.__TAURI__.core.convertFileSrc(videoFilePath);
-							player.src = tauriAssetUrl;
-							player.preload = "auto";
-							player.load();
-							toggleVideoPlaceholder(false);
-							window.loadSubtitleTrack(videoFilePath);
+		if (!videoQueue || videoQueue.length === 0) {
+			videoQueue = [
+				{
+					videoId: 1,
+					videoName: "Video 1",
+					videoFileName: "",
+					videoFilePath: "",
+					processStartTime: 0,
+					processEndTime: 0,
+					appState: { markers: [] },
+				},
+			];
+		}
+		activeQueueIndex = 0;
 
-							renderVideoQueueSelect();
-							updateLoadButtonColor();
-							updateMarkersList();
-							saveLocalState();
-							updateSliderTicks();
+		videoQueue[0].videoFileName = videoFileName;
+		videoQueue[0].videoFilePath = videoFilePath;
+		videoQueue[0].videoName = videoFileName;
 
-							await enableMiniPlayerMode();
+		if (window.__TAURI__) {
+			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
+			player.src = tauriAssetUrl;
+		} else {
+			player.src = videoFilePath;
+		}
+		player.preload = "auto";
+		player.load();
+		toggleVideoPlaceholder(false);
+		if (typeof window.loadSubtitleTrack === "function") {
+			window.loadSubtitleTrack(videoFilePath);
+		}
 
-							toConsole(
-								"Auto-loaded video from launch argument",
-								filePath,
-								debuggin,
-							);
-							showToast("Video loaded.", "success");
-						} catch (e) {
-							toConsole("Error auto-loading video file", e, debuggin);
-							showToast("Failed to load video file.", "error");
-						}
+		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
+		if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
+		if (typeof updateMarkersList === "function") updateMarkersList();
+		saveLocalState();
+		if (typeof updateSliderTicks === "function") updateSliderTicks();
+
+		if (typeof enableMiniPlayerMode === "function") {
+			await enableMiniPlayerMode();
+		}
+
+		toConsole("Auto-loaded video from launch argument", filePath, debuggin);
+		showToast("Video loaded.", "success");
+	} catch (e) {
+		toConsole("Error auto-loading video file", e, debuggin);
+		showToast("Failed to load video file.", "error");
+	}
+};
+
+window.initializeLaunchArgumentHandler = async () => {
+	try {
+		if (window.__TAURI__) {
+			const launchPath = await window.__TAURI__.core.invoke(
+				"get_launch_argument",
+			);
+
+			if (launchPath && launchPath.trim() !== "") {
+				console.log("[Launch System] External OS file detected:", launchPath);
+				const lower = launchPath.toLowerCase();
+
+				if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
+					try {
+						projectFilePath = launchPath;
+						localStorage.setItem("projectFilePath", projectFilePath);
+						const jsonText = await window.__TAURI__.fs.readTextFile(launchPath);
+						importFromJSON(jsonText);
+						toConsole(
+							"Auto-loaded project from launch argument",
+							launchPath,
+							debuggin,
+						);
+					} catch (e) {
+						toConsole("Error auto-loading project file", e, debuggin);
+						showToast("Failed to auto-load project.", "error");
 					}
 				} else {
-					// If a session has already been restored, do not clear the workspace
-					if (
-						(videoQueue &&
-							videoQueue.length > 0 &&
-							videoQueue[0].videoFilePath) ||
-						player.src
-					) {
-						return;
+					// 1. CLEAR STALE LOCAL STORAGE PERSISTENCE GHOSTS
+					localStorage.removeItem("tmvideo_markers");
+					localStorage.removeItem("tmvideo_project_metadata");
+					if (typeof window.clearAllPreviousProjectData === "function") {
+						window.clearAllPreviousProjectData();
+					} else if (typeof markers !== "undefined") {
+						markers = [];
+						if (typeof renderMarkersTable === "function") renderMarkersTable();
 					}
-					// Only clear/reset the workspace if we are starting completely fresh
-					window.resetClosedCaptions();
-					player.pause();
-					player.src = "";
-					player.removeAttribute("src");
-					player.load();
 
-					markers = [];
-					videoFileName = "";
-					preserveProcessTimes = false;
+					// 2. RESIZE THE VIEWPORT CONTAINER DYNAMICALLY TO PREVENT SCROLLBARS
+					if (window.__TAURI__.window?.getCurrentWindow) {
+						const appWindow = window.__TAURI__.window.getCurrentWindow();
+						const currentSize = await appWindow.innerSize();
+						const targetHeight = currentSize.height + 44;
 
-					for (const key in videoBlobCache) {
-						URL.revokeObjectURL(videoBlobCache[key]);
-						delete videoBlobCache[key];
+						if (window.__TAURI__.window.LogicalSize) {
+							const factor = await appWindow.scaleFactor();
+							const logicalWidth = currentSize.width / factor;
+							const logicalHeight = targetHeight / factor;
+							await appWindow.setSize(
+								new window.__TAURI__.window.LogicalSize(
+									logicalWidth,
+									logicalHeight,
+								),
+							);
+						} else {
+							await appWindow.setSize({
+								type: "Physical",
+								width: currentSize.width,
+								height: targetHeight,
+							});
+						}
+						console.log(
+							"[Launch System] Viewport height expanded by 44px to accommodate full playback panel metrics.",
+						);
 					}
-					videoFilePath = "";
-					projectFilePath = "";
-					localStorage.removeItem("projectFilePath");
-					projectName = "";
-					projectComments = "";
-					masterParts = [];
-					masterLabour = [];
-					processStartTime = 0;
-					processEndTime = 0;
 
-					videoQueue = [
-						{
-							videoId: 1,
-							videoName: "Video 1",
-							videoFileName: "",
-							videoFilePath: "",
-							processStartTime: 0,
-							processEndTime: 0,
-							appState: { markers: [] },
-						},
-					];
-					activeQueueIndex = 0;
-
-					if (DOM.projectNameInput) DOM.projectNameInput.value = "";
-
-					DOM.videoPlaceholder.textContent = "Load a video to get started";
-					toggleVideoPlaceholder(true);
-					updateLoadButtonColor();
-					updateMarkersList();
-					saveLocalState();
-					updateSliderTicks();
+					// 3. LOAD THE TARGET INGESTED MEDIA FILE
+					if (typeof window.loadVideo === "function") {
+						window.loadVideo(launchPath);
+					}
 				}
-			})
-			.catch((e) => toConsole("Failed to check launch argument", e, debuggin));
+			} else {
+				if (
+					(videoQueue &&
+						videoQueue.length > 0 &&
+						videoQueue[0].videoFilePath) ||
+					player.src
+				) {
+					return;
+				}
+				if (typeof window.clearAllPreviousProjectData === "function") {
+					window.clearAllPreviousProjectData();
+				}
+			}
+		}
+	} catch (error) {
+		console.error(
+			"[Launch System] Error initializing file launch constraints:",
+			error,
+		);
 	}
-});
+};
+
+if (window.__TAURI__ !== undefined) {
+	document.addEventListener("DOMContentLoaded", () => {
+		window.initializeLaunchArgumentHandler();
+	});
+}
 
 // 3. Media Initialization & Streaming Event Subsystems
 /** Resets closed captions and destroys peaks instance. */
@@ -767,6 +810,7 @@ const takeSnapshot = () => {
 		link.click();
 		document.body.removeChild(link);
 		showToast("Snapshot saved in Downloads", "success");
+		window.triggerPlaybackOverlay("Snapshot Captured");
 	} catch (error) {
 		toConsole("Failed to take snapshot", error, debuggin);
 		showToast("Error taking snapshot.", "error");
@@ -774,65 +818,223 @@ const takeSnapshot = () => {
 };
 
 /** Toggles cinema mode layout and fullscreen state. */
-async function toggleCinemaMode() {
-	isCinemaMode = !isCinemaMode;
+// 1. Establish global tracker state variable if not already defined
+if (typeof window.currentViewMode === "undefined") {
+	window.currentViewMode = "normal"; // Choices: 'normal', 'cinema', 'miniplayer'
+}
 
-	// 1. Toggle DOM classes for layout shift
-	document.body.classList.toggle("cinema-active", isCinemaMode);
+window.cycleViewMode = (targetMode) => {
+	const mainGrid = document.getElementById("mainLayoutGrid");
+	const modeBtn =
+		document.getElementById("expand-player-btn") ||
+		document.getElementById("toggleCinemaBtn") ||
+		document.getElementById("toggleMiniPlayerBtn") ||
+		document.querySelector(".view-mode-button");
 
-	// Handle scrollbar visibility for the main content area
-	const mainContentArea =
-		document.getElementById("mainLayoutGrid")?.parentElement;
-	if (mainContentArea) {
-		if (isCinemaMode) {
-			mainContentArea.style.overflowY = "hidden";
-		} else {
-			mainContentArea.style.overflowY = "auto";
+	if (!mainGrid) {
+		console.error("[View System] Main layout grid target frame not found.");
+		return;
+	}
+
+	// 2. Rotate to the next chronological layout state
+	if (targetMode) {
+		window.currentViewMode = targetMode;
+	} else {
+		switch (window.currentViewMode) {
+			case "normal":
+				window.currentViewMode = "cinema";
+				break;
+			case "cinema":
+				window.currentViewMode = "miniplayer";
+				break;
+			default:
+				window.currentViewMode = "normal";
+				break;
 		}
 	}
 
-	// 2. Handle Monitor Fullscreen
-	if (appWindow) {
-		try {
-			await appWindow.setFullscreen(isCinemaMode);
-		} catch (e) {
-			toConsole("Error setting fullscreen via Tauri", e, debuggin);
+	console.log(
+		`[View System] Shifting layout mode configuration to: ${window.currentViewMode.toUpperCase()}`,
+	);
+
+	// 3. Apply target class updates to the master viewport wrapper
+	// Remove all state variables first to keep state transitions completely clean
+	mainGrid.classList.remove(
+		"cinema-mode",
+		"miniplayer-mode",
+		"cinema-active",
+		"mini-player",
+	);
+	document.body.classList.remove(
+		"cinema-mode",
+		"miniplayer-mode",
+		"cinema-active",
+		"mini-player",
+	);
+
+	// Sync local tracking state variable
+	isCinemaMode = window.currentViewMode === "cinema";
+
+	const mainContentArea = mainGrid.parentElement;
+	const controlBar = document.getElementById("mediaControlsContainer");
+	const wrapper = document.getElementById("peaks-timeline-wrapper");
+	const seekBarContainer = document.getElementById("seekBarContainer");
+	const expandBtn = document.getElementById("expandToEditorBtn");
+
+	// Clean up timers & reset control bar transformations
+	if (cinemaIdleTimer) {
+		clearTimeout(cinemaIdleTimer);
+		cinemaIdleTimer = null;
+	}
+	if (controlBar) {
+		controlBar.classList.remove("translate-y-full", "opacity-0");
+	}
+	document.body.classList.remove("hide-controls");
+
+	if (window.currentViewMode === "cinema") {
+		mainGrid.classList.add("cinema-mode", "cinema-active");
+		document.body.classList.add("cinema-mode", "cinema-active");
+		if (modeBtn) modeBtn.title = "Switch to Miniplayer View";
+		if (expandBtn) expandBtn.classList.add("hidden");
+
+		if (mainContentArea) {
+			mainContentArea.style.overflowY = "hidden";
 		}
-	} else {
-		if (isCinemaMode && document.documentElement.requestFullscreen) {
-			await document.documentElement
+
+		// Handle Monitor Fullscreen
+		if (appWindow) {
+			appWindow.setFullscreen(true).catch((e) => console.error(e));
+		} else if (document.documentElement.requestFullscreen) {
+			document.documentElement
 				.requestFullscreen()
 				.catch((e) => console.warn(e));
-		} else if (document.exitFullscreen) {
-			await document.exitFullscreen();
 		}
-	}
 
-	// 3. Handle timer initialization or cleanup
-	if (isCinemaMode) {
+		// Reset inactivity timer
 		resetCinemaIdleTimer();
-	} else {
-		if (cinemaIdleTimer) {
-			clearTimeout(cinemaIdleTimer);
-			cinemaIdleTimer = null;
-		}
-		const controlBar = document.getElementById("mediaControlsContainer");
-		if (controlBar) {
-			controlBar.classList.remove("translate-y-full", "opacity-0");
-		}
-	}
 
-	// Handle peaks timeline display between Cinema and Normal modes
-	const wrapper = document.getElementById("peaks-timeline-wrapper");
-	if (isCinemaMode) {
+		// Handle peaks timeline display
 		if (wrapper) wrapper.style.display = "none";
+
+		showToast("Cinema Mode Activated", "info");
+	} else if (window.currentViewMode === "miniplayer") {
+		mainGrid.classList.add("miniplayer-mode", "mini-player");
+		document.body.classList.add("miniplayer-mode", "mini-player");
+		if (modeBtn) modeBtn.title = "Switch to Normal View";
+		if (expandBtn) expandBtn.classList.remove("hidden");
+
+		if (mainContentArea) {
+			mainContentArea.style.overflowY = "auto";
+		}
+
+		// Exit Fullscreen
+		if (appWindow) {
+			appWindow.setFullscreen(false).catch((e) => console.error(e));
+		} else if (document.exitFullscreen && document.fullscreenElement) {
+			document.exitFullscreen().catch((e) => console.warn(e));
+		}
+
+		// Resize window to mini player dimensions
+		if (appWindow) {
+			appWindow
+				.unmaximize()
+				.then(() => {
+					const size = new window.__TAURI__.window.LogicalSize(800, 600);
+					return appWindow.setSize(size);
+				})
+				.then(() => {
+					return appWindow.center();
+				})
+				.catch((e) => console.error("Error enabling mini player mode", e));
+		}
+
+		if (wrapper) wrapper.style.display = "none";
+		if (seekBarContainer) seekBarContainer.style.display = "block";
+
+		showToast("Miniplayer Mode Activated", "info");
 	} else {
+		// Normal state defaults
+		if (modeBtn) modeBtn.title = "Switch to Cinema Mode";
+		if (expandBtn) expandBtn.classList.add("hidden");
+
+		if (mainContentArea) {
+			mainContentArea.style.overflowY = "auto";
+		}
+
+		// Exit Fullscreen
+		if (appWindow) {
+			appWindow.setFullscreen(false).catch((e) => console.error(e));
+		} else if (document.exitFullscreen && document.fullscreenElement) {
+			document.exitFullscreen().catch((e) => console.warn(e));
+		}
+
+		// Maximize window
+		if (appWindow) {
+			appWindow.maximize().catch((e) => console.error(e));
+		}
+
 		if (wrapper) wrapper.style.display = "block";
+		if (seekBarContainer) seekBarContainer.style.display = "block";
 		window.loadWaveformTimeline();
+
+		showToast("Standard Layout Restored", "info");
 	}
 
-	toConsole("Cinema mode toggled", isCinemaMode, debuggin);
-}
+	// Trigger a video canvas alignment calculation adjust if needed
+	if (typeof window.repositionControls === "function") {
+		setTimeout(window.repositionControls, 50);
+	}
+};
+
+// Compatibility wrappers for existing references
+const enableMiniPlayerMode = async () => {
+	window.cycleViewMode("miniplayer");
+};
+const disableMiniPlayerMode = async () => {
+	window.cycleViewMode("normal");
+};
+const toggleCinemaMode = async () => {
+	window.cycleViewMode(
+		window.currentViewMode === "cinema" ? "normal" : "cinema",
+	);
+};
+// Centralized overlay presentation management engine
+window.triggerPlaybackOverlay = (messageText) => {
+	const overlayContainer =
+		document.getElementById("video-action-overlay") ||
+		document.querySelector(".action-overlay-toast");
+	if (!overlayContainer) return;
+
+	// Set the text content dynamically
+	overlayContainer.innerText = messageText;
+
+	// Make it instantly visible by removing any hidden or opacity-0 classes
+	overlayContainer.classList.remove(
+		"hidden",
+		"opacity-0",
+		"pointer-events-none",
+	);
+	overlayContainer.classList.add("flex", "opacity-100");
+
+	// Clear any pre-existing fading timer to prevent race conditions during rapid tapping
+	if (window.overlayFadeTimeout) {
+		clearTimeout(window.overlayFadeTimeout);
+	}
+
+	// Schedule automatic self-destruct concealment after exactly 5000ms (5 seconds)
+	window.overlayFadeTimeout = setTimeout(() => {
+		console.log(
+			"[Overlay System] Automatically fading transient action message indicator...",
+		);
+		overlayContainer.classList.add("opacity-0", "pointer-events-none");
+
+		// Cleanly switch back to display none once the CSS opacity transition finishes painting
+		setTimeout(() => {
+			overlayContainer.classList.remove("flex");
+			overlayContainer.classList.add("hidden");
+		}, 300); // Matches standard tailwind/CSS transition-opacity duration metrics
+	}, 5000);
+};
 
 /** Resets the inactivity timer for hiding controls in cinema mode. */
 function resetCinemaIdleTimer() {
@@ -843,6 +1045,7 @@ function resetCinemaIdleTimer() {
 
 	// 1. Mouse moved: Show the controls instantly
 	controlBar.classList.remove("translate-y-full", "opacity-0");
+	document.body.classList.remove("hide-controls");
 
 	// 2. Clear the existing timer
 	if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
@@ -850,6 +1053,7 @@ function resetCinemaIdleTimer() {
 	// 3. Set a new 5-second timer to hide the controls
 	cinemaIdleTimer = setTimeout(() => {
 		controlBar.classList.add("translate-y-full", "opacity-0");
+		document.body.classList.add("hide-controls");
 	}, 5000);
 }
 
@@ -923,12 +1127,9 @@ const initializePlayer = () => {
 
 	const toggleMiniPlayerBtn = document.getElementById("toggleMiniPlayerBtn");
 	if (toggleMiniPlayerBtn) {
-		toggleMiniPlayerBtn.addEventListener("click", () => {
-			if (document.body.classList.contains("mini-player")) {
-				disableMiniPlayerMode();
-			} else {
-				enableMiniPlayerMode();
-			}
+		toggleMiniPlayerBtn.addEventListener("click", (e) => {
+			e.preventDefault();
+			window.cycleViewMode();
 		});
 	}
 
@@ -1657,6 +1858,9 @@ const initializePlayer = () => {
 		} else {
 			updateZoom();
 		}
+		window.triggerPlaybackOverlay(
+			`Zoom: ${Math.round(window.zoomLevel * 100)}%`,
+		);
 	});
 	DOM.zoomOut.addEventListener("click", () => {
 		const container = document.getElementById("video-wrapper-id");
@@ -1682,6 +1886,9 @@ const initializePlayer = () => {
 		} else {
 			updateZoom();
 		}
+		window.triggerPlaybackOverlay(
+			`Zoom: ${Math.round(window.zoomLevel * 100)}%`,
+		);
 	});
 	DOM.resetZoom.addEventListener("click", () => {
 		window.zoomLevel = 1.0;
@@ -1692,12 +1899,16 @@ const initializePlayer = () => {
 		} else {
 			updateZoom();
 		}
+		window.triggerPlaybackOverlay("Zoom Reset");
 	});
 	if (DOM.takeSnapshotBtn) {
 		DOM.takeSnapshotBtn.addEventListener("click", takeSnapshot);
 	}
 	if (DOM.toggleCinemaBtn) {
-		DOM.toggleCinemaBtn.addEventListener("click", toggleCinemaMode);
+		DOM.toggleCinemaBtn.addEventListener("click", (e) => {
+			e.preventDefault();
+			window.cycleViewMode();
+		});
 	}
 	document.addEventListener("mousemove", resetCinemaIdleTimer);
 
@@ -1788,7 +1999,7 @@ const initializePlayer = () => {
 				break;
 			case "\\":
 				e.preventDefault();
-				toggleCinemaMode();
+				window.cycleViewMode();
 				break;
 			case " ":
 				e.preventDefault();
@@ -1858,11 +2069,13 @@ const initializePlayer = () => {
 				e.preventDefault();
 				zoomLevel += 0.1;
 				updateZoom();
+				window.triggerPlaybackOverlay(`Zoom: ${Math.round(zoomLevel * 100)}%`);
 				break;
 			case "-":
 				e.preventDefault();
 				zoomLevel = Math.max(0.1, zoomLevel - 0.2);
 				updateZoom();
+				window.triggerPlaybackOverlay(`Zoom: ${Math.round(zoomLevel * 100)}%`);
 				break;
 			case "Backspace":
 				e.preventDefault();
@@ -1870,6 +2083,7 @@ const initializePlayer = () => {
 				translateX = 0;
 				translateY = 0;
 				updateZoom();
+				window.triggerPlaybackOverlay("Zoom Reset");
 				break;
 			case "`":
 			case "1":
@@ -1890,6 +2104,7 @@ const initializePlayer = () => {
 					DOM.speedValue.textContent = `${newSpeed.toFixed(1)}x`;
 				toConsole("Playback speed shortcut", newSpeed, debuggin);
 				saveLocalState();
+				window.triggerPlaybackOverlay(`Speed: ${newSpeed.toFixed(1)}x`);
 				break;
 			}
 		}
@@ -1908,47 +2123,7 @@ const initializePlayer = () => {
 };
 
 /** Activates mini-player mode layout. */
-const enableMiniPlayerMode = async () => {
-	if (appWindow) {
-		try {
-			await appWindow.unmaximize();
-			const size = new window.__TAURI__.window.LogicalSize(800, 600);
-			await appWindow.setSize(size);
-			await appWindow.center();
-		} catch (e) {
-			console.error("Error enabling mini player mode", e);
-		}
-	}
-	document.body.classList.add("mini-player");
-	const expandBtn = document.getElementById("expandToEditorBtn");
-	if (expandBtn) expandBtn.classList.remove("hidden");
-
-	const wrapper = document.getElementById("peaks-timeline-wrapper");
-	if (wrapper) wrapper.style.display = "none";
-	const seekBarContainer = document.getElementById("seekBarContainer");
-	if (seekBarContainer) seekBarContainer.style.display = "block";
-};
-
-/** Deactivates mini-player mode and restores full interface. */
-const disableMiniPlayerMode = async () => {
-	document.body.classList.remove("mini-player");
-	const expandBtn = document.getElementById("expandToEditorBtn");
-	if (expandBtn) expandBtn.classList.add("hidden");
-
-	if (appWindow) {
-		try {
-			await appWindow.maximize();
-		} catch (e) {
-			console.error("Error disabling mini player mode", e);
-		}
-	}
-
-	const wrapper = document.getElementById("peaks-timeline-wrapper");
-	if (wrapper) wrapper.style.display = "block";
-	const seekBarContainer = document.getElementById("seekBarContainer");
-	if (seekBarContainer) seekBarContainer.style.display = "block";
-	window.loadWaveformTimeline();
-};
+// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine.
 
 /** Begins drawing the marquee selection box for zooming. */
 const startMarquee = (event) => {
