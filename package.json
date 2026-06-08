@@ -1,6 +1,6 @@
 {
-  "name": "timestudy",
-  "version": "0.3.1",
+  "name": "tmvideo",
+  "version": "0.4.0",
   "description": "A web-based application for conducting time and motion studies.",
   "main": "ui/index.html",
   "scripts": {
@@ -13,10 +13,10 @@
     "format": "biome format --write ."
   },
   "keywords": [
-    "timestudy",
-    "time-motion",
-    "manufacturing",
-    "process-analysis"
+    "tmvideo",
+    "video",
+    "media player",
+    "video editor"
   ],
   "author": "Terry Minett",
   "license": "MIT",
