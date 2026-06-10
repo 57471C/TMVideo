@@ -1076,6 +1076,70 @@ function resetCinemaIdleTimer() {
 /** Initializes the primary video player events, controls, and UI state. */
 const initializePlayer = () => {
 	player = DOM.video;
+	
+	let vlcTime = 0;
+	let vlcDuration = 0;
+
+	if (window.__TAURI__) {
+		player.play = async () => {
+			await window.__TAURI__.core.invoke("vlc_play");
+		};
+		player.pause = async () => {
+			await window.__TAURI__.core.invoke("vlc_pause");
+		};
+		player.load = async () => {
+			if (videoFilePath) {
+				try {
+					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
+					vlcDuration = dur;
+					player.dispatchEvent(new Event('loadedmetadata'));
+				} catch (e) {
+					console.error("VLC failed to open file:", e);
+				}
+			}
+		};
+
+		Object.defineProperty(player, 'currentTime', {
+			get() {
+				return vlcTime;
+			},
+			set(val) {
+				vlcTime = val;
+				window.__TAURI__.core.invoke("vlc_seek", { timeSecs: val });
+				player.dispatchEvent(new Event('seeking'));
+				player.dispatchEvent(new Event('timeupdate'));
+			},
+			configurable: true
+		});
+
+		Object.defineProperty(player, 'duration', {
+			get() {
+				return vlcDuration;
+			},
+			set(val) {
+				vlcDuration = val;
+			},
+			configurable: true
+		});
+
+		const canvas = document.getElementById('video-render-canvas');
+		const ctx = canvas.getContext('2d');
+
+		window.__TAURI__.event.listen('vlc-frame', (event) => {
+			const { pixels, width, height, time_secs } = event.payload;
+			vlcTime = time_secs;
+			player.dispatchEvent(new Event('timeupdate'));
+
+			if (canvas.width !== width || canvas.height !== height) {
+				canvas.width = width;
+				canvas.height = height;
+			}
+			const imgData = ctx.createImageData(width, height);
+			imgData.data.set(new Uint8ClampedArray(pixels));
+			ctx.putImageData(imgData, 0, 0);
+		});
+	}
+
 	player.preservesPitch = true;
 	playerReady = true;
 	toConsole("Video element initialized", "Success", debuggin);

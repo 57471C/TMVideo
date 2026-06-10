@@ -113,7 +113,8 @@
               <div id="marqueeOverlay" class="absolute inset-0 z-12 cursor-crosshair">
                 <div id="marqueeRect" class="absolute border-2 border-dashed border-blue-600 bg-blue-600/10 pointer-events-none hidden"></div>
               </div>
-              <video id="my_video" crossorigin="anonymous" class="w-full h-full object-contain z-1">
+              <canvas id="video-render-canvas" class="w-full h-full object-contain"></canvas>
+              <video id="my_video" crossorigin="anonymous" class="w-full h-full object-contain z-1 hidden">
                 <track kind="captions" />
                 Your browser does not support the video tag.
               </video>

@@ -1,12 +1,257 @@
 
 use std::sync::Mutex;
+use std::sync::Arc;
+use std::os::raw::{c_void, c_char, c_uint};
 use tauri::Manager;
 use tauri::Emitter;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
+use vlc::{Instance, MediaPlayer, Media};
 
 #[derive(Default)]
 pub struct FfmpegState(pub Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
+
+struct VideoContext {
+    app_handle: tauri::AppHandle,
+    player_raw: *mut c_void,
+    frame_buffer: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
+pub struct VlcPlayer {
+    player: MediaPlayer,
+    instance: Instance,
+    current_path: Option<String>,
+    context: Box<VideoContext>,
+}
+
+unsafe impl Send for VlcPlayer {}
+unsafe impl Sync for VlcPlayer {}
+unsafe impl Send for VideoContext {}
+unsafe impl Sync for VideoContext {}
+
+#[derive(Clone)]
+pub struct VlcState(pub Arc<Mutex<Option<VlcPlayer>>>);
+
+#[derive(Clone, serde::Serialize)]
+struct VlcFramePayload {
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+    time_secs: f64,
+}
+
+pub type libvlc_video_lock_cb = unsafe extern "C" fn(
+    opaque: *mut c_void,
+    planes: *mut *mut c_void,
+) -> *mut c_void;
+
+pub type libvlc_video_unlock_cb = unsafe extern "C" fn(
+    opaque: *mut c_void,
+    picture: *mut c_void,
+    planes: *mut *mut c_void,
+);
+
+pub type libvlc_video_display_cb = unsafe extern "C" fn(
+    opaque: *mut c_void,
+    picture: *mut c_void,
+);
+
+pub type libvlc_video_format_cb = unsafe extern "C" fn(
+    opaque: *mut *mut c_void,
+    chroma: *mut c_char,
+    width: *mut c_uint,
+    height: *mut c_uint,
+    pitches: *mut c_uint,
+    lines: *mut c_uint,
+) -> c_uint;
+
+extern "C" {
+    pub fn libvlc_video_set_callbacks(
+        mp: *mut c_void,
+        lock: Option<libvlc_video_lock_cb>,
+        unlock: Option<libvlc_video_unlock_cb>,
+        display: Option<libvlc_video_display_cb>,
+        opaque: *mut c_void,
+    );
+    pub fn libvlc_video_set_format_callbacks(
+        mp: *mut c_void,
+        setup: Option<libvlc_video_format_cb>,
+        cleanup: Option<unsafe extern "C" fn(*mut c_void)>,
+    );
+    pub fn libvlc_media_player_get_time(p_mi: *mut c_void) -> i64;
+    pub fn libvlc_media_player_get_length(p_mi: *mut c_void) -> i64;
+}
+
+unsafe extern "C" fn video_setup_cb(
+    opaque: *mut *mut c_void,
+    chroma: *mut c_char,
+    width: *mut c_uint,
+    height: *mut c_uint,
+    pitches: *mut c_uint,
+    lines: *mut c_uint,
+) -> c_uint {
+    let chroma_slice = std::slice::from_raw_parts_mut(chroma, 4);
+    chroma_slice[0] = b'R' as c_char;
+    chroma_slice[1] = b'V' as c_char;
+    chroma_slice[2] = b'3' as c_char;
+    chroma_slice[3] = b'2' as c_char;
+
+    let w = *width;
+    let h = *height;
+
+    *pitches = w * 4;
+    *lines = h;
+
+    let ctx_ptr = *opaque as *mut VideoContext;
+    if !ctx_ptr.is_null() {
+        let ctx = &mut *ctx_ptr;
+        ctx.width = w;
+        ctx.height = h;
+        ctx.frame_buffer = vec![0u8; (w * h * 4) as usize];
+    }
+
+    1
+}
+
+unsafe extern "C" fn video_lock_cb(
+    opaque: *mut c_void,
+    planes: *mut *mut c_void,
+) -> *mut c_void {
+    let ctx = &mut *(opaque as *mut VideoContext);
+    *planes = ctx.frame_buffer.as_mut_ptr() as *mut c_void;
+    std::ptr::null_mut()
+}
+
+unsafe extern "C" fn video_unlock_cb(
+    _opaque: *mut c_void,
+    _picture: *mut c_void,
+    _planes: *mut *mut c_void,
+) {}
+
+unsafe extern "C" fn video_display_cb(
+    opaque: *mut c_void,
+    _picture: *mut c_void,
+) {
+    let ctx = &mut *(opaque as *mut VideoContext);
+    let time_ms = libvlc_media_player_get_time(ctx.player_raw);
+    let time_secs = (time_ms as f64) / 1000.0;
+    
+    let payload = VlcFramePayload {
+        pixels: ctx.frame_buffer.clone(),
+        width: ctx.width,
+        height: ctx.height,
+        time_secs,
+    };
+    let _ = ctx.app_handle.emit("vlc-frame", payload);
+}
+
+#[tauri::command]
+fn vlc_open_file(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, VlcState>,
+    path: String,
+) -> Result<f64, String> {
+    {
+        let mut guard = state.0.lock().unwrap();
+        if let Some(old_player) = guard.take() {
+            old_player.player.stop();
+        }
+    }
+
+    let instance = Instance::new().ok_or("Failed to create VLC instance")?;
+    let player = MediaPlayer::new(&instance).ok_or("Failed to create VLC MediaPlayer")?;
+    let media = Media::new_path(&instance, &path).ok_or("Failed to load media path")?;
+    player.set_media(&media);
+
+    let player_raw = player.raw() as *mut c_void;
+
+    let mut context = Box::new(VideoContext {
+        app_handle: app_handle.clone(),
+        player_raw,
+        frame_buffer: Vec::new(),
+        width: 0,
+        height: 0,
+    });
+
+    unsafe {
+        libvlc_video_set_callbacks(
+            player_raw,
+            Some(video_lock_cb),
+            Some(video_unlock_cb),
+            Some(video_display_cb),
+            context.as_mut() as *mut VideoContext as *mut c_void,
+        );
+        libvlc_video_set_format_callbacks(
+            player_raw,
+            Some(video_setup_cb),
+            None,
+        );
+    }
+
+    player.play();
+    
+    let mut duration_ms = 0;
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        duration_ms = unsafe { libvlc_media_player_get_length(player_raw) };
+        if duration_ms > 0 {
+            break;
+        }
+    }
+
+    player.pause();
+
+    let duration_secs = (duration_ms as f64) / 1000.0;
+
+    let vlc_player = VlcPlayer {
+        player,
+        instance,
+        current_path: Some(path),
+        context,
+    };
+
+    let mut guard = state.0.lock().unwrap();
+    *guard = Some(vlc_player);
+
+    Ok(duration_secs)
+}
+
+#[tauri::command]
+fn vlc_play(state: tauri::State<'_, VlcState>) -> Result<(), String> {
+    let guard = state.0.lock().unwrap();
+    if let Some(ref vlc_player) = *guard {
+        vlc_player.player.play();
+        Ok(())
+    } else {
+        Err("VLC Player is not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+fn vlc_pause(state: tauri::State<'_, VlcState>) -> Result<(), String> {
+    let guard = state.0.lock().unwrap();
+    if let Some(ref vlc_player) = *guard {
+        vlc_player.player.pause();
+        Ok(())
+    } else {
+        Err("VLC Player is not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+fn vlc_seek(state: tauri::State<'_, VlcState>, time_secs: f64) -> Result<(), String> {
+    let guard = state.0.lock().unwrap();
+    if let Some(ref vlc_player) = *guard {
+        let time_ms = (time_secs * 1000.0) as i64;
+        vlc_player.player.set_time(time_ms);
+        Ok(())
+    } else {
+        Err("VLC Player is not initialized".to_string())
+    }
+}
+
 
 #[tauri::command]
 fn get_startup_file() -> Option<String> {
@@ -908,6 +1153,7 @@ fn save_vtt_file(video_path: String, vtt_text: String) -> Result<(), String> {
 pub fn run() {
   tauri::Builder::default()
     .manage(FfmpegState(Mutex::new(None)))
+    .manage(VlcState(Arc::new(Mutex::new(None))))
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
@@ -932,7 +1178,11 @@ pub fn run() {
         join_and_compress_videos,
         get_waveform_data,
         generate_timeline_thumbnails,
-        save_vtt_file
+        save_vtt_file,
+        vlc_open_file,
+        vlc_play,
+        vlc_pause,
+        vlc_seek
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
