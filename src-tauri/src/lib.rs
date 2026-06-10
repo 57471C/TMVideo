@@ -169,15 +169,26 @@ fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Option<Vec<
         if vlc_player.context.is_null() {
             return Ok(None);
         }
-        let pixels = unsafe { &*vlc_player.context }.frame_buffer.clone();
+        let context = unsafe { &*vlc_player.context };
+        let pixels = context.frame_buffer.clone();
         if pixels.is_empty() {
             return Ok(None);
         }
-        let mut processed = pixels;
-        for chunk in processed.chunks_exact_mut(4) {
+        
+        let time_ms = unsafe { libvlc_media_player_get_time(vlc_player.player.raw() as *mut c_void) };
+        let time_secs = (time_ms as f64) / 1000.0;
+
+        let mut result = Vec::with_capacity(16 + pixels.len());
+        result.extend_from_slice(&time_secs.to_le_bytes());
+        result.extend_from_slice(&context.width.to_le_bytes());
+        result.extend_from_slice(&context.height.to_le_bytes());
+        result.extend_from_slice(&pixels);
+
+        for chunk in result[16..].chunks_exact_mut(4) {
             chunk.swap(0, 2);
         }
-        Ok(Some(processed))
+
+        Ok(Some(result))
     } else {
         Ok(None)
     }
@@ -257,36 +268,45 @@ fn vlc_open_file(
 
 #[tauri::command]
 fn vlc_play(state: tauri::State<'_, VlcState>) -> Result<(), String> {
-    let guard = state.0.lock().unwrap();
-    if let Some(ref vlc_player) = *guard {
-        vlc_player.player.play();
-        Ok(())
-    } else {
-        Err("VLC Player is not initialized".to_string())
+    for _ in 0..10 {
+        if let Ok(guard) = state.0.try_lock() {
+            if let Some(ref vlc_player) = *guard {
+                let _ = vlc_player.player.play();
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    Err("VLC Player lock contention".to_string())
 }
 
 #[tauri::command]
 fn vlc_pause(state: tauri::State<'_, VlcState>) -> Result<(), String> {
-    let guard = state.0.lock().unwrap();
-    if let Some(ref vlc_player) = *guard {
-        vlc_player.player.pause();
-        Ok(())
-    } else {
-        Err("VLC Player is not initialized".to_string())
+    for _ in 0..10 {
+        if let Ok(guard) = state.0.try_lock() {
+            if let Some(ref vlc_player) = *guard {
+                let _ = vlc_player.player.pause();
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    Err("VLC Player lock contention".to_string())
 }
 
 #[tauri::command]
 fn vlc_seek(state: tauri::State<'_, VlcState>, time_secs: f64) -> Result<(), String> {
-    let guard = state.0.lock().unwrap();
-    if let Some(ref vlc_player) = *guard {
-        let time_ms = (time_secs * 1000.0) as i64;
-        vlc_player.player.set_time(time_ms);
-        Ok(())
-    } else {
-        Err("VLC Player is not initialized".to_string())
+    for _ in 0..10 {
+        if let Ok(guard) = state.0.try_lock() {
+            if let Some(ref vlc_player) = *guard {
+                let time_ms = (time_secs * 1000.0) as i64;
+                vlc_player.player.set_time(time_ms);
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    Err("VLC Player lock contention".to_string())
 }
 
 

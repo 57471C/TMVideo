@@ -1136,8 +1136,8 @@ const initializePlayer = () => {
 
 		let isFetchingFrame = false;
 		let renderLoopActive = false;
-		let currentWidth = 0;
-		let currentHeight = 0;
+		let lastRenderTime = 0;
+		const targetFrameInterval = 33; // ~30 fps baseline
 
 		async function paintVlcFrameLoop() {
 			if (!window.vlcLoopActive) {
@@ -1149,17 +1149,38 @@ const initializePlayer = () => {
 				return;
 			}
 
+			const now = performance.now();
+			if (now - lastRenderTime < targetFrameInterval) {
+				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+				return;
+			}
+
 			isFetchingFrame = true;
 			try {
-				const frame = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
-				if (frame && currentWidth > 0 && currentHeight > 0) {
-					if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
-						canvas.width = currentWidth;
-						canvas.height = currentHeight;
+				const frameBuffer = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
+				if (frameBuffer && frameBuffer.length > 16) {
+					const view = new DataView(frameBuffer.buffer, frameBuffer.byteOffset, 16);
+					const timeSecs = view.getFloat64(0, true);
+					const width = view.getUint32(8, true);
+					const height = view.getUint32(12, true);
+
+					vlcTime = timeSecs;
+					player.dispatchEvent(new Event('timeupdate'));
+
+					const pixels = new Uint8ClampedArray(frameBuffer.buffer, frameBuffer.byteOffset + 16, frameBuffer.length - 16);
+
+					if (canvas.width !== width || canvas.height !== height) {
+						canvas.width = width;
+						canvas.height = height;
 					}
-					const imgData = ctx.createImageData(currentWidth, currentHeight);
-					imgData.data.set(new Uint8ClampedArray(frame));
+					const imgData = ctx.createImageData(width, height);
+					imgData.data.set(pixels);
 					ctx.putImageData(imgData, 0, 0);
+
+					lastRenderTime = now;
+				} else {
+					// Back off for 50ms if frame is not ready
+					await new Promise(r => setTimeout(r, 50));
 				}
 			} catch (err) {
 				console.error("Frame fetch failed:", err);
@@ -1186,15 +1207,6 @@ const initializePlayer = () => {
 				}
 			}
 		};
-
-		window.__TAURI__.event.listen('vlc-frame', (event) => {
-			if (!window.vlcLoopActive) return;
-			const { width, height, time_secs } = event.payload;
-			vlcTime = time_secs;
-			currentWidth = width;
-			currentHeight = height;
-			player.dispatchEvent(new Event('timeupdate'));
-		});
 	}
 
 	player.preservesPitch = true;
