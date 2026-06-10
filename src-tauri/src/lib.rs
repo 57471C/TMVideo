@@ -160,23 +160,28 @@ unsafe extern "C" fn video_display_cb(
 }
 
 #[tauri::command]
-fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Option<Vec<u8>>, String> {
+fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<tauri::ipc::Response, String> {
     let guard = match state.0.try_lock() {
         Ok(g) => g,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(tauri::ipc::Response::new(Vec::new())),
     };
     if let Some(ref vlc_player) = *guard {
         if vlc_player.context.is_null() {
-            return Ok(None);
+            return Ok(tauri::ipc::Response::new(Vec::new()));
         }
         let context = unsafe { &*vlc_player.context };
-        let pixels = context.frame_buffer.clone();
+        let mut pixels = context.frame_buffer.clone();
         if pixels.is_empty() {
-            return Ok(None);
+            return Ok(tauri::ipc::Response::new(Vec::new()));
         }
         
         let time_ms = unsafe { libvlc_media_player_get_time(vlc_player.player.raw() as *mut c_void) };
         let time_secs = (time_ms as f64) / 1000.0;
+
+        // Swap Red (Byte 0) and Blue (Byte 2) channels in place for RGBA compatibility
+        // for chunk in pixels.chunks_exact_mut(4) {
+        //     chunk.swap(0, 2);
+        // }
 
         let mut result = Vec::with_capacity(16 + pixels.len());
         result.extend_from_slice(&time_secs.to_le_bytes());
@@ -184,13 +189,9 @@ fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Option<Vec<
         result.extend_from_slice(&context.height.to_le_bytes());
         result.extend_from_slice(&pixels);
 
-        for chunk in result[16..].chunks_exact_mut(4) {
-            chunk.swap(0, 2);
-        }
-
-        Ok(Some(result))
+        Ok(tauri::ipc::Response::new(result))
     } else {
-        Ok(None)
+        Ok(tauri::ipc::Response::new(Vec::new()))
     }
 }
 

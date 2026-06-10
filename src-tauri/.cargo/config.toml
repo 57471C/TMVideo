@@ -1,0 +1,8 @@
+[build]
+rustflags = ["-C", "link-arg=advapi32.lib"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=advapi32.lib"]
+
+[env]
+VLC_LIB_DIR = "C:\\Program Files\\VideoLAN\\VLC"

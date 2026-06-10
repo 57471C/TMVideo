@@ -16,7 +16,7 @@
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
  */
-
+//localStorage.clear(); // Temporary Boot-Trap Breaker
 // 1. Global State Configuration & Element Cache Registries
 const appWindow =
 	window.__TAURI__?.window?.appWindow ||
@@ -1090,10 +1090,26 @@ const initializePlayer = () => {
 		window.vlcAnimationId = null;
 
 		player.play = async () => {
-			await window.__TAURI__.core.invoke("vlc_play");
+			try {
+				await window.__TAURI__.core.invoke("vlc_play");
+			} catch (e) {
+				if (typeof e === 'string' && e.includes("lock contention")) {
+					// Cleanly ignore lock contention
+				} else {
+					console.error("vlc_play failed:", e);
+				}
+			}
 		};
 		player.pause = async () => {
-			await window.__TAURI__.core.invoke("vlc_pause");
+			try {
+				await window.__TAURI__.core.invoke("vlc_pause");
+			} catch (e) {
+				if (typeof e === 'string' && e.includes("lock contention")) {
+					// Cleanly ignore lock contention
+				} else {
+					console.error("vlc_pause failed:", e);
+				}
+			}
 		};
 		player.load = async () => {
 			if (videoFilePath) {
@@ -1114,7 +1130,13 @@ const initializePlayer = () => {
 			},
 			set(val) {
 				vlcTime = val;
-				window.__TAURI__.core.invoke("vlc_seek", { timeSecs: val });
+				window.__TAURI__.core.invoke("vlc_seek", { timeSecs: val }).catch(e => {
+					if (typeof e === 'string' && e.includes("lock contention")) {
+						// Cleanly ignore lock contention
+					} else {
+						console.error("vlc_seek failed:", e);
+					}
+				});
 				player.dispatchEvent(new Event('seeking'));
 				player.dispatchEvent(new Event('timeupdate'));
 			},
@@ -1134,64 +1156,96 @@ const initializePlayer = () => {
 		const canvas = document.getElementById('video-render-canvas');
 		const ctx = canvas.getContext('2d');
 
-		let isFetchingFrame = false;
 		let renderLoopActive = false;
-		let lastRenderTime = 0;
-		const targetFrameInterval = 33; // ~30 fps baseline
+		let lastFrameTime = 0;
+		window.isFetchingFrame = false;
+		window.vlcLoopActive = true;
 
-		async function paintVlcFrameLoop() {
+		async function paintVlcFrameLoop(timestamp) {
 			if (!window.vlcLoopActive) {
 				renderLoopActive = false;
 				return;
 			}
-			if (isFetchingFrame) {
+			
+			// Performance Throttle: Limit to ~30 FPS to prevent IPC bridge flooding
+			if (timestamp - lastFrameTime < 33) {
 				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 				return;
 			}
-
-			const now = performance.now();
-			if (now - lastRenderTime < targetFrameInterval) {
+			
+			// Concurrency Gate: Prevent stacking unresolved frame requests
+			if (window.isFetchingFrame) {
 				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 				return;
 			}
-
-			isFetchingFrame = true;
+			
+			window.isFetchingFrame = true;
 			try {
-				const frameBuffer = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
-				if (frameBuffer && frameBuffer.length > 16) {
-					const view = new DataView(frameBuffer.buffer, frameBuffer.byteOffset, 16);
-					const timeSecs = view.getFloat64(0, true);
-					const width = view.getUint32(8, true);
-					const height = view.getUint32(12, true);
+				// Fetch raw frame array from Rust backend (resolves to Response shell)
+				const frame = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
+				lastFrameTime = timestamp;
+				
+				// If lock contention or uninitialized data returns a notice string, handle it as a soft skip
+				if (typeof frame === 'string' && frame.includes("contention")) {
+					return;
+				}
 
-					vlcTime = timeSecs;
-					player.dispatchEvent(new Event('timeupdate'));
+				if (frame) {
+					// Tauri v2 already unpacks the IPC payload into a typed array or buffer!
+					const frameBytes = new Uint8Array(frame.buffer || frame);
 
-					const pixels = new Uint8ClampedArray(frameBuffer.buffer, frameBuffer.byteOffset + 16, frameBuffer.length - 16);
+					if (frameBytes.length > 16) {
+						// Read metadata directly without DataView to prevent ArrayBuffer errors
+						const width = frameBytes[8] | (frameBytes[9] << 8) | (frameBytes[10] << 16) | (frameBytes[11] << 24);
+						const height = frameBytes[12] | (frameBytes[13] << 8) | (frameBytes[14] << 16) | (frameBytes[15] << 24);
 
-					if (canvas.width !== width || canvas.height !== height) {
-						canvas.width = width;
-						canvas.height = height;
+						const timeBytes = new Uint8Array(8);
+						for (let i = 0; i < 8; i++) timeBytes[i] = frameBytes[i];
+						const timeSecs = new Float64Array(timeBytes.buffer)[0];
+
+						vlcTime = timeSecs;
+						player.dispatchEvent(new Event('timeupdate'));
+
+						// The pixels start at index 16
+						const offset = (frameBytes.byteOffset || 0) + 16;
+						const pixelArray = new Uint8ClampedArray(frameBytes.buffer || frameBytes, offset, frameBytes.length - 16);
+						const canvas = document.getElementById('video-render-canvas');
+						if (canvas) {
+							const ctx = canvas.getContext('2d');
+							if (canvas.width !== width || canvas.height !== height) {
+								canvas.width = width;
+								canvas.height = height;
+								window.vlcImageData = ctx.createImageData(width, height);
+							}
+							if (!window.vlcImageData) {
+								window.vlcImageData = ctx.createImageData(width, height);
+							}
+							window.vlcImageData.data.set(pixelArray);
+							ctx.putImageData(window.vlcImageData, 0, 0);
+						}
 					}
-					const imgData = ctx.createImageData(width, height);
-					imgData.data.set(pixels);
-					ctx.putImageData(imgData, 0, 0);
-
-					lastRenderTime = now;
-				} else {
-					// Back off for 50ms if frame is not ready
-					await new Promise(r => setTimeout(r, 50));
 				}
 			} catch (err) {
-				console.error("Frame fetch failed:", err);
+				console.error("VLC Frame Loop tripped hard fuse. Shutting down loop:", err);
+				window.vlcLoopActive = false; // HARD SHUT DOWN
+				if (window.vlcAnimationId) {
+					cancelAnimationFrame(window.vlcAnimationId);
+				}
+				return;
 			} finally {
-				isFetchingFrame = false;
-				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+				window.isFetchingFrame = false;
 			}
+			
+			window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 		}
 
 		player.load = async () => {
 			if (videoFilePath) {
+				const canvas = document.getElementById('video-render-canvas');
+				if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+					console.warn("[VLC Player] Skipping load/loop start: Canvas is not ready in DOM.");
+					return;
+				}
 				try {
 					window.vlcLoopActive = true;
 					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
@@ -1501,18 +1555,23 @@ const initializePlayer = () => {
 	if (videoQueue && videoQueue.length > 0) {
 		const currentVideo = videoQueue[activeQueueIndex];
 		if (currentVideo?.videoFilePath) {
-			const isTauri = window.__TAURI__ !== undefined;
-			if (isTauri && window.__TAURI__.core?.convertFileSrc) {
-				const assetUrl = window.__TAURI__.core.convertFileSrc(
-					currentVideo.videoFilePath,
-				);
-				player.src = assetUrl;
-				player.preload = "auto";
-				player.load();
-				toggleVideoPlaceholder(false);
-				if (typeof window.loadSubtitleTrack === "function") {
-					window.loadSubtitleTrack(currentVideo.videoFilePath);
+			const canvas = document.getElementById('video-render-canvas');
+			if (canvas && canvas.width > 0 && canvas.height > 0) {
+				const isTauri = window.__TAURI__ !== undefined;
+				if (isTauri && window.__TAURI__.core?.convertFileSrc) {
+					const assetUrl = window.__TAURI__.core.convertFileSrc(
+						currentVideo.videoFilePath,
+					);
+					player.src = assetUrl;
+					player.preload = "auto";
+					player.load();
+					toggleVideoPlaceholder(false);
+					if (typeof window.loadSubtitleTrack === "function") {
+						window.loadSubtitleTrack(currentVideo.videoFilePath);
+					}
 				}
+			} else {
+				console.warn("[Boot System] Auto-load skipped: Canvas is not ready in DOM.");
 			}
 		}
 	}

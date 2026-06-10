@@ -16,6 +16,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-shell",
  "tokio",
+ "vlc-rs",
  "zip",
 ]
 
@@ -1995,6 +1996,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f02ab6bace2054fb888a3c16f990117b579d14a3088e472d63c6011fa185c9d3"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "libvlc-sys"
+version = "0.2.0"
+source = "git+https://code.videolan.org/videolan/vlc-rs.git#12a22eb8a436242dcbf951fc8286b5880e662dd0"
+dependencies = [
+ "libc",
+ "pkg-config",
+ "vswhom",
 ]
 
 [[package]]
@@ -4398,6 +4409,15 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vlc-rs"
+version = "0.3.0"
+source = "git+https://code.videolan.org/videolan/vlc-rs.git#12a22eb8a436242dcbf951fc8286b5880e662dd0"
+dependencies = [
+ "libc",
+ "libvlc-sys",
+]
 
 [[package]]
 name = "vswhom"
