@@ -100,6 +100,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Helpers for project data clearance and video loading
 window.clearAllPreviousProjectData = () => {
+	window.vlcLoopActive = false;
+	if (window.vlcAnimationId) {
+		cancelAnimationFrame(window.vlcAnimationId);
+		window.vlcAnimationId = null;
+	}
 	window.resetClosedCaptions();
 	if (player) {
 		player.pause();
@@ -1081,6 +1086,9 @@ const initializePlayer = () => {
 	let vlcDuration = 0;
 
 	if (window.__TAURI__) {
+		window.vlcLoopActive = false;
+		window.vlcAnimationId = null;
+
 		player.play = async () => {
 			await window.__TAURI__.core.invoke("vlc_play");
 		};
@@ -1090,6 +1098,7 @@ const initializePlayer = () => {
 		player.load = async () => {
 			if (videoFilePath) {
 				try {
+					window.vlcLoopActive = true;
 					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
 					vlcDuration = dur;
 					player.dispatchEvent(new Event('loadedmetadata'));
@@ -1129,6 +1138,10 @@ const initializePlayer = () => {
 		let renderLoopActive = false;
 
 		function renderLoop() {
+			if (!window.vlcLoopActive) {
+				renderLoopActive = false;
+				return;
+			}
 			if (!pendingFrame) {
 				renderLoopActive = false;
 				return;
@@ -1144,20 +1157,30 @@ const initializePlayer = () => {
 			imgData.data.set(new Uint8ClampedArray(pixels));
 			ctx.putImageData(imgData, 0, 0);
 
-			requestAnimationFrame(renderLoop);
+			if (window.vlcLoopActive) {
+				window.vlcAnimationId = requestAnimationFrame(renderLoop);
+			} else {
+				renderLoopActive = false;
+			}
 		}
 
 		window.__TAURI__.event.listen('vlc-frame', async (event) => {
+			if (!window.vlcLoopActive) return;
 			const { width, height, time_secs } = event.payload;
 			vlcTime = time_secs;
 			player.dispatchEvent(new Event('timeupdate'));
 
-			const pixels = await window.__TAURI__.core.invoke('vlc_get_latest_frame');
-			pendingFrame = { pixels, width, height };
+			try {
+				const pixels = await window.__TAURI__.core.invoke('vlc_get_latest_frame');
+				if (!pixels) return;
+				pendingFrame = { pixels, width, height };
 
-			if (!renderLoopActive) {
-				renderLoopActive = true;
-				requestAnimationFrame(renderLoop);
+				if (!renderLoopActive && window.vlcLoopActive) {
+					renderLoopActive = true;
+					window.vlcAnimationId = requestAnimationFrame(renderLoop);
+				}
+			} catch (e) {
+				console.error(e);
 			}
 		});
 	}

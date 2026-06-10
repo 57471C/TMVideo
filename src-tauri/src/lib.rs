@@ -146,17 +146,23 @@ unsafe extern "C" fn video_display_cb(
 }
 
 #[tauri::command]
-fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Vec<u8>, String> {
-    let guard = state.0.lock().unwrap();
+fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Option<Vec<u8>>, String> {
+    let guard = match state.0.try_lock() {
+        Ok(g) => g,
+        Err(_) => return Ok(None),
+    };
     if let Some(ref vlc_player) = *guard {
-        let mut pixels = vlc_player.context.frame_buffer.clone();
-        // Swap red and blue channels (BGRA -> RGBA)
-        for chunk in pixels.chunks_exact_mut(4) {
+        let pixels = vlc_player.context.frame_buffer.clone();
+        if pixels.is_empty() {
+            return Ok(None);
+        }
+        let mut processed = pixels;
+        for chunk in processed.chunks_exact_mut(4) {
             chunk.swap(0, 2);
         }
-        Ok(pixels)
+        Ok(Some(processed))
     } else {
-        Err("No active player".to_string())
+        Ok(None)
     }
 }
 
