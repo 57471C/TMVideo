@@ -1134,54 +1134,66 @@ const initializePlayer = () => {
 		const canvas = document.getElementById('video-render-canvas');
 		const ctx = canvas.getContext('2d');
 
-		let pendingFrame = null;
+		let isFetchingFrame = false;
 		let renderLoopActive = false;
+		let currentWidth = 0;
+		let currentHeight = 0;
 
-		function renderLoop() {
+		async function paintVlcFrameLoop() {
 			if (!window.vlcLoopActive) {
 				renderLoopActive = false;
 				return;
 			}
-			if (!pendingFrame) {
-				renderLoopActive = false;
+			if (isFetchingFrame) {
+				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 				return;
 			}
-			const { pixels, width, height } = pendingFrame;
-			pendingFrame = null;
 
-			if (canvas.width !== width || canvas.height !== height) {
-				canvas.width = width;
-				canvas.height = height;
-			}
-			const imgData = ctx.createImageData(width, height);
-			imgData.data.set(new Uint8ClampedArray(pixels));
-			ctx.putImageData(imgData, 0, 0);
-
-			if (window.vlcLoopActive) {
-				window.vlcAnimationId = requestAnimationFrame(renderLoop);
-			} else {
-				renderLoopActive = false;
+			isFetchingFrame = true;
+			try {
+				const frame = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
+				if (frame && currentWidth > 0 && currentHeight > 0) {
+					if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+						canvas.width = currentWidth;
+						canvas.height = currentHeight;
+					}
+					const imgData = ctx.createImageData(currentWidth, currentHeight);
+					imgData.data.set(new Uint8ClampedArray(frame));
+					ctx.putImageData(imgData, 0, 0);
+				}
+			} catch (err) {
+				console.error("Frame fetch failed:", err);
+			} finally {
+				isFetchingFrame = false;
+				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 			}
 		}
 
-		window.__TAURI__.event.listen('vlc-frame', async (event) => {
+		player.load = async () => {
+			if (videoFilePath) {
+				try {
+					window.vlcLoopActive = true;
+					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
+					vlcDuration = dur;
+					player.dispatchEvent(new Event('loadedmetadata'));
+
+					if (!renderLoopActive) {
+						renderLoopActive = true;
+						window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+					}
+				} catch (e) {
+					console.error("VLC failed to open file:", e);
+				}
+			}
+		};
+
+		window.__TAURI__.event.listen('vlc-frame', (event) => {
 			if (!window.vlcLoopActive) return;
 			const { width, height, time_secs } = event.payload;
 			vlcTime = time_secs;
+			currentWidth = width;
+			currentHeight = height;
 			player.dispatchEvent(new Event('timeupdate'));
-
-			try {
-				const pixels = await window.__TAURI__.core.invoke('vlc_get_latest_frame');
-				if (!pixels) return;
-				pendingFrame = { pixels, width, height };
-
-				if (!renderLoopActive && window.vlcLoopActive) {
-					renderLoopActive = true;
-					window.vlcAnimationId = requestAnimationFrame(renderLoop);
-				}
-			} catch (e) {
-				console.error(e);
-			}
 		});
 	}
 

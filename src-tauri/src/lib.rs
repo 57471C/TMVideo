@@ -23,7 +23,15 @@ pub struct VlcPlayer {
     player: MediaPlayer,
     instance: Instance,
     current_path: Option<String>,
-    context: Box<VideoContext>,
+    context: *mut VideoContext,
+}
+
+impl Drop for VlcPlayer {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = Box::from_raw(self.context);
+        }
+    }
 }
 
 unsafe impl Send for VlcPlayer {}
@@ -91,6 +99,9 @@ unsafe extern "C" fn video_setup_cb(
     pitches: *mut c_uint,
     lines: *mut c_uint,
 ) -> c_uint {
+    if opaque.is_null() || (*opaque).is_null() {
+        return 0;
+    }
     let chroma_slice = std::slice::from_raw_parts_mut(chroma, 4);
     chroma_slice[0] = b'R' as c_char;
     chroma_slice[1] = b'G' as c_char;
@@ -103,13 +114,10 @@ unsafe extern "C" fn video_setup_cb(
     *pitches = w * 4;
     *lines = h;
 
-    let ctx_ptr = *opaque as *mut VideoContext;
-    if !ctx_ptr.is_null() {
-        let ctx = &mut *ctx_ptr;
-        ctx.width = w;
-        ctx.height = h;
-        ctx.frame_buffer = vec![0u8; (w * h * 4) as usize];
-    }
+    let ctx = &mut *(*opaque as *mut VideoContext);
+    ctx.width = w;
+    ctx.height = h;
+    ctx.frame_buffer = vec![0u8; (w * h * 4) as usize];
 
     1
 }
@@ -118,6 +126,9 @@ unsafe extern "C" fn video_lock_cb(
     opaque: *mut c_void,
     planes: *mut *mut c_void,
 ) -> *mut c_void {
+    if opaque.is_null() {
+        return std::ptr::null_mut();
+    }
     let ctx = &mut *(opaque as *mut VideoContext);
     *planes = ctx.frame_buffer.as_mut_ptr() as *mut c_void;
     std::ptr::null_mut()
@@ -133,6 +144,9 @@ unsafe extern "C" fn video_display_cb(
     opaque: *mut c_void,
     _picture: *mut c_void,
 ) {
+    if opaque.is_null() {
+        return;
+    }
     let ctx = &mut *(opaque as *mut VideoContext);
     let time_ms = libvlc_media_player_get_time(ctx.player_raw);
     let time_secs = (time_ms as f64) / 1000.0;
@@ -152,7 +166,10 @@ fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Option<Vec<
         Err(_) => return Ok(None),
     };
     if let Some(ref vlc_player) = *guard {
-        let pixels = vlc_player.context.frame_buffer.clone();
+        if vlc_player.context.is_null() {
+            return Ok(None);
+        }
+        let pixels = unsafe { &*vlc_player.context }.frame_buffer.clone();
         if pixels.is_empty() {
             return Ok(None);
         }
@@ -186,13 +203,14 @@ fn vlc_open_file(
 
     let player_raw = player.raw() as *mut c_void;
 
-    let mut context = Box::new(VideoContext {
+    let context = Box::new(VideoContext {
         app_handle: app_handle.clone(),
         player_raw,
         frame_buffer: Vec::new(),
         width: 0,
         height: 0,
     });
+    let context_raw = Box::into_raw(context);
 
     unsafe {
         libvlc_video_set_callbacks(
@@ -200,7 +218,7 @@ fn vlc_open_file(
             Some(video_lock_cb),
             Some(video_unlock_cb),
             Some(video_display_cb),
-            context.as_mut() as *mut VideoContext as *mut c_void,
+            context_raw as *mut c_void,
         );
         libvlc_video_set_format_callbacks(
             player_raw,
@@ -209,7 +227,7 @@ fn vlc_open_file(
         );
     }
 
-    player.play();
+    let _ = player.play();
     
     let mut duration_ms = 0;
     for _ in 0..30 {
@@ -228,7 +246,7 @@ fn vlc_open_file(
         player,
         instance,
         current_path: Some(path),
-        context,
+        context: context_raw,
     };
 
     let mut guard = state.0.lock().unwrap();
