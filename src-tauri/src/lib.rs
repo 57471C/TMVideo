@@ -36,7 +36,6 @@ pub struct VlcState(pub Arc<Mutex<Option<VlcPlayer>>>);
 
 #[derive(Clone, serde::Serialize)]
 struct VlcFramePayload {
-    pixels: Vec<u8>,
     width: u32,
     height: u32,
     time_secs: f64,
@@ -94,9 +93,9 @@ unsafe extern "C" fn video_setup_cb(
 ) -> c_uint {
     let chroma_slice = std::slice::from_raw_parts_mut(chroma, 4);
     chroma_slice[0] = b'R' as c_char;
-    chroma_slice[1] = b'V' as c_char;
-    chroma_slice[2] = b'3' as c_char;
-    chroma_slice[3] = b'2' as c_char;
+    chroma_slice[1] = b'G' as c_char;
+    chroma_slice[2] = b'B' as c_char;
+    chroma_slice[3] = b'A' as c_char;
 
     let w = *width;
     let h = *height;
@@ -139,12 +138,26 @@ unsafe extern "C" fn video_display_cb(
     let time_secs = (time_ms as f64) / 1000.0;
     
     let payload = VlcFramePayload {
-        pixels: ctx.frame_buffer.clone(),
         width: ctx.width,
         height: ctx.height,
         time_secs,
     };
     let _ = ctx.app_handle.emit("vlc-frame", payload);
+}
+
+#[tauri::command]
+fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<Vec<u8>, String> {
+    let guard = state.0.lock().unwrap();
+    if let Some(ref vlc_player) = *guard {
+        let mut pixels = vlc_player.context.frame_buffer.clone();
+        // Swap red and blue channels (BGRA -> RGBA)
+        for chunk in pixels.chunks_exact_mut(4) {
+            chunk.swap(0, 2);
+        }
+        Ok(pixels)
+    } else {
+        Err("No active player".to_string())
+    }
 }
 
 #[tauri::command]
@@ -1182,7 +1195,8 @@ pub fn run() {
         vlc_open_file,
         vlc_play,
         vlc_pause,
-        vlc_seek
+        vlc_seek,
+        vlc_get_latest_frame
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

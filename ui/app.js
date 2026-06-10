@@ -1125,10 +1125,16 @@ const initializePlayer = () => {
 		const canvas = document.getElementById('video-render-canvas');
 		const ctx = canvas.getContext('2d');
 
-		window.__TAURI__.event.listen('vlc-frame', (event) => {
-			const { pixels, width, height, time_secs } = event.payload;
-			vlcTime = time_secs;
-			player.dispatchEvent(new Event('timeupdate'));
+		let pendingFrame = null;
+		let renderLoopActive = false;
+
+		function renderLoop() {
+			if (!pendingFrame) {
+				renderLoopActive = false;
+				return;
+			}
+			const { pixels, width, height } = pendingFrame;
+			pendingFrame = null;
 
 			if (canvas.width !== width || canvas.height !== height) {
 				canvas.width = width;
@@ -1137,6 +1143,22 @@ const initializePlayer = () => {
 			const imgData = ctx.createImageData(width, height);
 			imgData.data.set(new Uint8ClampedArray(pixels));
 			ctx.putImageData(imgData, 0, 0);
+
+			requestAnimationFrame(renderLoop);
+		}
+
+		window.__TAURI__.event.listen('vlc-frame', async (event) => {
+			const { width, height, time_secs } = event.payload;
+			vlcTime = time_secs;
+			player.dispatchEvent(new Event('timeupdate'));
+
+			const pixels = await window.__TAURI__.core.invoke('vlc_get_latest_frame');
+			pendingFrame = { pixels, width, height };
+
+			if (!renderLoopActive) {
+				renderLoopActive = true;
+				requestAnimationFrame(renderLoop);
+			}
 		});
 	}
 
