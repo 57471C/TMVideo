@@ -23,24 +23,39 @@ if (typeof window.currentViewMode === 'undefined') {
   window.currentViewMode = 'normal'; // Valid options: 'normal', 'cinema', 'miniplayer'
 }
 
-// --- CRITICAL VIDEO RESOUCE PIPELINE DIAGNOSTIC INTERCEPTOR ---
+// --- BRUTE-FORCE AUTOMATED PATH SANITIZER & LOCAL PROTOCOL STREAM PROTOCOL ---
 (function() {
-  console.log("[Diagnostic Core] Instantiating global HTMLMediaElement interceptor...");
+  console.log("[Proxy Interceptor] Arming automated local asset protocol conversion matrices...");
   
-  // Cache the browser's native source descriptor methods
   const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
   
   if (originalSrcDescriptor) {
     Object.defineProperty(HTMLMediaElement.prototype, 'src', {
       set: function(assignedValue) {
-        console.warn("%chttps://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Video element source is being set to:", "background: #85144b; color: #fff; font-weight: bold; padding: 4px;", assignedValue);
+        let cleanUrlTarget = assignedValue;
         
-        // Print an explicit breakdown of the string layout to detect UNC prefixes or platform bugs
-        console.log("https://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Path length:", assignedValue ? assignedValue.length : 0);
-        console.log("https://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Begins with asset protocol?:", assignedValue ? assignedValue.startsWith("https://asset.localhost") : false);
+        // Intercept raw Windows local paths (e.g., strings beginning with C: or containing backslashes)
+        if (typeof assignedValue === 'string' && (assignedValue.match(/^[a-zA-Z]:\\/) || assignedValue.includes('\\'))) {
+          console.warn(`%c[Interceptor Match] Intercepted raw local path target assignment: "${assignedValue}"`, "background: #0074D9; color: #fff; padding: 2px; font-weight: bold;");
+          
+          // Strip native Windows extended-length path security anchors if present
+          let pathString = assignedValue.replace(/^\\\\?\\/, "");
+          
+          // Securely convert absolute disk paths to authenticated WebView streaming server resources
+          if (window.__TAURI__) {
+            const convertFn = (window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || 
+                              (window.__TAURI__.tauri && window.__TAURI__.tauri.convertFileSrc);
+            if (convertFn) {
+              cleanUrlTarget = convertFn(pathString);
+            } else {
+              cleanUrlTarget = `https://asset.localhost/${encodeURIComponent(pathString)}`;
+            }
+            console.log("[Interceptor Translate] Successfully transformed resource link to secure stream URL:", cleanUrlTarget);
+          }
+        }
         
-        // Hand control back to the native browser media engine to continue loading
-        originalSrcDescriptor.set.call(this, assignedValue);
+        // Pass the fully valid protocol stream URL down to the browser media rendering engine
+        originalSrcDescriptor.set.call(this, cleanUrlTarget);
       },
       get: function() {
         return originalSrcDescriptor.get.call(this);
@@ -48,9 +63,7 @@ if (typeof window.currentViewMode === 'undefined') {
       configurable: true,
       enumerable: true
     });
-    console.log("[Diagnostic Core] Interceptor successfully armed. Awaiting video resource assignments...");
-  } else {
-    console.error("[Diagnostic Core] Failed to map HTMLMediaElement prototype descriptors.");
+    console.log("[Proxy Interceptor] Interception matrix armed successfully.");
   }
 })();
 
@@ -1123,17 +1136,17 @@ window.cycleViewMode = async (targetMode) => {
 		if (appWindow) {
 			try {
 				console.log(
-					"[View System] Shifting to Miniplayer: Scaling down to bounded layout metrics...",
+					"[View System] Miniplayer Mode Selected: Stripping window maximization and shrinking frame bounds...",
 				);
-				await appWindow.unmaximize();
+				await appWindow.unmaximize(); // Restores from fullscreen scales safely before updating dimensions
 				await appWindow.setSize({
 					type: "Physical",
-					width: 580, // Slick, compact layout size
-					height: 420, // Includes 40px buffer safety allowance for tracking bars and speed rows
+					width: 580, // Compact width dimensions
+					height: 440, // Sits comfortable height parameters including timeline speed slider row real estate
 				});
 			} catch (err) {
 				console.error(
-					"[View System] OS Window layout resize operation faulted:",
+					"[View System] Asynchronous window transformation command failed:",
 					err,
 				);
 			}
@@ -1163,12 +1176,12 @@ window.cycleViewMode = async (targetMode) => {
 		if (appWindow) {
 			try {
 				console.log(
-					"[View System] Shifting to Normal: Maximizing main interface desktop grid...",
+					"[View System] Normal Mode Selected: Maximizing application dashboard container...",
 				);
-				await appWindow.maximize();
+				await appWindow.maximize(); // Dynamic native window expansion
 			} catch (err) {
 				console.error(
-					"[View System] OS Window layout resize operation faulted:",
+					"[View System] Asynchronous window transformation command failed:",
 					err,
 				);
 			}

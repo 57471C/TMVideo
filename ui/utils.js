@@ -25,6 +25,19 @@ const sanitizeFilename = (name) => {
 const toConsole = (message, value, debuggin = 1) => {
 	if (debuggin === 1) {
 		console.log(`${message}:`, value);
+
+		// If the message contains an error or failure signature, force a stack trace map
+		if (
+			typeof message === "string" &&
+			(message.toLowerCase().includes("error") ||
+				message.toLowerCase().includes("fail"))
+		) {
+			console.warn(
+				`%c[Trace Anchor] Unmasking true source for block: "${message}"`,
+				"color: #ff0044; font-weight: bold;",
+			);
+			console.trace(); // Prints the absolute file path and precise line number that invoked this log
+		}
 	}
 };
 
