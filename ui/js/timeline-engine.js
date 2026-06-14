@@ -148,7 +148,7 @@ const setupVideoTrack = () => {
 	}
 };
 
-const drawCustomAudioWaveform = () => {
+const renderAudioWaveformCanvas = () => {
 	const audioTrack = document.getElementById("timeline-audio-track");
 	if (!audioTrack) return;
 	audioTrack.innerHTML = "";
@@ -317,5 +317,5 @@ const paintTimelineMarkersAndShading = () => {
 window.syncTimelinePlayheadSmoothly = syncTimelinePlayheadSmoothly;
 window.paintTimelineRuler = paintTimelineRuler;
 window.setupVideoTrack = setupVideoTrack;
-window.drawCustomAudioWaveform = drawCustomAudioWaveform;
+window.renderAudioWaveformCanvas = renderAudioWaveformCanvas;
 window.paintTimelineMarkersAndShading = paintTimelineMarkersAndShading;

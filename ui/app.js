@@ -55,7 +55,7 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 window.currentWaveformDataPath = null;
-window.peaksInstance = null;
+window.waveformTrackData = null;
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -156,110 +156,169 @@ window.clearAllPreviousProjectData = () => {
 	if (typeof updateSliderTicks === "function") updateSliderTicks();
 };
 
-window.loadVideo = async (filePath) => {
-	try {
-		if (!filePath || filePath.trim() === "") return;
+window.loadVideo = async (incomingVideoPath) => {
+	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
+		console.error(
+			"[Loader Debug] Rejecting load request: Path string is blank.",
+		);
+		return;
+	}
 
-		let resolvedPath = filePath;
-		const optimizationOverlayNode =
-			document.getElementById("optimizingOverlay");
+	console.log(
+		"[Loader Debug] Phase 1: Ingestion initiated for absolute path:",
+		incomingVideoPath,
+	);
+	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
+	let resolvedPlaybackPath = incomingVideoPath;
 
-		if (window.__TAURI__) {
-			try {
-				if (optimizationOverlayNode) {
-					optimizationOverlayNode.classList.remove("hidden");
-					void optimizationOverlayNode.offsetWidth; // Force a synchronous layout repaint
-					optimizationOverlayNode.classList.remove("opacity-0");
-					optimizationOverlayNode.classList.add("opacity-100", "flex");
-				}
+	if (window.__TAURI__) {
+		try {
+			// Reveal the fullscreen progress dimming container
+			if (optimizationOverlayNode) {
+				optimizationOverlayNode.classList.remove("hidden");
+				void optimizationOverlayNode.offsetWidth; // Forces layout engine repaint
+				optimizationOverlayNode.classList.remove("opacity-0");
+				optimizationOverlayNode.classList.add("opacity-100", "flex");
+			}
 
-				console.log(
-					"[Ingest System] Pre-verifying video codec specifications for target asset path:",
-					filePath,
+			console.log(
+				"[Loader Debug] Phase 2: Dispatching path down to Rust invoke channels...",
+			);
+
+			// Fire invocation and trace if the promise stays stalled hanging
+			resolvedPlaybackPath = await window.__TAURI__.core.invoke(
+				"verify_and_prepare_video",
+				{
+					videoPath: incomingVideoPath,
+				},
+			);
+
+			console.log(
+				"[Loader Debug] Phase 3: Rust promise resolved safely. Path mapped to:",
+				resolvedPlaybackPath,
+			);
+		} catch (pipelineFaultError) {
+			console.error(
+				"[Loader Debug] CRITICAL: Codec preparation command crashed:",
+				pipelineFaultError,
+			);
+			if (typeof showToast === "function") {
+				showToast(
+					"Asset pre-verification failed; attempting direct stream...",
+					"error",
 				);
-				resolvedPath = await window.__TAURI__.core.invoke(
-					"verify_and_prepare_video",
-					{ videoPath: filePath },
-				);
-				console.log(
-					"[Ingest System] Video resource reference mapped safely to:",
-					resolvedPath,
-				);
-			} catch (pipelineFaultError) {
-				console.error(
-					"[Ingest System] Codec preparation pipeline threw an exception:",
-					pipelineFaultError,
-				);
-				if (typeof showToast === "function") {
-					showToast(
-						"Optimization failed; falling back to original media path profile",
-						"warn",
-					);
-				}
-			} finally {
-				if (optimizationOverlayNode) {
-					optimizationOverlayNode.classList.remove("opacity-100");
-					optimizationOverlayNode.classList.add("opacity-0");
-					setTimeout(() => {
-						optimizationOverlayNode.classList.add("hidden");
-						optimizationOverlayNode.classList.remove("flex");
-					}, 300);
-				}
+			}
+		} finally {
+			if (optimizationOverlayNode) {
+				optimizationOverlayNode.classList.remove("opacity-100");
+				optimizationOverlayNode.classList.add("opacity-0");
+				setTimeout(() => {
+					optimizationOverlayNode.classList.add("hidden");
+					optimizationOverlayNode.classList.remove("flex");
+				}, 300);
 			}
 		}
-
-		const extractedFileName = resolvedPath.split(/[/\\]/).pop();
-		videoFileName = extractedFileName;
-		videoFilePath = resolvedPath;
-
-		if (!videoQueue || videoQueue.length === 0) {
-			videoQueue = [
-				{
-					videoId: 1,
-					videoName: "Video 1",
-					videoFileName: "",
-					videoFilePath: "",
-					processStartTime: 0,
-					processEndTime: 0,
-					appState: { markers: [] },
-				},
-			];
-		}
-		activeQueueIndex = 0;
-
-		videoQueue[0].videoFileName = videoFileName;
-		videoQueue[0].videoFilePath = videoFilePath;
-		videoQueue[0].videoName = videoFileName;
-
-		if (window.__TAURI__) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-		} else {
-			player.src = videoFilePath;
-		}
-		player.preload = "auto";
-		player.load();
-		toggleVideoPlaceholder(false);
-		if (typeof window.loadSubtitleTrack === "function") {
-			window.loadSubtitleTrack(videoFilePath);
-		}
-
-		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
-		if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
-		if (typeof updateMarkersList === "function") updateMarkersList();
-		saveLocalState();
-		if (typeof updateSliderTicks === "function") updateSliderTicks();
-
-		if (typeof enableMiniPlayerMode === "function") {
-			await enableMiniPlayerMode();
-		}
-
-		toConsole("Auto-loaded video from launch argument", filePath, debuggin);
-		showToast("Video loaded.", "success");
-	} catch (e) {
-		toConsole("Error auto-loading video file", e, debuggin);
-		showToast("Failed to load video file.", "error");
 	}
+
+	// 3. SECURE TAURI ASSET PROTOCOL CONVERSION CODES
+	// Select the core media element viewport container
+	const videoElement =
+		document.querySelector("video") ||
+		document.getElementById("video-player") ||
+		player;
+	if (!videoElement) {
+		console.error(
+			"[Loader Debug] CRITICAL FAILURE: HTML5 <video> element container was not located in the DOM tree!",
+		);
+		return;
+	}
+
+	// Convert the file path into an authenticated local server link format
+	let finalMediaUrlSrc = resolvedPlaybackPath;
+	if (window.__TAURI__) {
+		if (window.__TAURI__.core?.convertFileSrc) {
+			finalMediaUrlSrc =
+				window.__TAURI__.core.convertFileSrc(resolvedPlaybackPath);
+		} else if (window.__TAURI__.tauri?.convertFileSrc) {
+			finalMediaUrlSrc =
+				window.__TAURI__.tauri.convertFileSrc(resolvedPlaybackPath);
+		} else {
+			finalMediaUrlSrc = `https://asset.localhost/${encodeURIComponent(resolvedPlaybackPath)}`;
+		}
+	}
+
+	console.log(
+		"[Loader Debug] Phase 4: Setting final converted player src URL to:",
+		finalMediaUrlSrc,
+	);
+
+	// Bind references cleanly inside global project track memory models
+	const extractedFileName = resolvedPlaybackPath.split(/[/\\]/).pop();
+	videoFileName = extractedFileName;
+	videoFilePath = resolvedPlaybackPath;
+
+	if (!videoQueue || videoQueue.length === 0) {
+		videoQueue = [
+			{
+				videoId: 1,
+				videoName: "Video 1",
+				videoFileName: "",
+				videoFilePath: "",
+				processStartTime: 0,
+				processEndTime: 0,
+				appState: { markers: [] },
+			},
+		];
+	}
+	activeQueueIndex = 0;
+
+	videoQueue[0].videoFileName = videoFileName;
+	videoQueue[0].videoFilePath = videoFilePath;
+	videoQueue[0].videoName = videoFileName;
+
+	if (typeof currentVideo !== "undefined" && currentVideo) {
+		currentVideo.videoFilePath = resolvedPlaybackPath; // Keeps records mapping pure
+	}
+
+	// Mount listeners directly to the video element node to catch hidden errors
+	videoElement.onerror = (_e) => {
+		console.error(
+			"[Loader Debug] WebView Multimedia Engine rejected source path stream!",
+			videoElement.error,
+		);
+	};
+
+	videoElement.onloadstart = () => {
+		console.log(
+			"[Loader Debug] Success! WebView media engine acknowledged resource ingestion buffer loop start.",
+		);
+	};
+
+	// Assign the source and force the video block layout load sequence
+	videoElement.src = finalMediaUrlSrc;
+	videoElement.preload = "auto";
+	videoElement.load();
+	toggleVideoPlaceholder(false);
+	if (typeof window.loadSubtitleTrack === "function") {
+		window.loadSubtitleTrack(videoFilePath);
+	}
+
+	if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
+	if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
+	if (typeof updateMarkersList === "function") updateMarkersList();
+	saveLocalState();
+	if (typeof updateSliderTicks === "function") updateSliderTicks();
+
+	if (typeof enableMiniPlayerMode === "function") {
+		await enableMiniPlayerMode();
+	}
+
+	toConsole(
+		"Auto-loaded video from launch argument",
+		incomingVideoPath,
+		debuggin,
+	);
+	showToast("Video loaded.", "success");
 };
 
 window.initializeLaunchArgumentHandler = async () => {
@@ -409,13 +468,15 @@ window.resetClosedCaptions = () => {
 	window.currentCaptions = [];
 	window.captionsVisible = true;
 
-	if (window.peaksInstance) {
+	if (window.waveformTrackData) {
 		try {
-			window.peaksInstance.destroy();
+			if (typeof window.waveformTrackData.destroy === "function") {
+				window.waveformTrackData.destroy();
+			}
 		} catch (e) {
-			console.error("Error destroying peaksInstance:", e);
+			console.error("Error destroying waveformTrackData:", e);
 		}
-		window.peaksInstance = null;
+		window.waveformTrackData = null;
 	}
 	window.currentWaveformDataPath = null;
 	const peaksContainer = document.getElementById("peaks-timeline-wrapper");
@@ -611,7 +672,7 @@ window.loadWaveformTimeline = async () => {
 		// Trigger ruler, video, and audio track rendering
 		window.paintTimelineRuler(duration);
 		window.setupVideoTrack();
-		window.drawCustomAudioWaveform();
+		window.renderAudioWaveformCanvas();
 		if (typeof window.paintTimelineMarkersAndShading === "function") {
 			window.paintTimelineMarkersAndShading();
 		}
