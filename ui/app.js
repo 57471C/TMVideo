@@ -1517,11 +1517,31 @@ const initializePlayer = () => {
 			window.playheadAnimationId = null;
 		}
 	});
-	player.addEventListener("error", () => {
-		toConsole("Video load error", "Failed to load video from URL", debuggin);
-		alert(
-			"Failed to load the video from the provided URL. Please click the video placeholder to select the video file manually.",
+	player.addEventListener("error", (videoElementLoadError) => {
+		const failedUrlContext =
+			typeof videoFilePath !== "undefined" && videoFilePath
+				? videoFilePath
+				: player.src || "Unknown Path Variable";
+
+		console.error(
+			"%c[CRITICAL RESOURCE FAILURE] Video Pipeline Stopped!",
+			"background: #ff0000; color: #fff; font-weight: bold; padding: 4px;",
 		);
+		console.warn(
+			`[CRITICAL RESOURCE FAILURE] Attempted to stream URL: "${failedUrlContext}"`,
+		);
+		console.log(
+			"[CRITICAL RESOURCE FAILURE] Underlying DOM Error Exception Object:",
+			videoElementLoadError,
+		);
+
+		if (typeof showToast === "function") {
+			showToast(`Failed to load video from URL: ${failedUrlContext}`, "error");
+		} else {
+			alert(
+				`Failed to load the video from the provided URL: ${failedUrlContext}. Please click the video placeholder to select the video file manually.`,
+			);
+		}
 		player.src = "";
 		player.removeAttribute("src");
 		toggleVideoPlaceholder(true);
@@ -4537,3 +4557,30 @@ window.triggerVttGeneration = async () => {
 		showToast("Failed to write subtitle track file to disk", "error");
 	}
 };
+
+// --- EMERGENCY BACKUP VIDEO SRC MONITOR ---
+setTimeout(() => {
+	const physicalVideoNode =
+		document.querySelector("video") || document.getElementById("video-player");
+	if (physicalVideoNode) {
+		console.log(
+			"[Monitor Core] Tracking physical video DOM node properties directly.",
+		);
+
+		// Catch native browser-level decoding failures immediately as they paint
+		physicalVideoNode.addEventListener("error", (_domErrorEvent) => {
+			console.error(
+				"%c[DOM HARDWARE ERROR] WebView2 Media Engine Rejected Source!",
+				"background: #d8000c; color: #fff; font-weight: bold; padding: 4px;",
+			);
+			console.warn(
+				"[DOM HARDWARE ERROR] Current active video.src value string is:",
+				physicalVideoNode.src,
+			);
+			console.log(
+				"[DOM HARDWARE ERROR] Native Error Code Spec:",
+				physicalVideoNode.error,
+			);
+		});
+	}
+}, 1500); // Waits for the initial master data rehydration layout pass to settle down
