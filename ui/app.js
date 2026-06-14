@@ -1119,26 +1119,23 @@ window.cycleViewMode = async (targetMode) => {
 			document.exitFullscreen().catch((e) => console.warn(e));
 		}
 
-		// Resize window to mini player dimensions + add 40px height buffer
+		// Resize window to mini player dimensions
 		if (appWindow) {
 			try {
-				await appWindow.unmaximize();
-				const size = new window.__TAURI__.window.LogicalSize(800, 600);
-				await appWindow.setSize(size);
-				await appWindow.center();
-
 				console.log(
-					"[View System] Adding 40px vertical buffer for mini-player sliders...",
+					"[View System] Shifting to Miniplayer: Scaling down to bounded layout metrics...",
 				);
-				const currentSize = await appWindow.innerSize();
-				const targetHeight = currentSize.height + 42;
+				await appWindow.unmaximize();
 				await appWindow.setSize({
 					type: "Physical",
-					width: currentSize.width,
-					height: targetHeight,
+					width: 580, // Slick, compact layout size
+					height: 420, // Includes 40px buffer safety allowance for tracking bars and speed rows
 				});
-			} catch (e) {
-				console.error("Error enabling mini player mode", e);
+			} catch (err) {
+				console.error(
+					"[View System] OS Window layout resize operation faulted:",
+					err,
+				);
 			}
 		}
 
@@ -1166,11 +1163,14 @@ window.cycleViewMode = async (targetMode) => {
 		if (appWindow) {
 			try {
 				console.log(
-					"[View System] Restoring standard structural scale dimensions...",
+					"[View System] Shifting to Normal: Maximizing main interface desktop grid...",
 				);
 				await appWindow.maximize();
-			} catch (e) {
-				console.error(e);
+			} catch (err) {
+				console.error(
+					"[View System] OS Window layout resize operation faulted:",
+					err,
+				);
 			}
 		}
 

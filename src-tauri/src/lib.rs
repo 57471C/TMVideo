@@ -970,6 +970,7 @@ async fn verify_and_prepare_video(
                 "-c:v", "libx264",
                 "-preset", "ultrafast",   // Minimizes disk-writing times for near-instant proxy conversion
                 "-crf", "23",            // Balances timeline parsing quality with low compute payloads
+                "-pix_fmt", "yuv420p",   // CRITICAL FIX: Downsamples 10-bit streams to 8-bit color space for web-engine compatibility
                 "-c:a", "aac",           // Stabilizes browser WebView audio engine playback loops
                 "-y",                    // Implicitly forces overwrite safety
                 &proxy_path_str
@@ -987,7 +988,9 @@ async fn verify_and_prepare_video(
     }
 
     // 5. Send path reference indicator strings back up to your JavaScript window
-    Ok(proxy_path_str)
+    let clean_proxy_path = proxy_path_str.replace("\\\\?\\", "");
+    println!("[Proxy Core] Returning sanitized path tracking string to frontend: {}", clean_proxy_path);
+    Ok(clean_proxy_path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
