@@ -46,6 +46,22 @@
   }
 })();
 
+// --- VIEWPORT LAYOUT COMPATIBILITY BRIDGE ---
+// Tracks our 3-state view carousel smoothly
+if (typeof window.currentViewMode === 'undefined') {
+  window.currentViewMode = 'normal'; 
+}
+
+// Intercepts any legacy references checking for 'isCinemaMode' and maps them to our active setup
+Object.defineProperty(window, 'isCinemaMode', {
+  get: () => window.currentViewMode === 'cinema',
+  set: (isCinema) => { 
+    window.currentViewMode = isCinema ? 'cinema' : 'normal'; 
+  },
+  configurable: true,
+  enumerable: true
+});
+
 // 1. Global State Configuration & Element Cache Registries
 const appWindow =
 	window.__TAURI__?.window?.appWindow ||
@@ -1215,7 +1231,9 @@ window.triggerPlaybackOverlay = (messageText) => {
 
 /** Resets the inactivity timer for hiding controls in cinema mode. */
 function resetCinemaIdleTimer() {
-	if (!isCinemaMode) return; // Only run in Cinema Mode
+	if (window.currentViewMode !== "cinema") {
+		return;
+	}
 
 	const controlBar = document.getElementById("mediaControlsContainer");
 	if (!controlBar) return;
