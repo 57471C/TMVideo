@@ -16,7 +16,7 @@
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
  */
-//localStorage.clear(); // Temporary Boot-Trap Breaker
+localStorage.clear(); // Temporary Boot-Trap Breaker
 // 1. Global State Configuration & Element Cache Registries
 const appWindow =
 	window.__TAURI__?.window?.appWindow ||
@@ -35,6 +35,7 @@ const openDialog = window.__TAURI__?.dialog?.open || null;
 let isCinemaMode = false;
 let cinemaIdleTimer = null;
 let player;
+let isLoopRunning = false;
 let loadVideoButton;
 let addMarkerBtn;
 let projectExportButton;
@@ -100,6 +101,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Helpers for project data clearance and video loading
 window.clearAllPreviousProjectData = () => {
+	isLoopRunning = false;
+	const canvas = document.getElementById("video-render-canvas");
+	if (canvas) {
+		const ctx = canvas.getContext("2d");
+		if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+		canvas.width = 0;
+		canvas.height = 0;
+	}
 	window.vlcLoopActive = false;
 	if (window.vlcAnimationId) {
 		cancelAnimationFrame(window.vlcAnimationId);
@@ -506,19 +515,50 @@ window.loadWaveformTimeline = async () => {
 	try {
 		const videoEl = document.querySelector("video") || player;
 		const duration = videoEl.duration || player.duration || 0;
-		const peakArray = await window.__TAURI__.core.invoke("get_waveform_data", {
-			videoPath: videoFilePath,
-			durationSeconds: duration,
-		});
+		if (
+			!videoFilePath ||
+			videoFilePath.trim() === "" ||
+			Number.isNaN(duration) ||
+			duration <= 0
+		) {
+			console.warn(
+				"Waveform data empty or invalid duration, bypassing timeline initialization.",
+			);
+			window.currentWaveformData = [];
+			return;
+		}
+		const peakArray = await window.__TAURI__.core
+			.invoke("get_waveform_data", {
+				videoPath: videoFilePath,
+				durationSeconds: duration,
+			})
+			.catch((err) => {
+				console.error("Failed to invoke get_waveform_data:", err);
+				return [];
+			});
 		if (!peakArray || peakArray.length === 0) {
 			console.warn("Waveform data empty, bypassing timeline initialization.");
 			window.currentWaveformData = [];
 			return;
 		}
 
+		// import { convertFileSrc } from '@tauri-apps/api/core';
+		let convertFileSrc = window.__TAURI__?.core?.convertFileSrc;
+		if (!convertFileSrc) {
+			try {
+				const apiCore = await import("@tauri-apps/api/core");
+				convertFileSrc = apiCore.convertFileSrc;
+			} catch (e) {
+				convertFileSrc = (path) => path;
+			}
+		}
+
+		// Convert the raw file path string into a safe local protocol URL
+		const safeAssetUrl = convertFileSrc(videoFilePath);
+
 		// Save the raw peak data sequence directly to the global window memory state
 		window.currentWaveformData = peakArray;
-		window.currentWaveformDataPath = videoFilePath;
+		window.currentWaveformDataPath = safeAssetUrl;
 
 		// Trigger ruler, video, and audio track rendering
 		window.paintTimelineRuler(duration);
@@ -648,6 +688,14 @@ window.joinAndCompressVideos = async (videoSegments) => {
 
 /** Processes and loads a new video file into the active project slot. */
 const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
+	isLoopRunning = false;
+	const canvas = document.getElementById("video-render-canvas");
+	if (canvas) {
+		const ctx = canvas.getContext("2d");
+		if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+		canvas.width = 0;
+		canvas.height = 0;
+	}
 	if (typeof window.resetVideoViewport === "function") {
 		window.resetVideoViewport(player);
 	}
@@ -1081,7 +1129,7 @@ function resetCinemaIdleTimer() {
 /** Initializes the primary video player events, controls, and UI state. */
 const initializePlayer = () => {
 	player = DOM.video;
-	
+
 	let vlcTime = 0;
 	let vlcDuration = 0;
 
@@ -1089,72 +1137,102 @@ const initializePlayer = () => {
 		window.vlcLoopActive = false;
 		window.vlcAnimationId = null;
 
+		let vlcIsPaused = true;
+		let vlcIsEnded = false;
+
 		player.play = async () => {
+			vlcIsPaused = false;
+			vlcIsEnded = false;
+			if (!window.vlcLoopActive) {
+				window.vlcLoopActive = true;
+				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+			}
 			try {
 				await window.__TAURI__.core.invoke("vlc_play");
 			} catch (e) {
-				if (typeof e === 'string' && e.includes("lock contention")) {
+				if (typeof e === "string" && e.includes("lock contention")) {
 					// Cleanly ignore lock contention
 				} else {
 					console.error("vlc_play failed:", e);
 				}
 			}
 		};
+
 		player.pause = async () => {
+			vlcIsPaused = true;
 			try {
 				await window.__TAURI__.core.invoke("vlc_pause");
 			} catch (e) {
-				if (typeof e === 'string' && e.includes("lock contention")) {
+				if (typeof e === "string" && e.includes("lock contention")) {
 					// Cleanly ignore lock contention
 				} else {
 					console.error("vlc_pause failed:", e);
 				}
 			}
 		};
+
 		player.load = async () => {
 			if (videoFilePath) {
 				try {
 					window.vlcLoopActive = true;
-					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
+					const dur = await window.__TAURI__.core.invoke("vlc_open_file", {
+						path: videoFilePath,
+					});
 					vlcDuration = dur;
-					player.dispatchEvent(new Event('loadedmetadata'));
+					player.dispatchEvent(new Event("loadedmetadata"));
+					isLoopRunning = true;
 				} catch (e) {
 					console.error("VLC failed to open file:", e);
 				}
 			}
 		};
 
-		Object.defineProperty(player, 'currentTime', {
+		Object.defineProperty(player, "paused", {
+			get() {
+				return vlcIsPaused;
+			},
+			configurable: true,
+		});
+		Object.defineProperty(player, "ended", {
+			get() {
+				return vlcIsEnded;
+			},
+			configurable: true,
+		});
+
+		Object.defineProperty(player, "currentTime", {
 			get() {
 				return vlcTime;
 			},
 			set(val) {
 				vlcTime = val;
-				window.__TAURI__.core.invoke("vlc_seek", { timeSecs: val }).catch(e => {
-					if (typeof e === 'string' && e.includes("lock contention")) {
-						// Cleanly ignore lock contention
-					} else {
-						console.error("vlc_seek failed:", e);
-					}
-				});
-				player.dispatchEvent(new Event('seeking'));
-				player.dispatchEvent(new Event('timeupdate'));
+				window.__TAURI__.core
+					.invoke("vlc_seek", { timeSecs: val })
+					.catch((e) => {
+						if (typeof e === "string" && e.includes("lock contention")) {
+							// Cleanly ignore lock contention
+						} else {
+							console.error("vlc_seek failed:", e);
+						}
+					});
+				player.dispatchEvent(new Event("seeking"));
+				player.dispatchEvent(new Event("timeupdate"));
 			},
-			configurable: true
+			configurable: true,
 		});
 
-		Object.defineProperty(player, 'duration', {
+		Object.defineProperty(player, "duration", {
 			get() {
 				return vlcDuration;
 			},
 			set(val) {
 				vlcDuration = val;
 			},
-			configurable: true
+			configurable: true,
 		});
 
-		const canvas = document.getElementById('video-render-canvas');
-		const ctx = canvas.getContext('2d');
+		const canvas = document.getElementById("video-render-canvas");
+		const ctx = canvas.getContext("2d");
 
 		let renderLoopActive = false;
 		let lastFrameTime = 0;
@@ -1162,71 +1240,141 @@ const initializePlayer = () => {
 		window.vlcLoopActive = true;
 
 		async function paintVlcFrameLoop(timestamp) {
-			if (!window.vlcLoopActive) {
+			if (!isLoopRunning || !window.vlcLoopActive) {
 				renderLoopActive = false;
 				return;
 			}
-			
+
 			// Performance Throttle: Limit to ~30 FPS to prevent IPC bridge flooding
 			if (timestamp - lastFrameTime < 33) {
 				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 				return;
 			}
-			
+
 			// Concurrency Gate: Prevent stacking unresolved frame requests
 			if (window.isFetchingFrame) {
 				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 				return;
 			}
-			
+
 			window.isFetchingFrame = true;
 			try {
 				// Fetch raw frame array from Rust backend (resolves to Response shell)
-				const frame = await window.__TAURI__.core.invoke("vlc_get_latest_frame");
+				const frame = await window.__TAURI__.core.invoke(
+					"vlc_get_latest_frame",
+				);
 				lastFrameTime = timestamp;
-				
-				// If lock contention or uninitialized data returns a notice string, handle it as a soft skip
-				if (typeof frame === 'string' && frame.includes("contention")) {
+
+				// If the backend returns null or an empty/error notice
+				if (
+					frame === null ||
+					frame === undefined ||
+					(typeof frame === "string" &&
+						(frame.includes("error") ||
+							frame.includes("contention") ||
+							frame.trim() === ""))
+				) {
+					// Skip canvas painting, but schedule next animation tick cleanly if loop is active
+					if (window.vlcLoopActive) {
+						window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+					}
 					return;
 				}
 
-				if (frame) {
-					// Tauri v2 already unpacks the IPC payload into a typed array or buffer!
-					const frameBytes = new Uint8Array(frame.buffer || frame);
-
-					if (frameBytes.length > 16) {
-						// Read metadata directly without DataView to prevent ArrayBuffer errors
-						const width = frameBytes[8] | (frameBytes[9] << 8) | (frameBytes[10] << 16) | (frameBytes[11] << 24);
-						const height = frameBytes[12] | (frameBytes[13] << 8) | (frameBytes[14] << 16) | (frameBytes[15] << 24);
-
-						const timeBytes = new Uint8Array(8);
-						for (let i = 0; i < 8; i++) timeBytes[i] = frameBytes[i];
-						const timeSecs = new Float64Array(timeBytes.buffer)[0];
-
-						vlcTime = timeSecs;
-						player.dispatchEvent(new Event('timeupdate'));
-
-						// The pixels start at index 16
-						const offset = (frameBytes.byteOffset || 0) + 16;
-						const pixelArray = new Uint8ClampedArray(frameBytes.buffer || frameBytes, offset, frameBytes.length - 16);
-						const canvas = document.getElementById('video-render-canvas');
-						if (canvas) {
-							const ctx = canvas.getContext('2d');
-							if (canvas.width !== width || canvas.height !== height) {
-								canvas.width = width;
-								canvas.height = height;
-								window.vlcImageData = ctx.createImageData(width, height);
-							}
-							if (!window.vlcImageData) {
-								window.vlcImageData = ctx.createImageData(width, height);
-							}
-							window.vlcImageData.data.set(pixelArray);
-							ctx.putImageData(window.vlcImageData, 0, 0);
-						}
+				// --- DEFENSIVE TYPE RESOLUTION START ---
+				let buffer;
+				if (frame instanceof ArrayBuffer) {
+					buffer = frame;
+				} else if (ArrayBuffer.isView(frame)) {
+					// If it's a Uint8Array, extract its underlying raw ArrayBuffer
+					buffer = frame.buffer;
+				} else if (Array.isArray(frame)) {
+					// If it's a legacy JSON serialized array [0, 255, ...], safely convert it
+					buffer = new Uint8Array(frame).buffer;
+				} else if (frame.buffer instanceof ArrayBuffer) {
+					buffer = frame.buffer;
+				} else {
+					console.error(
+						"VLC Frame Loop received incompatible data type:",
+						frame,
+					);
+					if (window.vlcLoopActive) {
+						window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 					}
+					return;
+				}
+				// --- DEFENSIVE TYPE RESOLUTION END ---
+
+				// Now safely instantiate the DataView using the normalized buffer
+				const byteOffset = frame.byteOffset || 0;
+				const byteLength =
+					frame.byteLength !== undefined ? frame.byteLength : buffer.byteLength;
+
+				if (byteLength <= 16) {
+					if (window.vlcLoopActive) {
+						window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+					}
+					return;
+				}
+
+				const view = new DataView(buffer, byteOffset, byteLength);
+				const timeSecs = view.getFloat64(0, true);
+				const frameWidth = view.getUint32(8, true);
+				const frameHeight = view.getUint32(12, true);
+
+				vlcTime = timeSecs;
+				player.dispatchEvent(new Event("timeupdate"));
+
+				// Calculate the exact memory size the canvas demands
+				const expectedByteLength = frameWidth * frameHeight * 4;
+				const actualByteLength = byteLength - 16;
+
+				const rawBuffer = new Uint8Array(buffer, byteOffset, byteLength);
+
+				const canvas = document.getElementById("video-render-canvas");
+				if (
+					canvas &&
+					frameWidth > 0 &&
+					frameHeight > 0 &&
+					actualByteLength >= expectedByteLength
+				) {
+					if (canvas.width !== frameWidth || canvas.height !== frameHeight) {
+						canvas.width = frameWidth;
+						canvas.height = frameHeight;
+					}
+
+					const ctx = canvas.getContext("2d", { alpha: false });
+					if (
+						!window.vlcImageData ||
+						window.vlcImageData.width !== canvas.width ||
+						window.vlcImageData.height !== canvas.height
+					) {
+						window.vlcImageData = ctx.createImageData(
+							canvas.width,
+							canvas.height,
+						);
+					}
+
+					// STRICT CROP: Slice exactly the number of bytes the canvas needs, discarding VLC hardware padding
+					const pixelSlice = rawBuffer.subarray(16, 16 + expectedByteLength);
+					const pixelArray = new Uint8ClampedArray(
+						pixelSlice.buffer,
+						pixelSlice.byteOffset,
+						pixelSlice.byteLength,
+					);
+
+					window.vlcImageData.data.set(pixelArray);
+					ctx.putImageData(window.vlcImageData, 0, 0);
+				} else if (frameWidth > 0) {
+					console.warn(
+						`[Frame Drop] Size mismatch. Expected: ${expectedByteLength}, Got: ${actualByteLength}`,
+					);
 				}
 			} catch (err) {
-				console.error("VLC Frame Loop tripped hard fuse. Shutting down loop:", err);
+				console.error(
+					"VLC Frame Loop tripped hard fuse. Shutting down loop:",
+					err,
+				);
 				window.vlcLoopActive = false; // HARD SHUT DOWN
 				if (window.vlcAnimationId) {
 					cancelAnimationFrame(window.vlcAnimationId);
@@ -1235,29 +1383,49 @@ const initializePlayer = () => {
 			} finally {
 				window.isFetchingFrame = false;
 			}
-			
-			window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+
+			if (window.vlcLoopActive) {
+				window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
+			}
 		}
 
 		player.load = async () => {
 			if (videoFilePath) {
-				const canvas = document.getElementById('video-render-canvas');
-				if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-					console.warn("[VLC Player] Skipping load/loop start: Canvas is not ready in DOM.");
+				const canvas = document.getElementById("video-render-canvas");
+				if (!canvas) {
+					console.warn(
+						"[VLC Player] Skipping load/loop start: Canvas is not ready in DOM.",
+					);
 					return;
 				}
 				try {
 					window.vlcLoopActive = true;
-					const dur = await window.__TAURI__.core.invoke("vlc_open_file", { path: videoFilePath });
+					const dur = await window.__TAURI__.core.invoke("vlc_open_file", {
+						path: videoFilePath,
+					});
 					vlcDuration = dur;
-					player.dispatchEvent(new Event('loadedmetadata'));
+					player.dispatchEvent(new Event("loadedmetadata"));
 
+					isLoopRunning = true;
 					if (!renderLoopActive) {
 						renderLoopActive = true;
 						window.vlcAnimationId = requestAnimationFrame(paintVlcFrameLoop);
 					}
 				} catch (e) {
 					console.error("VLC failed to open file:", e);
+					localStorage.removeItem("timeStudyData");
+					localStorage.removeItem("projectFilePath");
+					window.vlcLoopActive = false;
+					if (window.vlcAnimationId) {
+						cancelAnimationFrame(window.vlcAnimationId);
+						window.vlcAnimationId = null;
+					}
+					player.src = "";
+					player.removeAttribute("src");
+					toggleVideoPlaceholder(true);
+					if (DOM.videoPlaceholder) {
+						DOM.videoPlaceholder.textContent = "Load a video to get started";
+					}
 				}
 			}
 		};
@@ -1552,27 +1720,46 @@ const initializePlayer = () => {
 
 	loadLocalState();
 
-	if (videoQueue && videoQueue.length > 0) {
-		const currentVideo = videoQueue[activeQueueIndex];
-		if (currentVideo?.videoFilePath) {
-			const canvas = document.getElementById('video-render-canvas');
-			if (canvas && canvas.width > 0 && canvas.height > 0) {
-				const isTauri = window.__TAURI__ !== undefined;
-				if (isTauri && window.__TAURI__.core?.convertFileSrc) {
-					const assetUrl = window.__TAURI__.core.convertFileSrc(
-						currentVideo.videoFilePath,
-					);
-					player.src = assetUrl;
-					player.preload = "auto";
-					player.load();
-					toggleVideoPlaceholder(false);
-					if (typeof window.loadSubtitleTrack === "function") {
-						window.loadSubtitleTrack(currentVideo.videoFilePath);
+	try {
+		if (videoQueue && videoQueue.length > 0) {
+			const currentVideo = videoQueue[activeQueueIndex];
+			if (currentVideo?.videoFilePath) {
+				const canvas = document.getElementById("video-render-canvas");
+				if (canvas && canvas.width > 0 && canvas.height > 0) {
+					const isTauri = window.__TAURI__ !== undefined;
+					if (isTauri && window.__TAURI__.core?.convertFileSrc) {
+						const assetUrl = window.__TAURI__.core.convertFileSrc(
+							currentVideo.videoFilePath,
+						);
+						player.src = assetUrl;
+						player.preload = "auto";
+						player.load();
+						toggleVideoPlaceholder(false);
+						if (typeof window.loadSubtitleTrack === "function") {
+							window.loadSubtitleTrack(currentVideo.videoFilePath);
+						}
 					}
+				} else {
+					console.warn(
+						"[Boot System] Auto-load skipped: Canvas is not ready in DOM.",
+					);
 				}
-			} else {
-				console.warn("[Boot System] Auto-load skipped: Canvas is not ready in DOM.");
 			}
+		}
+	} catch (e) {
+		console.error("VLC player auto-load initialization failed:", e);
+		localStorage.removeItem("timeStudyData");
+		localStorage.removeItem("projectFilePath");
+		window.vlcLoopActive = false;
+		if (window.vlcAnimationId) {
+			cancelAnimationFrame(window.vlcAnimationId);
+			window.vlcAnimationId = null;
+		}
+		player.src = "";
+		player.removeAttribute("src");
+		toggleVideoPlaceholder(true);
+		if (DOM.videoPlaceholder) {
+			DOM.videoPlaceholder.textContent = "Load a video to get started";
 		}
 	}
 

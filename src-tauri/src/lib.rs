@@ -28,9 +28,13 @@ pub struct VlcPlayer {
 
 impl Drop for VlcPlayer {
     fn drop(&mut self) {
-        unsafe {
-            let _ = Box::from_raw(self.context);
-        }
+        // Safely instruct the native C++ engine to stop processing frames
+        self.player.stop();
+        
+        // DO NOT mutate the raw context pointer or Vec here!
+        // We intentionally allow the memory pointer to leak when the player 
+        // swaps out, guaranteeing that straggling C++ callbacks write to safe, 
+        // valid memory instead of triggering an Access Violation.
     }
 }
 
@@ -41,6 +45,13 @@ unsafe impl Sync for VideoContext {}
 
 #[derive(Clone)]
 pub struct VlcState(pub Arc<Mutex<Option<VlcPlayer>>>);
+
+pub struct LatestFrameBuffer {
+    pub pixels: std::sync::Mutex<Vec<u8>>,
+    pub width: std::sync::atomic::AtomicU32,
+    pub height: std::sync::atomic::AtomicU32,
+    pub video_loaded: std::sync::atomic::AtomicBool,
+}
 
 #[derive(Clone, serde::Serialize)]
 struct VlcFramePayload {
@@ -89,6 +100,7 @@ extern "C" {
     );
     pub fn libvlc_media_player_get_time(p_mi: *mut c_void) -> i64;
     pub fn libvlc_media_player_get_length(p_mi: *mut c_void) -> i64;
+    pub fn libvlc_media_player_stop(p_mi: *mut c_void);
 }
 
 unsafe extern "C" fn video_setup_cb(
@@ -104,9 +116,9 @@ unsafe extern "C" fn video_setup_cb(
     }
     let chroma_slice = std::slice::from_raw_parts_mut(chroma, 4);
     chroma_slice[0] = b'R' as c_char;
-    chroma_slice[1] = b'G' as c_char;
-    chroma_slice[2] = b'B' as c_char;
-    chroma_slice[3] = b'A' as c_char;
+    chroma_slice[1] = b'V' as c_char;
+    chroma_slice[2] = b'3' as c_char;
+    chroma_slice[3] = b'2' as c_char;
 
     let w = *width;
     let h = *height;
@@ -118,6 +130,19 @@ unsafe extern "C" fn video_setup_cb(
     ctx.width = w;
     ctx.height = h;
     ctx.frame_buffer = vec![0u8; (w * h * 4) as usize];
+
+    // Explicitly update the shared width/height state fields before locking/writing frame bytes
+    if let Some(state) = ctx.app_handle.try_state::<LatestFrameBuffer>() {
+        state.width.store(w, std::sync::atomic::Ordering::SeqCst);
+        state.height.store(h, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut buffer_guard) = state.pixels.lock() {
+            let needed_len = (w * h * 4) as usize;
+            if buffer_guard.len() != needed_len {
+                *buffer_guard = vec![0u8; needed_len];
+            }
+        }
+        state.video_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 
     1
 }
@@ -148,6 +173,40 @@ unsafe extern "C" fn video_display_cb(
         return;
     }
     let ctx = &mut *(opaque as *mut VideoContext);
+
+    // If incoming pixel buffer is uninitialized or changing dimensions, exit early to prevent copying unallocated slots
+    if ctx.frame_buffer.is_empty() || ctx.width == 0 || ctx.height == 0 {
+        return;
+    }
+    
+    // If video_loaded is false, drop/ignore any incoming frames
+    if let Some(state) = ctx.app_handle.try_state::<LatestFrameBuffer>() {
+        if !state.video_loaded.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+    }
+    
+    // Isolated Shipping Buffer State updates
+    if let Some(state) = ctx.app_handle.try_state::<LatestFrameBuffer>() {
+        let mut pixels = vec![0u8; ctx.frame_buffer.len()];
+        pixels.copy_from_slice(&ctx.frame_buffer);
+        
+        // Swap Red (Byte 0) and Blue (Byte 2) channels in place for RGBA compatibility
+        for chunk in pixels.chunks_exact_mut(4) {
+            chunk.swap(0, 2); // Swap Red and Blue
+            chunk[3] = 255;   // FORCE Alpha to 100% Opaque
+        }
+        
+        if let Ok(mut buffer_guard) = state.pixels.try_lock() {
+            if buffer_guard.len() != pixels.len() {
+                *buffer_guard = vec![0u8; pixels.len()];
+            }
+            buffer_guard.copy_from_slice(&pixels);
+            state.width.store(ctx.width, std::sync::atomic::Ordering::SeqCst);
+            state.height.store(ctx.height, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
     let time_ms = libvlc_media_player_get_time(ctx.player_raw);
     let time_secs = (time_ms as f64) / 1000.0;
     
@@ -160,39 +219,38 @@ unsafe extern "C" fn video_display_cb(
 }
 
 #[tauri::command]
-fn vlc_get_latest_frame(state: tauri::State<'_, VlcState>) -> Result<tauri::ipc::Response, String> {
-    let guard = match state.0.try_lock() {
-        Ok(g) => g,
-        Err(_) => return Ok(tauri::ipc::Response::new(Vec::new())),
-    };
-    if let Some(ref vlc_player) = *guard {
-        if vlc_player.context.is_null() {
-            return Ok(tauri::ipc::Response::new(Vec::new()));
-        }
-        let context = unsafe { &*vlc_player.context };
-        let mut pixels = context.frame_buffer.clone();
-        if pixels.is_empty() {
-            return Ok(tauri::ipc::Response::new(Vec::new()));
-        }
-        
-        let time_ms = unsafe { libvlc_media_player_get_time(vlc_player.player.raw() as *mut c_void) };
-        let time_secs = (time_ms as f64) / 1000.0;
-
-        // Swap Red (Byte 0) and Blue (Byte 2) channels in place for RGBA compatibility
-        // for chunk in pixels.chunks_exact_mut(4) {
-        //     chunk.swap(0, 2);
-        // }
-
-        let mut result = Vec::with_capacity(16 + pixels.len());
-        result.extend_from_slice(&time_secs.to_le_bytes());
-        result.extend_from_slice(&context.width.to_le_bytes());
-        result.extend_from_slice(&context.height.to_le_bytes());
-        result.extend_from_slice(&pixels);
-
-        Ok(tauri::ipc::Response::new(result))
-    } else {
-        Ok(tauri::ipc::Response::new(Vec::new()))
+fn vlc_get_latest_frame(
+    state: tauri::State<'_, LatestFrameBuffer>,
+    vlc_state: tauri::State<'_, VlcState>,
+) -> Result<tauri::ipc::Response, String> {
+    let guard = state.pixels.lock().unwrap();
+    if guard.is_empty() {
+        return Ok(tauri::ipc::Response::new(vec![0u8; 16]));
     }
+    let pixels = guard.clone();
+
+    let width = state.width.load(std::sync::atomic::Ordering::SeqCst);
+    let height = state.height.load(std::sync::atomic::Ordering::SeqCst);
+
+    // Get time from player
+    let time_secs = if let Ok(guard) = vlc_state.0.try_lock() {
+        if let Some(ref vlc_player) = *guard {
+            let time_ms = unsafe { libvlc_media_player_get_time(vlc_player.player.raw() as *mut c_void) };
+            (time_ms as f64) / 1000.0
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    let mut result = Vec::with_capacity(16 + pixels.len());
+    result.extend_from_slice(&time_secs.to_le_bytes());
+    result.extend_from_slice(&width.to_le_bytes());
+    result.extend_from_slice(&height.to_le_bytes());
+    result.extend_from_slice(&pixels);
+
+    Ok(tauri::ipc::Response::new(result))
 }
 
 #[tauri::command]
@@ -204,11 +262,44 @@ fn vlc_open_file(
     {
         let mut guard = state.0.lock().unwrap();
         if let Some(old_player) = guard.take() {
-            old_player.player.stop();
+            unsafe {
+                let raw_ptr = old_player.player.raw() as *mut c_void;
+                // Disconnect callbacks by setting them to None/null to prevent straggling threads
+                libvlc_video_set_callbacks(
+                    raw_ptr,
+                    None, None, None,
+                    std::ptr::null_mut(),
+                );
+                libvlc_video_set_format_callbacks(
+                    raw_ptr,
+                    None, None,
+                );
+                // Explicit stop
+                libvlc_media_player_stop(raw_ptr);
+            }
+            std::mem::drop(old_player);
+            std::thread::sleep(std::time::Duration::from_millis(250));
         }
     }
 
-    let instance = Instance::new().ok_or("Failed to create VLC instance")?;
+    // Clear out the global frame shipping buffer completely AFTER the old player is fully stopped/released
+    if let Some(frame_buf_state) = app_handle.try_state::<LatestFrameBuffer>() {
+        frame_buf_state.video_loaded.store(false, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut pixels_guard) = frame_buf_state.pixels.lock() {
+            pixels_guard.clear();
+            pixels_guard.shrink_to_fit();
+        }
+        frame_buf_state.width.store(0, std::sync::atomic::Ordering::SeqCst);
+        frame_buf_state.height.store(0, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    let args = vec![
+        "--no-osd".to_string(),
+        "--drop-late-frames".to_string(),
+        "--avcodec-hw=none".to_string(), // Disables DXVA/D3D11 GPU theft
+        "--vout=vmem".to_string(),       // Forces Video Output to our memory callbacks
+    ];
+    let instance = Instance::with_args(Some(args)).ok_or("Failed to create VLC instance")?;
     let player = MediaPlayer::new(&instance).ok_or("Failed to create VLC MediaPlayer")?;
     let media = Media::new_path(&instance, &path).ok_or("Failed to load media path")?;
     player.set_media(&media);
@@ -1212,6 +1303,12 @@ pub fn run() {
   tauri::Builder::default()
     .manage(FfmpegState(Mutex::new(None)))
     .manage(VlcState(Arc::new(Mutex::new(None))))
+    .manage(LatestFrameBuffer {
+        pixels: Mutex::new(Vec::new()),
+        width: std::sync::atomic::AtomicU32::new(0),
+        height: std::sync::atomic::AtomicU32::new(0),
+        video_loaded: std::sync::atomic::AtomicBool::new(false),
+    })
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
