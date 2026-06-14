@@ -904,6 +904,92 @@ fn save_vtt_file(video_path: String, vtt_text: String) -> Result<(), String> {
         .map_err(|err| format!("Failed to write VTT subtitle file to disk: {}", err))
 }
 
+#[tauri::command]
+async fn verify_and_prepare_video(
+    app_handle: tauri::AppHandle,
+    video_path: String,
+) -> Result<String, String> {
+    use std::fs;
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+    use std::path::Path;
+
+    let path = Path::new(&video_path);
+    if !path.exists() {
+        return Err("Target media file path does not exist on disk".to_string());
+    }
+
+    // 1. Probe the video metadata using the bundled static ffmpeg sidecar binary
+    // Running input query without destination targets sends stream information directly to stderr
+    let output = app_handle.shell().sidecar("ffmpeg")
+        .map_err(|e| format!("FFmpeg sidecar component mapping failure: {}", e))?
+        .args(["-i", &video_path])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to initialize command thread execution: {}", e))?;
+
+    let stderr_output = String::from_utf8_lossy(&output.stderr);
+    
+    // 2. Parse string blocks to find active HEVC / H.265 compression indicators
+    let is_h265 = stderr_output.contains("hevc") || stderr_output.contains("h265");
+
+    if !is_h265 {
+        // Standard H.264 or web-native baseline file profile detected; bypass and return original asset path
+        return Ok(video_path);
+    }
+
+    println!("[Proxy Core] H.265 stream signature intercepted. Starting fallback generation sequence...");
+
+    // 3. Generate a collision-free unique proxy filename using standard library memory hashing
+    let mut hasher = DefaultHasher::new();
+    video_path.hash(&mut hasher);
+    let hash_value = hasher.finish();
+    let proxy_filename = format!("proxy_{:x}.mp4", hash_value);
+
+    // Resolve target path metrics inside the system's local application cache context area
+    let cache_dir = app_handle.path()
+        .app_cache_dir()
+        .map_err(|e| format!("System environment failed to map absolute local cache boundaries: {}", e))?;
+
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create storage folder cache matrices: {}", e))?;
+    }
+
+    let proxy_destination_path = cache_dir.join(proxy_filename);
+    let proxy_path_str = proxy_destination_path.to_string_lossy().to_string();
+
+    // 4. If a transcoded version of this specific asset doesn't exist yet, build it using ultrafast parameters
+    if !proxy_destination_path.exists() {
+        println!("[Proxy Core] Encoding clean proxy container instance to location: {}", proxy_path_str);
+        
+        let transcode_output = app_handle.shell().sidecar("ffmpeg")
+            .map_err(|e| format!("FFmpeg sidecar instance context invalid: {}", e))?
+            .args([
+                "-i", &video_path,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",   // Minimizes disk-writing times for near-instant proxy conversion
+                "-crf", "23",            // Balances timeline parsing quality with low compute payloads
+                "-c:a", "aac",           // Stabilizes browser WebView audio engine playback loops
+                "-y",                    // Implicitly forces overwrite safety
+                &proxy_path_str
+            ])
+            .output()
+            .await
+            .map_err(|e| format!("Transcode pipeline execution faulted: {}", e))?;
+
+        if !transcode_output.status.success() {
+            return Err("FFmpeg process mapping failed to finalize stream conversion cleanly".to_string());
+        }
+        println!("[Proxy Core] Transcoding task finished successfully.");
+    } else {
+        println!("[Proxy Core] Matching cached proxy reference located. Skipping duplicate transcoding run.");
+    }
+
+    // 5. Send path reference indicator strings back up to your JavaScript window
+    Ok(proxy_path_str)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -932,8 +1018,10 @@ pub fn run() {
         join_and_compress_videos,
         get_waveform_data,
         generate_timeline_thumbnails,
-        save_vtt_file
+        save_vtt_file,
+        verify_and_prepare_video
         ]) 
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
+

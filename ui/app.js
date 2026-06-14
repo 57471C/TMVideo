@@ -158,9 +158,59 @@ window.clearAllPreviousProjectData = () => {
 
 window.loadVideo = async (filePath) => {
 	try {
-		const extractedFileName = filePath.split(/[/\\]/).pop();
+		if (!filePath || filePath.trim() === "") return;
+
+		let resolvedPath = filePath;
+		const optimizationOverlayNode =
+			document.getElementById("optimizingOverlay");
+
+		if (window.__TAURI__) {
+			try {
+				if (optimizationOverlayNode) {
+					optimizationOverlayNode.classList.remove("hidden");
+					void optimizationOverlayNode.offsetWidth; // Force a synchronous layout repaint
+					optimizationOverlayNode.classList.remove("opacity-0");
+					optimizationOverlayNode.classList.add("opacity-100", "flex");
+				}
+
+				console.log(
+					"[Ingest System] Pre-verifying video codec specifications for target asset path:",
+					filePath,
+				);
+				resolvedPath = await window.__TAURI__.core.invoke(
+					"verify_and_prepare_video",
+					{ videoPath: filePath },
+				);
+				console.log(
+					"[Ingest System] Video resource reference mapped safely to:",
+					resolvedPath,
+				);
+			} catch (pipelineFaultError) {
+				console.error(
+					"[Ingest System] Codec preparation pipeline threw an exception:",
+					pipelineFaultError,
+				);
+				if (typeof showToast === "function") {
+					showToast(
+						"Optimization failed; falling back to original media path profile",
+						"warn",
+					);
+				}
+			} finally {
+				if (optimizationOverlayNode) {
+					optimizationOverlayNode.classList.remove("opacity-100");
+					optimizationOverlayNode.classList.add("opacity-0");
+					setTimeout(() => {
+						optimizationOverlayNode.classList.add("hidden");
+						optimizationOverlayNode.classList.remove("flex");
+					}, 300);
+				}
+			}
+		}
+
+		const extractedFileName = resolvedPath.split(/[/\\]/).pop();
 		videoFileName = extractedFileName;
-		videoFilePath = filePath;
+		videoFilePath = resolvedPath;
 
 		if (!videoQueue || videoQueue.length === 0) {
 			videoQueue = [
@@ -308,6 +358,49 @@ if (window.__TAURI__ !== undefined) {
 	document.addEventListener("DOMContentLoaded", () => {
 		window.initializeLaunchArgumentHandler();
 	});
+
+	try {
+		const currentActiveAppWindowInstance = window.__TAURI__.window
+			.getCurrentWindow
+			? window.__TAURI__.window.getCurrentWindow()
+			: window.__TAURI__.window.appWindow;
+
+		if (
+			currentActiveAppWindowInstance &&
+			typeof currentActiveAppWindowInstance.onDragDropEvent === "function"
+		) {
+			currentActiveAppWindowInstance.onDragDropEvent(
+				(dragDropFilePayloadEvent) => {
+					const payloadData = dragDropFilePayloadEvent.payload;
+
+					if (
+						payloadData &&
+						payloadData.type === "drop" &&
+						payloadData.paths &&
+						payloadData.paths.length > 0
+					) {
+						const absoluteDroppedFilePathRef = payloadData.paths[0];
+						console.log(
+							"[DragDrop Subsystem] Caught OS file dropped directly onto app space grid wrapper:",
+							absoluteDroppedFilePathRef,
+						);
+
+						if (typeof window.loadVideo === "function") {
+							window.loadVideo(absoluteDroppedFilePathRef);
+						}
+					}
+				},
+			);
+			console.log(
+				"[DragDrop Subsystem] Native drag-drop hook tracking layers established successfully.",
+			);
+		}
+	} catch (initializationFailureErr) {
+		console.error(
+			"[DragDrop Subsystem] Critical error mapping hardware window events:",
+			initializationFailureErr,
+		);
+	}
 }
 
 // 3. Media Initialization & Streaming Event Subsystems

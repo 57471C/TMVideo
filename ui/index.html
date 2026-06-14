@@ -22,6 +22,18 @@
 
   </head>
   <body class="font-sans bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 h-screen overflow-hidden flex flex-col transition-colors duration-200">
+    <!-- Codec Optimizing Overlay -->
+    <div id="optimizingOverlay" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] hidden flex-col items-center justify-center text-center p-6 transition-all duration-300 opacity-0">
+      <div class="flex flex-col items-center gap-4 max-w-md animate-fade-in">
+        <div class="w-14 h-14 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin"></div>
+        
+        <h3 class="text-xl font-bold text-zinc-100 tracking-wide mt-3">Optimizing High-Efficiency Media</h3>
+        <p class="text-sm text-zinc-400 leading-relaxed">
+          Processing H.265/HEVC tracking sequences to generate a frame-accurate proxy timeline track. This occurs once per video asset. Please keep this window active...
+        </p>
+      </div>
+    </div>
+
     <!-- Header -->
     <header class="bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 shadow-sm py-1.5 px-4 flex justify-between items-center z-10 min-h-8">
       <div class="flex items-center gap-2 sm:gap-3">
