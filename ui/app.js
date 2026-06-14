@@ -15,7 +15,36 @@
  * - The new layout shifts away from modal drag-and-drop to a unified persistent side panel (`#playlist-queue-sidebar`).
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
- */
+// --- CRITICAL VIDEO RESOUCE PIPELINE DIAGNOSTIC INTERCEPTOR ---
+(function() {
+  console.log("[Diagnostic Core] Instantiating global HTMLMediaElement interceptor...");
+  
+  // Cache the browser's native source descriptor methods
+  const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+  
+  if (originalSrcDescriptor) {
+    Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+      set: function(assignedValue) {
+        console.warn("%chttps://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Video element source is being set to:", "background: #85144b; color: #fff; font-weight: bold; padding: 4px;", assignedValue);
+        
+        // Print an explicit breakdown of the string layout to detect UNC prefixes or platform bugs
+        console.log("https://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Path length:", assignedValue ? assignedValue.length : 0);
+        console.log("https://www.youtube.com/playlist?list=PLYpOygsH1yNuacF5X-ShiargYwz2hV3Zv Begins with asset protocol?:", assignedValue ? assignedValue.startsWith("https://asset.localhost") : false);
+        
+        // Hand control back to the native browser media engine to continue loading
+        originalSrcDescriptor.set.call(this, assignedValue);
+      },
+      get: function() {
+        return originalSrcDescriptor.get.call(this);
+      },
+      configurable: true,
+      enumerable: true
+    });
+    console.log("[Diagnostic Core] Interceptor successfully armed. Awaiting video resource assignments...");
+  } else {
+    console.error("[Diagnostic Core] Failed to map HTMLMediaElement prototype descriptors.");
+  }
+})();
 
 // 1. Global State Configuration & Element Cache Registries
 const appWindow =
@@ -157,15 +186,10 @@ window.clearAllPreviousProjectData = () => {
 };
 
 window.loadVideo = async (incomingVideoPath) => {
-	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
-		console.error(
-			"[Loader Debug] Rejecting load request: Path string is blank.",
-		);
-		return;
-	}
+	if (!incomingVideoPath || incomingVideoPath.trim() === "") return;
 
 	console.log(
-		"[Loader Debug] Phase 1: Ingestion initiated for absolute path:",
+		"[Loader Debug] Preparing video payload sequence for absolute location:",
 		incomingVideoPath,
 	);
 	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
@@ -173,19 +197,12 @@ window.loadVideo = async (incomingVideoPath) => {
 
 	if (window.__TAURI__) {
 		try {
-			// Reveal the fullscreen progress dimming container
 			if (optimizationOverlayNode) {
 				optimizationOverlayNode.classList.remove("hidden");
-				void optimizationOverlayNode.offsetWidth; // Forces layout engine repaint
-				optimizationOverlayNode.classList.remove("opacity-0");
 				optimizationOverlayNode.classList.add("opacity-100", "flex");
 			}
 
-			console.log(
-				"[Loader Debug] Phase 2: Dispatching path down to Rust invoke channels...",
-			);
-
-			// Fire invocation and trace if the promise stays stalled hanging
+			// Invoke backend codec verifier
 			resolvedPlaybackPath = await window.__TAURI__.core.invoke(
 				"verify_and_prepare_video",
 				{
@@ -193,66 +210,55 @@ window.loadVideo = async (incomingVideoPath) => {
 				},
 			);
 
+			// Secondary safety check: strip out any rogue unc characters if they managed to sneak past the backend
+			resolvedPlaybackPath = resolvedPlaybackPath
+				.replace(/^\\\\?\\\\/, "")
+				.replace(/^\\\\?\\/, "");
 			console.log(
-				"[Loader Debug] Phase 3: Rust promise resolved safely. Path mapped to:",
+				"[Loader Debug] Resolved playback target destination path:",
 				resolvedPlaybackPath,
 			);
-		} catch (pipelineFaultError) {
-			console.error(
-				"[Loader Debug] CRITICAL: Codec preparation command crashed:",
-				pipelineFaultError,
-			);
-			if (typeof showToast === "function") {
-				showToast(
-					"Asset pre-verification failed; attempting direct stream...",
-					"error",
-				);
-			}
+		} catch (err) {
+			console.error("[Loader Debug] Backend ingestion command faulted:", err);
 		} finally {
 			if (optimizationOverlayNode) {
 				optimizationOverlayNode.classList.remove("opacity-100");
-				optimizationOverlayNode.classList.add("opacity-0");
-				setTimeout(() => {
-					optimizationOverlayNode.classList.add("hidden");
-					optimizationOverlayNode.classList.remove("flex");
-				}, 300);
+				setTimeout(() => optimizationOverlayNode.classList.add("hidden"), 300);
 			}
 		}
 	}
 
-	// 3. SECURE TAURI ASSET PROTOCOL CONVERSION CODES
-	// Select the core media element viewport container
+	// Locate the physical screen media asset node
 	const videoElement =
 		document.querySelector("video") ||
 		document.getElementById("video-player") ||
 		player;
 	if (!videoElement) {
 		console.error(
-			"[Loader Debug] CRITICAL FAILURE: HTML5 <video> element container was not located in the DOM tree!",
+			"[Loader Debug] CRITICAL: HTML5 video node not found inside active DOM frame layout.",
 		);
 		return;
 	}
 
-	// Convert the file path into an authenticated local server link format
-	let finalMediaUrlSrc = resolvedPlaybackPath;
+	// Convert absolute local hard drive paths to authenticated secure asset protocol URLs
+	let tauriStreamUrl = resolvedPlaybackPath;
 	if (window.__TAURI__) {
-		if (window.__TAURI__.core?.convertFileSrc) {
-			finalMediaUrlSrc =
-				window.__TAURI__.core.convertFileSrc(resolvedPlaybackPath);
-		} else if (window.__TAURI__.tauri?.convertFileSrc) {
-			finalMediaUrlSrc =
-				window.__TAURI__.tauri.convertFileSrc(resolvedPlaybackPath);
+		const convertFn =
+			window.__TAURI__.core?.convertFileSrc ||
+			window.__TAURI__.tauri?.convertFileSrc;
+		if (convertFn) {
+			tauriStreamUrl = convertFn(resolvedPlaybackPath);
 		} else {
-			finalMediaUrlSrc = `https://asset.localhost/${encodeURIComponent(resolvedPlaybackPath)}`;
+			tauriStreamUrl = `https://asset.localhost/${encodeURIComponent(resolvedPlaybackPath)}`;
 		}
 	}
 
 	console.log(
-		"[Loader Debug] Phase 4: Setting final converted player src URL to:",
-		finalMediaUrlSrc,
+		"[Loader Debug] Directing HTML5 Media pipeline src target to stream url:",
+		tauriStreamUrl,
 	);
 
-	// Bind references cleanly inside global project track memory models
+	// Synchronize internal system global state data schemas
 	const extractedFileName = resolvedPlaybackPath.split(/[/\\]/).pop();
 	videoFileName = extractedFileName;
 	videoFilePath = resolvedPlaybackPath;
@@ -277,25 +283,21 @@ window.loadVideo = async (incomingVideoPath) => {
 	videoQueue[0].videoName = videoFileName;
 
 	if (typeof currentVideo !== "undefined" && currentVideo) {
-		currentVideo.videoFilePath = resolvedPlaybackPath; // Keeps records mapping pure
+		currentVideo.videoFilePath = resolvedPlaybackPath;
 	}
 
-	// Mount listeners directly to the video element node to catch hidden errors
-	videoElement.onerror = (_e) => {
+	// Explicit tracking triggers to catch hidden codec engine exceptions
+	videoElement.onerror = () => {
 		console.error(
-			"[Loader Debug] WebView Multimedia Engine rejected source path stream!",
+			"[Loader Debug] Native WebView2 element reported playback failure. Code:",
 			videoElement.error,
 		);
+		if (typeof showToast === "function")
+			showToast("Media engine failed to resolve stream path safely", "error");
 	};
 
-	videoElement.onloadstart = () => {
-		console.log(
-			"[Loader Debug] Success! WebView media engine acknowledged resource ingestion buffer loop start.",
-		);
-	};
-
-	// Assign the source and force the video block layout load sequence
-	videoElement.src = finalMediaUrlSrc;
+	// Assign the sanitized URL and fire the browser native loading process
+	videoElement.src = tauriStreamUrl;
 	videoElement.preload = "auto";
 	videoElement.load();
 	toggleVideoPlaceholder(false);
@@ -523,8 +525,13 @@ window.resetClosedCaptions = () => {
 		for (const dbName of dbsToPurge) {
 			try {
 				const deleteRequest = window.indexedDB.deleteDatabase(dbName);
-				deleteRequest.onsuccess = () =>
-					console.log("Successfully purged offline database:", dbName);
+				deleteRequest.onsuccess = () => {
+					if (window.TM_DEBUG_MODE) {
+						console.log(
+							`[Database System] Successfully purged offline database: ${dbName}`,
+						);
+					}
+				};
 			} catch (e) {
 				console.warn("Database purge skipped for:", dbName, e);
 			}
