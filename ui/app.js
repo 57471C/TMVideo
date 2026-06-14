@@ -223,82 +223,90 @@ window.clearAllPreviousProjectData = () => {
 };
 
 window.loadVideo = async (incomingVideoPath) => {
-	if (!incomingVideoPath || incomingVideoPath.trim() === "") return;
+	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
+		console.error(
+			"[Loader Core] Rejected video payload command: Path target is blank.",
+		);
+		return;
+	}
 
 	console.log(
-		"[Loader Debug] Preparing video payload sequence for absolute location:",
+		"[Loader Core] Ingestion sequence initiated for absolute file path:",
 		incomingVideoPath,
 	);
 	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
-	let resolvedPlaybackPath = incomingVideoPath;
+	let finalMediaUrlSrc = incomingVideoPath;
 
-	if (window.__TAURI__) {
-		try {
-			if (optimizationOverlayNode) {
-				optimizationOverlayNode.classList.remove("hidden");
-				optimizationOverlayNode.classList.add("opacity-100", "flex");
-			}
+	try {
+		// 1. Fire up the fullscreen dimming optimization spinner overlay
+		if (optimizationOverlayNode) {
+			optimizationOverlayNode.classList.remove("hidden");
+			optimizationOverlayNode.classList.add("opacity-100", "flex");
+		}
 
-			// Invoke backend codec verifier
-			resolvedPlaybackPath = await window.__TAURI__.core.invoke(
+		// 2. Hand path metrics down to our background Rust encoder checking engine
+		if (window.__TAURI__) {
+			finalMediaUrlSrc = await window.__TAURI__.core.invoke(
 				"verify_and_prepare_video",
 				{
 					videoPath: incomingVideoPath,
 				},
 			);
+		}
 
-			// Secondary safety check: strip out any rogue unc characters if they managed to sneak past the backend
-			resolvedPlaybackPath = resolvedPlaybackPath
-				.replace(/^\\\\?\\\\/, "")
-				.replace(/^\\\\?\\/, "");
-			console.log(
-				"[Loader Debug] Resolved playback target destination path:",
-				resolvedPlaybackPath,
-			);
-		} catch (err) {
-			console.error("[Loader Debug] Backend ingestion command faulted:", err);
-		} finally {
-			if (optimizationOverlayNode) {
-				optimizationOverlayNode.classList.remove("opacity-100");
-				setTimeout(() => optimizationOverlayNode.classList.add("hidden"), 300);
-			}
+		// Strip out any invalid Windows internal UNC prefix strings if returned from the file check
+		finalMediaUrlSrc = finalMediaUrlSrc.replace(/^\\\\?\\/, "");
+		console.log(
+			"[Loader Core] Resolved safe destination asset track path:",
+			finalMediaUrlSrc,
+		);
+	} catch (backendCommandException) {
+		console.error(
+			"[Loader Core] Pre-verification encoder command faulted:",
+			backendCommandException,
+		);
+		finalMediaUrlSrc = incomingVideoPath; // Use raw link fallback if backend thread chokes
+	} finally {
+		if (optimizationOverlayNode) {
+			optimizationOverlayNode.classList.remove("opacity-100");
+			setTimeout(() => optimizationOverlayNode.classList.add("hidden"), 300);
 		}
 	}
 
-	// Locate the physical screen media asset node
+	// 3. Locate the actual physical screen video tag inside the layout tree
 	const videoElement =
 		document.querySelector("video") ||
 		document.getElementById("video-player") ||
 		player;
 	if (!videoElement) {
 		console.error(
-			"[Loader Debug] CRITICAL: HTML5 video node not found inside active DOM frame layout.",
+			"[Loader Core] CRITICAL FAILURE: HTML5 <video> node missing from DOM mapping canvas.",
 		);
 		return;
 	}
 
-	// Convert absolute local hard drive paths to authenticated secure asset protocol URLs
-	let tauriStreamUrl = resolvedPlaybackPath;
+	// 4. Securely translate the absolute local disk string into an authorized stream URL protocol link
+	let tauriStreamUrl = finalMediaUrlSrc;
 	if (window.__TAURI__) {
 		const convertFn =
 			window.__TAURI__.core?.convertFileSrc ||
 			window.__TAURI__.tauri?.convertFileSrc;
 		if (convertFn) {
-			tauriStreamUrl = convertFn(resolvedPlaybackPath);
+			tauriStreamUrl = convertFn(finalMediaUrlSrc);
 		} else {
-			tauriStreamUrl = `https://asset.localhost/${encodeURIComponent(resolvedPlaybackPath)}`;
+			tauriStreamUrl = `https://asset.localhost/${encodeURIComponent(finalMediaUrlSrc)}`;
 		}
 	}
 
 	console.log(
-		"[Loader Debug] Directing HTML5 Media pipeline src target to stream url:",
+		"[Loader Core] Driving HTML5 playback media pipe source parameter to target URL:",
 		tauriStreamUrl,
 	);
 
-	// Synchronize internal system global state data schemas
-	const extractedFileName = resolvedPlaybackPath.split(/[/\\]/).pop();
+	// Synchronize master application memory data models
+	const extractedFileName = finalMediaUrlSrc.split(/[/\\]/).pop();
 	videoFileName = extractedFileName;
-	videoFilePath = resolvedPlaybackPath;
+	videoFilePath = finalMediaUrlSrc;
 
 	if (!videoQueue || videoQueue.length === 0) {
 		videoQueue = [
@@ -320,44 +328,67 @@ window.loadVideo = async (incomingVideoPath) => {
 	videoQueue[0].videoName = videoFileName;
 
 	if (typeof currentVideo !== "undefined" && currentVideo) {
-		currentVideo.videoFilePath = resolvedPlaybackPath;
+		currentVideo.videoFilePath = finalMediaUrlSrc;
 	}
 
-	// Explicit tracking triggers to catch hidden codec engine exceptions
+	// Set up temporary local catch blocks inside this scope to prevent silent player failures
 	videoElement.onerror = () => {
 		console.error(
-			"[Loader Debug] Native WebView2 element reported playback failure. Code:",
+			"[Loader Core] DOM Media Pipeline reported loading error. State Code Ref:",
 			videoElement.error,
+		);
+		console.warn(
+			`[Loader Core] Defective URL source caught on hardware reject track: "${videoElement.src}"`,
+		);
+	};
+
+	// 5. Inject source stream links and execute browser level rendering paint triggers
+	try {
+		videoElement.src = tauriStreamUrl;
+		videoElement.preload = "auto";
+		videoElement.load();
+
+		// Run any internal post-load layouts present in your original logic sequence
+		toggleVideoPlaceholder(false);
+		if (typeof window.loadSubtitleTrack === "function") {
+			window.loadSubtitleTrack(videoFilePath);
+		}
+
+		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
+		if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
+		if (typeof updateMarkersList === "function") updateMarkersList();
+		saveLocalState();
+		if (typeof updateSliderTicks === "function") updateSliderTicks();
+
+		if (typeof enableMiniPlayerMode === "function") {
+			await enableMiniPlayerMode();
+		}
+
+		if (typeof window.repositionControls === "function")
+			setTimeout(window.repositionControls, 100);
+		if (typeof showPlaceholder === "function") showPlaceholder(false);
+
+		toConsole(
+			"Auto-loaded video from launch argument",
+			incomingVideoPath,
+			debuggin,
+		);
+		showToast("Video loaded.", "success");
+	} catch (videoElementLoadError) {
+		console.error(
+			"%c[CRITICAL RESOURCE FAILURE] Video Pipeline Stopped!",
+			"background: #ff0000; color: #fff; font-weight: bold; padding: 4px;",
+		);
+		console.warn(
+			`[CRITICAL RESOURCE FAILURE] Attempted to stream URL: "${tauriStreamUrl}"`,
+		);
+		console.log(
+			"[CRITICAL RESOURCE FAILURE] Underlying DOM Error Exception Object:",
+			videoElementLoadError,
 		);
 		if (typeof showToast === "function")
 			showToast("Media engine failed to resolve stream path safely", "error");
-	};
-
-	// Assign the sanitized URL and fire the browser native loading process
-	videoElement.src = tauriStreamUrl;
-	videoElement.preload = "auto";
-	videoElement.load();
-	toggleVideoPlaceholder(false);
-	if (typeof window.loadSubtitleTrack === "function") {
-		window.loadSubtitleTrack(videoFilePath);
 	}
-
-	if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
-	if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
-	if (typeof updateMarkersList === "function") updateMarkersList();
-	saveLocalState();
-	if (typeof updateSliderTicks === "function") updateSliderTicks();
-
-	if (typeof enableMiniPlayerMode === "function") {
-		await enableMiniPlayerMode();
-	}
-
-	toConsole(
-		"Auto-loaded video from launch argument",
-		incomingVideoPath,
-		debuggin,
-	);
-	showToast("Video loaded.", "success");
 };
 
 window.initializeLaunchArgumentHandler = async () => {
@@ -1136,18 +1167,33 @@ window.cycleViewMode = async (targetMode) => {
 		if (appWindow) {
 			try {
 				console.log(
-					"[View System] Miniplayer Mode Selected: Stripping window maximization and shrinking frame bounds...",
+					"[View System] Shifting to Miniplayer: Scaling down to bounded dimensions...",
 				);
-				await appWindow.unmaximize(); // Restores from fullscreen scales safely before updating dimensions
-				await appWindow.setSize({
-					type: "Physical",
-					width: 580, // Compact width dimensions
-					height: 440, // Sits comfortable height parameters including timeline speed slider row real estate
-				});
-			} catch (err) {
+				await appWindow.unmaximize(); // Restores from max size before resizing bounds
+
+				// Enforce our clean, compact floating widget dimension variables
+				const targetWidth = 580;
+				const targetHeight = 440; // High headroom accounts for timeline speed row
+
+				if (window.__TAURI__.window.LogicalSize) {
+					const factor = await appWindow.scaleFactor();
+					await appWindow.setSize(
+						new window.__TAURI__.window.LogicalSize(
+							targetWidth / factor,
+							targetHeight / factor,
+						),
+					);
+				} else {
+					await appWindow.setSize({
+						type: "Physical",
+						width: targetWidth,
+						height: targetHeight,
+					});
+				}
+			} catch (windowSizingError) {
 				console.error(
-					"[View System] Asynchronous window transformation command failed:",
-					err,
+					"[View System] Asynchronous window operation failed:",
+					windowSizingError,
 				);
 			}
 		}
