@@ -15,6 +15,14 @@
  * - The new layout shifts away from modal drag-and-drop to a unified persistent side panel (`#playlist-queue-sidebar`).
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
+// --- CENTRAL APPLICATION RUNTIME STATE SAFETIES ---
+if (typeof window.cinemaIdleTimer === 'undefined') {
+  window.cinemaIdleTimer = null; // Globally registers the idle timer pointer
+}
+if (typeof window.currentViewMode === 'undefined') {
+  window.currentViewMode = 'normal'; // Valid options: 'normal', 'cinema', 'miniplayer'
+}
+
 // --- CRITICAL VIDEO RESOUCE PIPELINE DIAGNOSTIC INTERCEPTOR ---
 (function() {
   console.log("[Diagnostic Core] Instantiating global HTMLMediaElement interceptor...");
@@ -1059,9 +1067,9 @@ window.cycleViewMode = async (targetMode) => {
 	const expandBtn = document.getElementById("expandToEditorBtn");
 
 	// Clean up timers & reset control bar transformations
-	if (cinemaIdleTimer) {
-		clearTimeout(cinemaIdleTimer);
-		cinemaIdleTimer = null;
+	if (window.cinemaIdleTimer) {
+		clearTimeout(window.cinemaIdleTimer);
+		window.cinemaIdleTimer = null;
 	}
 	if (controlBar) {
 		controlBar.classList.remove("translate-y-full", "opacity-0");
@@ -1231,24 +1239,23 @@ window.triggerPlaybackOverlay = (messageText) => {
 
 /** Resets the inactivity timer for hiding controls in cinema mode. */
 function resetCinemaIdleTimer() {
-	if (window.currentViewMode !== "cinema") {
-		return;
+	// Gracefully drop out if we aren't currently viewing a movie clip layout
+	if (window.currentViewMode !== "cinema") return;
+
+	// Clear existing timeout using the bulletproof window wrapper
+	if (window.cinemaIdleTimer) {
+		clearTimeout(window.cinemaIdleTimer);
 	}
 
-	const controlBar = document.getElementById("mediaControlsContainer");
-	if (!controlBar) return;
+	// Reveal the layout controls panel smoothly
+	const mainGrid = document.getElementById("mainLayoutGrid");
+	if (mainGrid) mainGrid.classList.remove("hide-controls");
 
-	// 1. Mouse moved: Show the controls instantly
-	controlBar.classList.remove("translate-y-full", "opacity-0");
-	document.body.classList.remove("hide-controls");
-
-	// 2. Clear the existing timer
-	if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
-
-	// 3. Set a new 5-second timer to hide the controls
-	cinemaIdleTimer = setTimeout(() => {
-		controlBar.classList.add("translate-y-full", "opacity-0");
-		document.body.classList.add("hide-controls");
+	// Re-schedule the next 5-second hiding loop sequence safely
+	window.cinemaIdleTimer = setTimeout(() => {
+		if (window.currentViewMode === "cinema" && mainGrid) {
+			mainGrid.classList.add("hide-controls");
+		}
 	}, 5000);
 }
 
@@ -2322,6 +2329,13 @@ const initializePlayer = () => {
 
 /** Begins drawing the marquee selection box for zooming. */
 const startMarquee = (event) => {
+	// Safety guard initialization to stop string extraction crashes
+	const targetInput = event?.target;
+	const startIdx =
+		typeof selectionStart !== "undefined"
+			? selectionStart
+			: targetInput?.selectionStart || 0;
+
 	if (event.button !== 0) return;
 	if (event.target.closest(".zoom-controls")) return;
 	isDrawing = true;
@@ -2378,6 +2392,12 @@ const drawMarquee = (event) => {
 
 /** Finalizes the marquee selection box and executes viewport zoom. */
 const endMarquee = (event) => {
+	const targetInput = event?.target;
+	const endIdx =
+		typeof selectionEnd !== "undefined"
+			? selectionEnd
+			: targetInput?.selectionEnd || 0;
+
 	if (!isDrawing) return;
 	if (event.button !== 0) return;
 	isDrawing = false;
