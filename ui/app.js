@@ -314,6 +314,9 @@ window.initializeLaunchArgumentHandler = async () => {
 							launchPath,
 							debuggin,
 						);
+
+						// RULE 1: Project files explicitly boot into maximized Normal workspace
+						await window.cycleViewMode("normal");
 					} catch (e) {
 						toConsole("Error auto-loading project file", e, debuggin);
 						showToast("Failed to auto-load project.", "error");
@@ -329,38 +332,13 @@ window.initializeLaunchArgumentHandler = async () => {
 						if (typeof renderMarkersTable === "function") renderMarkersTable();
 					}
 
-					// 2. RESIZE THE VIEWPORT CONTAINER DYNAMICALLY TO PREVENT SCROLLBARS
-					if (window.__TAURI__.window?.getCurrentWindow) {
-						const appWindow = window.__TAURI__.window.getCurrentWindow();
-						const currentSize = await appWindow.innerSize();
-						const targetHeight = currentSize.height + 44;
-
-						if (window.__TAURI__.window.LogicalSize) {
-							const factor = await appWindow.scaleFactor();
-							const logicalWidth = currentSize.width / factor;
-							const logicalHeight = targetHeight / factor;
-							await appWindow.setSize(
-								new window.__TAURI__.window.LogicalSize(
-									logicalWidth,
-									logicalHeight,
-								),
-							);
-						} else {
-							await appWindow.setSize({
-								type: "Physical",
-								width: currentSize.width,
-								height: targetHeight,
-							});
-						}
-						console.log(
-							"[Launch System] Viewport height expanded by 44px to accommodate full playback panel metrics.",
-						);
-					}
-
-					// 3. LOAD THE TARGET INGESTED MEDIA FILE
+					// 2. INGEST MEDIA STREAM ADDRESS TARGET URL
 					if (typeof window.loadVideo === "function") {
-						window.loadVideo(launchPath);
+						await window.loadVideo(launchPath);
 					}
+
+					// RULE 2: Raw media assets explicitly boot into floating Miniplayer widget
+					await window.cycleViewMode("miniplayer");
 				}
 			} else {
 				if (
@@ -369,11 +347,16 @@ window.initializeLaunchArgumentHandler = async () => {
 						videoQueue[0].videoFilePath) ||
 					player.src
 				) {
+					// Retain active session stability bounds on standard launch check
+					await window.cycleViewMode("normal");
 					return;
 				}
 				if (typeof window.clearAllPreviousProjectData === "function") {
 					window.clearAllPreviousProjectData();
 				}
+
+				// RULE 3: Cold boots without parameters maximize into standard workspace mode
+				await window.cycleViewMode("normal");
 			}
 		}
 	} catch (error) {
@@ -955,23 +938,31 @@ if (typeof window.currentViewMode === "undefined") {
 
 // TARGET: Completely overhaul the window management logic block within window.cycleViewMode
 // TARGET: Completely overhaul the view state lifecycle configuration block inside window.cycleViewMode
-window.cycleViewMode = async () => {
+window.cycleViewMode = async (targetMode) => {
 	const mainGrid = document.getElementById("mainLayoutGrid");
 	const modeBtn = document.getElementById("expand-player-btn");
 
 	if (!mainGrid) return;
 
-	// 1. Progress layout tracking states smoothly
-	switch (window.currentViewMode) {
-		case "normal":
-			window.currentViewMode = "cinema";
-			break;
-		case "cinema":
-			window.currentViewMode = "miniplayer";
-			break;
-		default:
-			window.currentViewMode = "normal";
-			break;
+	// Check for direct explicit state routing overrides
+	if (
+		targetMode &&
+		["normal", "cinema", "miniplayer"].includes(targetMode.toLowerCase())
+	) {
+		window.currentViewMode = targetMode.toLowerCase();
+	} else {
+		// Fall back to default progressive carousel rotation loops
+		switch (window.currentViewMode) {
+			case "normal":
+				window.currentViewMode = "cinema";
+				break;
+			case "cinema":
+				window.currentViewMode = "miniplayer";
+				break;
+			default:
+				window.currentViewMode = "normal";
+				break;
+		}
 	}
 
 	console.log(
