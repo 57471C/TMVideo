@@ -245,8 +245,8 @@ html {
 	align-items: flex-start !important;
 }
 
-body.mini-player #toastContainer,
-body.cinema-active #toastContainer {
+body.miniplayer-mode #toastContainer,
+body.cinema-mode #toastContainer {
 	top: 16px !important;
 	bottom: auto !important;
 	left: 50% !important;
