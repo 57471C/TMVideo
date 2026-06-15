@@ -967,6 +967,7 @@ async fn verify_and_prepare_video(
 
     // 4. If a transcoded version of this specific asset doesn't exist yet, build it using ultrafast parameters
     if !proxy_destination_path.exists() {
+        let _ = app_handle.emit("transcode-needed", ());
         println!("[Proxy Core] Encoding clean proxy container instance to location: {}", proxy_path_str);
         
         let transcode_output = app_handle.shell().sidecar("ffmpeg")

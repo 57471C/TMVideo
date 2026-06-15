@@ -362,6 +362,7 @@ const importFromJSON = (jsonText) => {
 	if (typeof window.resetVideoViewport === "function") {
 		window.resetVideoViewport(player);
 	}
+
 	try {
 		preserveProcessTimes = true;
 		const data = JSON.parse(jsonText);

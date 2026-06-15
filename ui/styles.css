@@ -53,7 +53,7 @@ html.dark,
 body.dark,
 .dark html,
 .dark body {
-	background-color: #000000 !important; /* Retains absolute dark mode depth */
+	background-color: #121214 !important; /* Retains absolute dark mode depth */
 	color: #f4f4f5 !important;
 }
 
@@ -445,7 +445,7 @@ body.cinema-mode #mainLayoutGrid {
 	height: 100vh !important;
 	margin: 0 !important;
 	padding: 0 !important;
-	background: #000000 !important;
+	background: #121214 !important;
 }
 
 body.cinema-mode #video-wrapper-id,
@@ -455,7 +455,7 @@ body.cinema-mode #video-viewport {
 	left: 0 !important;
 	width: 100vw !important;
 	height: 100vh !important;
-	background: #000000 !important;
+	background: #121214 !important;
 	display: flex !important;
 	align-items: center !important;
 	justify-content: center !important;
@@ -521,7 +521,7 @@ body.miniplayer-mode #mainLayoutGrid {
 	padding: 0 !important;
 	position: relative !important;
 	overflow: hidden !important;
-	background: #000000 !important;
+	background: #121214 !important;
 }
 
 /* Force video viewport to claim everything except the control row */

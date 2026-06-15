@@ -17,32 +17,11 @@
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
 // --- CENTRAL APPLICATION RUNTIME STATE SAFETIES ---
 window.cinemaIdleTimer = window.cinemaIdleTimer || null;
-window.isCinemaMode = window.isCinemaMode || false;
-if (typeof window.currentViewMode === "undefined") {
-	window.currentViewMode = "normal"; // Valid options: 'normal', 'cinema', 'miniplayer'
-}
+window.currentViewMode = window.currentViewMode || "normal"; // Valid options: 'normal', 'cinema', 'miniplayer'
 
 // --- MARQUEE ZOOM COORDINATE POINTER SAFETIES ---
 window.marqueeSelectionStartRef = null;
 window.marqueeSelectionEndRef = null;
-
-
-
-// --- VIEWPORT LAYOUT COMPATIBILITY BRIDGE ---
-// Tracks our 3-state view carousel smoothly
-if (typeof window.currentViewMode === 'undefined') {
-  window.currentViewMode = 'normal'; 
-}
-
-// Intercepts any legacy references checking for 'isCinemaMode' and maps them to our active setup
-Object.defineProperty(window, 'isCinemaMode', {
-  get: () => window.currentViewMode === 'cinema',
-  set: (isCinema) => { 
-    window.currentViewMode = isCinema ? 'cinema' : 'normal'; 
-  },
-  configurable: true,
-  enumerable: true
-});
 
 // 1. Global State Configuration & Element Cache Registries
 const appWindow =
@@ -80,7 +59,6 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 window.currentWaveformDataPath = null;
-window.waveformTrackData = null;
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -109,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	const expandBtn = document.getElementById("expandToEditorBtn");
 	if (expandBtn) {
-		expandBtn.addEventListener("click", disableMiniPlayerMode);
+		expandBtn.addEventListener("click", () => window.cycleViewMode("normal"));
 	}
 
 	const timelineToggleBtn = document.getElementById("timeline-toggle-btn");
@@ -177,6 +155,20 @@ window.clearAllPreviousProjectData = () => {
 	toggleVideoPlaceholder(true);
 	if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
 	if (typeof updateMarkersList === "function") updateMarkersList();
+
+	// Hard visual reset of timeline graphics panels
+	const videoTrack = document.getElementById("timeline-video-track");
+	if (videoTrack) videoTrack.innerHTML = "";
+	const audioTrack = document.getElementById("timeline-audio-track");
+	if (audioTrack) audioTrack.innerHTML = "";
+	const rulerTrack = document.getElementById("timeline-ruler-track");
+	if (rulerTrack) rulerTrack.innerHTML = "";
+	const overlayTrack = document.getElementById("timeline-marker-overlay");
+	if (overlayTrack) overlayTrack.innerHTML = "";
+
+	window.currentWaveformData = [];
+	window.currentWaveformDataPath = null;
+
 	saveLocalState();
 	if (typeof updateSliderTicks === "function") updateSliderTicks();
 };
@@ -189,18 +181,64 @@ window.loadVideo = async (incomingVideoPath) => {
 		return;
 	}
 
+	// Hard visual reset of timeline graphics panels
+	const videoTrack = document.getElementById("timeline-video-track");
+	if (videoTrack) {
+		videoTrack.innerHTML = "";
+	}
+	const audioTrack = document.getElementById("timeline-audio-track");
+	if (audioTrack) {
+		audioTrack.innerHTML = "";
+	}
+	const rulerTrack = document.getElementById("timeline-ruler-track");
+	if (rulerTrack) {
+		rulerTrack.innerHTML = "";
+	}
+	const overlayTrack = document.getElementById("timeline-marker-overlay");
+	if (overlayTrack) {
+		overlayTrack.innerHTML = "";
+	}
+
+	window.currentWaveformData = [];
+	window.currentWaveformDataPath = null;
+
 	console.log(
 		"[Loader Core] Processing absolute ingestion path parameter:",
 		incomingVideoPath,
 	);
 	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
 	let resolvedFilePath = incomingVideoPath;
+	let unlistenTranscode = null;
 
 	try {
-		// 1. Reveal fullscreen optimization screen progress indicator spinner
+		// 1. Reveal fullscreen progress indicator spinner with neutral text on launch
 		if (optimizationOverlayNode) {
+			const titleEl = optimizationOverlayNode.querySelector("h3");
+			const descEl = optimizationOverlayNode.querySelector("p");
+			if (titleEl) titleEl.textContent = "Loading Video Asset...";
+			if (descEl)
+				descEl.textContent =
+					"Verifying video file compatibility, please wait...";
 			optimizationOverlayNode.classList.remove("hidden");
 			optimizationOverlayNode.classList.add("opacity-100", "flex");
+		}
+
+		// Listen for transcode-needed event to only display the HEVC warning if optimization is actively occurring
+		if (window.__TAURI__?.event?.listen) {
+			unlistenTranscode = await window.__TAURI__.event.listen(
+				"transcode-needed",
+				() => {
+					if (optimizationOverlayNode) {
+						const titleEl = optimizationOverlayNode.querySelector("h3");
+						const descEl = optimizationOverlayNode.querySelector("p");
+						if (titleEl)
+							titleEl.textContent = "Optimizing High-Efficiency Media";
+						if (descEl)
+							descEl.textContent =
+								"Processing H.265/HEVC tracking sequences to generate a frame-accurate proxy timeline track. This occurs once per video asset. Please keep this window active...";
+					}
+				},
+			);
 		}
 
 		// 2. Pass track path metrics down to our backend Rust transcoding checker command
@@ -226,9 +264,21 @@ window.loadVideo = async (incomingVideoPath) => {
 		);
 		resolvedFilePath = incomingVideoPath;
 	} finally {
+		if (unlistenTranscode) {
+			unlistenTranscode();
+		}
 		if (optimizationOverlayNode) {
 			optimizationOverlayNode.classList.remove("opacity-100");
-			setTimeout(() => optimizationOverlayNode.classList.add("hidden"), 300);
+			setTimeout(() => {
+				optimizationOverlayNode.classList.add("hidden");
+				// Restore original elements for future runs
+				const titleEl = optimizationOverlayNode.querySelector("h3");
+				const descEl = optimizationOverlayNode.querySelector("p");
+				if (titleEl) titleEl.textContent = "Optimizing High-Efficiency Media";
+				if (descEl)
+					descEl.textContent =
+						"Processing H.265/HEVC tracking sequences to generate a frame-accurate proxy timeline track. This occurs once per video asset. Please keep this window active...";
+			}, 300);
 		}
 	}
 
@@ -303,12 +353,93 @@ window.initializeLaunchArgumentHandler = async () => {
 				console.log("[Launch System] External OS file detected:", launchPath);
 				const lower = launchPath.toLowerCase();
 
+				// Unconditionally wipe all visual components on launch to prevent ghosting
+				const videoTrack = document.getElementById("timeline-video-track");
+				if (videoTrack) videoTrack.innerHTML = "";
+				const audioTrack = document.getElementById("timeline-audio-track");
+				if (audioTrack) audioTrack.innerHTML = "";
+				const rulerTrack = document.getElementById("timeline-ruler-track");
+				if (rulerTrack) rulerTrack.innerHTML = "";
+				const overlayTrack = document.getElementById("timeline-marker-overlay");
+				if (overlayTrack) overlayTrack.innerHTML = "";
+				window.currentWaveformData = [];
+				window.currentWaveformDataPath = null;
+
 				if (lower.endsWith(".tmv") || lower.endsWith(".tmvz")) {
 					try {
 						projectFilePath = launchPath;
 						localStorage.setItem("projectFilePath", projectFilePath);
-						const jsonText = await window.__TAURI__.fs.readTextFile(launchPath);
-						importFromJSON(jsonText);
+
+						if (lower.endsWith(".tmvz")) {
+							const optimizationOverlayNode =
+								document.getElementById("optimizingOverlay");
+							if (optimizationOverlayNode) {
+								const titleEl = optimizationOverlayNode.querySelector("h3");
+								const descEl = optimizationOverlayNode.querySelector("p");
+								if (titleEl)
+									titleEl.textContent = "Extracting Project Archive...";
+								if (descEl)
+									descEl.textContent =
+										"Unpacking compressed project folders, please wait...";
+								optimizationOverlayNode.classList.remove("hidden");
+								optimizationOverlayNode.classList.add("opacity-100", "flex");
+							}
+
+							try {
+								const result = await window.__TAURI__.core.invoke(
+									"load_tspz_bundle",
+									{
+										bundlePath: launchPath,
+									},
+								);
+
+								importFromJSON(result.project_json);
+
+								if (result.video_paths && result.video_paths.length > 0) {
+									result.video_paths.forEach((tempPath, i) => {
+										if (videoQueue[i]) {
+											videoQueue[i].videoFilePath = tempPath;
+											videoQueue[i].videoFileName = tempPath.replace(
+												/^.*[\\/]/,
+												"",
+											);
+										}
+									});
+									const active = videoQueue[activeQueueIndex];
+									if (active?.videoFilePath) {
+										const url = window.__TAURI__.core.convertFileSrc(
+											active.videoFilePath,
+										);
+										player.src = url;
+										player.preload = "auto";
+										player.load();
+										toggleVideoPlaceholder(false);
+										window.loadSubtitleTrack(active.videoFilePath);
+									}
+									saveLocalState();
+									renderVideoQueueSelect();
+								}
+							} finally {
+								if (optimizationOverlayNode) {
+									optimizationOverlayNode.classList.remove("opacity-100");
+									setTimeout(() => {
+										optimizationOverlayNode.classList.add("hidden");
+										const titleEl = optimizationOverlayNode.querySelector("h3");
+										const descEl = optimizationOverlayNode.querySelector("p");
+										if (titleEl)
+											titleEl.textContent = "Optimizing High-Efficiency Media";
+										if (descEl)
+											descEl.textContent =
+												"Processing H.265/HEVC tracking sequences to generate a frame-accurate proxy timeline track. This occurs once per video asset. Please keep this window active...";
+									}, 300);
+								}
+							}
+						} else {
+							const jsonText =
+								await window.__TAURI__.fs.readTextFile(launchPath);
+							importFromJSON(jsonText);
+						}
+
 						toConsole(
 							"Auto-loaded project from launch argument",
 							launchPath,
@@ -422,16 +553,7 @@ window.resetClosedCaptions = () => {
 	window.currentCaptions = [];
 	window.captionsVisible = true;
 
-	if (window.waveformTrackData) {
-		try {
-			if (typeof window.waveformTrackData.destroy === "function") {
-				window.waveformTrackData.destroy();
-			}
-		} catch (e) {
-			console.error("Error destroying waveformTrackData:", e);
-		}
-		window.waveformTrackData = null;
-	}
+	// No active visualizer instances to destroy
 	window.currentWaveformDataPath = null;
 	const peaksContainer = document.getElementById("peaks-timeline-wrapper");
 	if (peaksContainer) {
@@ -987,31 +1109,7 @@ window.cycleViewMode = async (targetMode) => {
 		videoWrapper.style.height = "";
 	}
 
-	// 3. Unconditionally clear legacy state modifiers from body and grid layout structures
-	mainGrid.classList.remove("normal-mode", "cinema-mode", "miniplayer-mode");
-	document.body.classList.remove(
-		"normal-mode",
-		"cinema-mode",
-		"miniplayer-mode",
-	);
-
-	// 4. Standardized state assignment passing control entirely to the CSS engine
-	mainGrid.classList.add(`${window.currentViewMode}-mode`);
-	document.body.classList.add(`${window.currentViewMode}-mode`);
-
-	if (modeBtn) {
-		if (window.currentViewMode === "normal")
-			modeBtn.title = "Switch to Cinema Mode";
-		else if (window.currentViewMode === "cinema")
-			modeBtn.title = "Switch to Miniplayer View";
-		else modeBtn.title = "Switch to Normal View";
-	}
-
-	if (typeof window.repositionControls === "function") {
-		setTimeout(window.repositionControls, 50);
-	}
-
-	// 5. Native Tauri Window Boundary Manipulation Subsystem
+	// 3. Native Tauri Window Boundary Manipulation Subsystem (Asynchronous native operations run first)
 	if (window.__TAURI__?.window?.getCurrentWindow) {
 		try {
 			const appWindow = window.__TAURI__.window.getCurrentWindow();
@@ -1054,20 +1152,36 @@ window.cycleViewMode = async (targetMode) => {
 			console.error("[View System] Asynchronous window operation failed:", err);
 		}
 	}
+
+	// 4. Stamping new layout mode class hooks onto DOM inside 60ms timeout to avoid repaint glitches
+	setTimeout(() => {
+		// Clear legacy state modifiers from body and grid layout structures
+		mainGrid.classList.remove("normal-mode", "cinema-mode", "miniplayer-mode");
+		document.body.classList.remove(
+			"normal-mode",
+			"cinema-mode",
+			"miniplayer-mode",
+		);
+
+		// Standardized state assignment passing control entirely to the CSS engine
+		mainGrid.classList.add(`${window.currentViewMode}-mode`);
+		document.body.classList.add(`${window.currentViewMode}-mode`);
+
+		if (modeBtn) {
+			if (window.currentViewMode === "normal")
+				modeBtn.title = "Switch to Cinema Mode";
+			else if (window.currentViewMode === "cinema")
+				modeBtn.title = "Switch to Miniplayer View";
+			else modeBtn.title = "Switch to Normal View";
+		}
+
+		if (typeof window.repositionControls === "function") {
+			window.repositionControls();
+		}
+	}, 60);
 };
 
-// Compatibility wrappers for existing references
-const enableMiniPlayerMode = async () => {
-	window.cycleViewMode("miniplayer");
-};
-const disableMiniPlayerMode = async () => {
-	window.cycleViewMode("normal");
-};
-const toggleCinemaMode = async () => {
-	window.cycleViewMode(
-		window.currentViewMode === "cinema" ? "normal" : "cinema",
-	);
-};
+// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
 // Centralized overlay presentation management engine
 window.triggerPlaybackOverlay = (messageText) => {
 	const overlayContainer =
@@ -1250,10 +1364,7 @@ const initializePlayer = () => {
 			DOM.closeMasterDataBtn.addEventListener("click", closeMasterModal);
 	}
 
-	player.addEventListener("timeupdate", seektimeupdate);
-	player.addEventListener("loadedmetadata", () => {
-		const duration = player.duration;
-		seekBar.max = duration;
+	function configureTimelineTicks(duration) {
 		if (duration > 0) {
 			let tickSeconds = 60;
 			if (duration <= 15)
@@ -1275,6 +1386,21 @@ const initializePlayer = () => {
 			const tickInterval = (tickSeconds / duration) * 100;
 			seekBar.style.setProperty("--tick-interval", `${tickInterval}%`);
 		}
+	}
+
+	function bootTimelineVisualizers() {
+		if (videoFilePath) {
+			if (window.currentViewMode !== "miniplayer") {
+				window.loadWaveformTimeline();
+			}
+		}
+	}
+
+	player.addEventListener("timeupdate", seektimeupdate);
+	player.addEventListener("loadedmetadata", () => {
+		const duration = player.duration;
+		seekBar.max = duration;
+		configureTimelineTicks(duration);
 		if (preserveProcessTimes) {
 			if (
 				processEndTime === undefined ||
@@ -1310,16 +1436,7 @@ const initializePlayer = () => {
 		DOM.volumeValue.textContent = "0";
 		toConsole("Video muted on load", "Success", debuggin);
 
-		if (videoFilePath) {
-			if (document.body.classList.contains("miniplayer-mode")) {
-				const wrapper = document.getElementById("peaks-timeline-wrapper");
-				if (wrapper) wrapper.style.display = "none";
-				const seekBarContainer = document.getElementById("seekBarContainer");
-				if (seekBarContainer) seekBarContainer.style.display = "block";
-			} else {
-				window.loadWaveformTimeline();
-			}
-		}
+		bootTimelineVisualizers();
 		if (typeof window.initializeVideoViewportZoomPan === "function") {
 			window.initializeVideoViewportZoomPan(
 				player,
@@ -1584,6 +1701,19 @@ const initializePlayer = () => {
 					toConsole("Loading .tmvz bundle", selectedPath, debuggin);
 					showToast("Extracting bundle…", "info");
 
+					const optimizationOverlayNode =
+						document.getElementById("optimizingOverlay");
+					if (optimizationOverlayNode) {
+						const titleEl = optimizationOverlayNode.querySelector("h3");
+						const descEl = optimizationOverlayNode.querySelector("p");
+						if (titleEl) titleEl.textContent = "Extracting Project Archive...";
+						if (descEl)
+							descEl.textContent =
+								"Unpacking compressed project folders, please wait...";
+						optimizationOverlayNode.classList.remove("hidden");
+						optimizationOverlayNode.classList.add("opacity-100", "flex");
+					}
+
 					try {
 						const result = await window.__TAURI__.core.invoke(
 							"load_tspz_bundle",
@@ -1629,6 +1759,20 @@ const initializePlayer = () => {
 							`Error loading bundle: ${bundleErr?.message || bundleErr}`,
 							"error",
 						);
+					} finally {
+						if (optimizationOverlayNode) {
+							optimizationOverlayNode.classList.remove("opacity-100");
+							setTimeout(() => {
+								optimizationOverlayNode.classList.add("hidden");
+								const titleEl = optimizationOverlayNode.querySelector("h3");
+								const descEl = optimizationOverlayNode.querySelector("p");
+								if (titleEl)
+									titleEl.textContent = "Optimizing High-Efficiency Media";
+								if (descEl)
+									descEl.textContent =
+										"Processing H.265/HEVC tracking sequences to generate a frame-accurate proxy timeline track. This occurs once per video asset. Please keep this window active...";
+							}, 300);
+						}
 					}
 				} else {
 					// --- Standard .tmv load path ---
@@ -1701,6 +1845,20 @@ const initializePlayer = () => {
 		toggleVideoPlaceholder(true);
 		updateLoadButtonColor();
 		updateMarkersList();
+
+		// Hard visual reset of timeline graphics panels
+		const videoTrack = document.getElementById("timeline-video-track");
+		if (videoTrack) videoTrack.innerHTML = "";
+		const audioTrack = document.getElementById("timeline-audio-track");
+		if (audioTrack) audioTrack.innerHTML = "";
+		const rulerTrack = document.getElementById("timeline-ruler-track");
+		if (rulerTrack) rulerTrack.innerHTML = "";
+		const overlayTrack = document.getElementById("timeline-marker-overlay");
+		if (overlayTrack) overlayTrack.innerHTML = "";
+
+		window.currentWaveformData = [];
+		window.currentWaveformDataPath = null;
+
 		saveLocalState();
 		updateSliderTicks();
 
@@ -1968,7 +2126,9 @@ const initializePlayer = () => {
 	if (DOM.toggleCinemaBtn) {
 		DOM.toggleCinemaBtn.addEventListener("click", (e) => {
 			e.preventDefault();
-			window.cycleViewMode();
+			window.cycleViewMode(
+				window.currentViewMode === "cinema" ? "normal" : "cinema",
+			);
 		});
 	}
 	document.addEventListener("mousemove", resetCinemaIdleTimer);
