@@ -2118,7 +2118,7 @@ const initializePlayer = () => {
 		} else {
 			updateZoom();
 		}
-		window.triggerPlaybackOverlay("Zoom Reset");
+		//window.triggerPlaybackOverlay("Zoom Reset");
 	});
 	if (DOM.takeSnapshotBtn) {
 		DOM.takeSnapshotBtn.addEventListener("click", takeSnapshot);
@@ -2307,7 +2307,7 @@ const initializePlayer = () => {
 				translateX = 0;
 				translateY = 0;
 				updateZoom();
-				window.triggerPlaybackOverlay("Zoom Reset");
+				//window.triggerPlaybackOverlay("Zoom Reset");
 				break;
 			case "`":
 			case "1":

@@ -1,14 +1,7 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
 	"files": {
-		"includes": [
-			"ui/*.js",
-			"ui/js/**/*.js",
-			"ui/css/**/*.css",
-			"ui/input.css",
-			"ui/styles.css",
-			"ui/index.html"
-		]
+		"includes": ["ui/*.js", "ui/js/*.js", "ui/css/*.css", "ui/index.html"]
 	},
 	"formatter": {
 		"enabled": true

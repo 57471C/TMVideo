@@ -1,7 +1,7 @@
 {
   "name": "tmvideo",
   "version": "0.4.2",
-  "description": "A web-based application for conducting time and motion studies.",
+  "description": "A Windows Video Player/Editor with multiple view modes and encoding capabilities.",
   "main": "ui/index.html",
   "scripts": {
     "start": "tauri dev",
