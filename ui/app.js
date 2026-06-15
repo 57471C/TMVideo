@@ -16,56 +16,17 @@
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
 // --- CENTRAL APPLICATION RUNTIME STATE SAFETIES ---
-if (typeof window.cinemaIdleTimer === 'undefined') {
-  window.cinemaIdleTimer = null; // Globally registers the idle timer pointer
-}
-if (typeof window.currentViewMode === 'undefined') {
-  window.currentViewMode = 'normal'; // Valid options: 'normal', 'cinema', 'miniplayer'
+window.cinemaIdleTimer = window.cinemaIdleTimer || null;
+window.isCinemaMode = window.isCinemaMode || false;
+if (typeof window.currentViewMode === "undefined") {
+	window.currentViewMode = "normal"; // Valid options: 'normal', 'cinema', 'miniplayer'
 }
 
-// --- BRUTE-FORCE AUTOMATED PATH SANITIZER & LOCAL PROTOCOL STREAM PROTOCOL ---
-(function() {
-  console.log("[Proxy Interceptor] Arming automated local asset protocol conversion matrices...");
-  
-  const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-  
-  if (originalSrcDescriptor) {
-    Object.defineProperty(HTMLMediaElement.prototype, 'src', {
-      set: function(assignedValue) {
-        let cleanUrlTarget = assignedValue;
-        
-        // Intercept raw Windows local paths (e.g., strings beginning with C: or containing backslashes)
-        if (typeof assignedValue === 'string' && (assignedValue.match(/^[a-zA-Z]:\\/) || assignedValue.includes('\\'))) {
-          console.warn(`%c[Interceptor Match] Intercepted raw local path target assignment: "${assignedValue}"`, "background: #0074D9; color: #fff; padding: 2px; font-weight: bold;");
-          
-          // Strip native Windows extended-length path security anchors if present
-          let pathString = assignedValue.replace(/^\\\\?\\/, "");
-          
-          // Securely convert absolute disk paths to authenticated WebView streaming server resources
-          if (window.__TAURI__) {
-            const convertFn = (window.__TAURI__.core && window.__TAURI__.core.convertFileSrc) || 
-                              (window.__TAURI__.tauri && window.__TAURI__.tauri.convertFileSrc);
-            if (convertFn) {
-              cleanUrlTarget = convertFn(pathString);
-            } else {
-              cleanUrlTarget = `https://asset.localhost/${encodeURIComponent(pathString)}`;
-            }
-            console.log("[Interceptor Translate] Successfully transformed resource link to secure stream URL:", cleanUrlTarget);
-          }
-        }
-        
-        // Pass the fully valid protocol stream URL down to the browser media rendering engine
-        originalSrcDescriptor.set.call(this, cleanUrlTarget);
-      },
-      get: function() {
-        return originalSrcDescriptor.get.call(this);
-      },
-      configurable: true,
-      enumerable: true
-    });
-    console.log("[Proxy Interceptor] Interception matrix armed successfully.");
-  }
-})();
+// --- MARQUEE ZOOM COORDINATE POINTER SAFETIES ---
+window.marqueeSelectionStartRef = null;
+window.marqueeSelectionEndRef = null;
+
+
 
 // --- VIEWPORT LAYOUT COMPATIBILITY BRIDGE ---
 // Tracks our 3-state view carousel smoothly
@@ -98,8 +59,6 @@ const exists = window.__TAURI__?.fs?.exists || null;
 const tempdir = window.__TAURI__?.os?.tempdir || null;
 const join = window.__TAURI__?.path?.join || null;
 const openDialog = window.__TAURI__?.dialog?.open || null;
-let isCinemaMode = false;
-let cinemaIdleTimer = null;
 let player;
 let loadVideoButton;
 let addMarkerBtn;
@@ -225,28 +184,28 @@ window.clearAllPreviousProjectData = () => {
 window.loadVideo = async (incomingVideoPath) => {
 	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
 		console.error(
-			"[Loader Core] Rejected video payload command: Path target is blank.",
+			"[Loader Core] Resource assignment blocked: empty path string.",
 		);
 		return;
 	}
 
 	console.log(
-		"[Loader Core] Ingestion sequence initiated for absolute file path:",
+		"[Loader Core] Processing absolute ingestion path parameter:",
 		incomingVideoPath,
 	);
 	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
-	let finalMediaUrlSrc = incomingVideoPath;
+	let resolvedFilePath = incomingVideoPath;
 
 	try {
-		// 1. Fire up the fullscreen dimming optimization spinner overlay
+		// 1. Reveal fullscreen optimization screen progress indicator spinner
 		if (optimizationOverlayNode) {
 			optimizationOverlayNode.classList.remove("hidden");
 			optimizationOverlayNode.classList.add("opacity-100", "flex");
 		}
 
-		// 2. Hand path metrics down to our background Rust encoder checking engine
-		if (window.__TAURI__) {
-			finalMediaUrlSrc = await window.__TAURI__.core.invoke(
+		// 2. Pass track path metrics down to our backend Rust transcoding checker command
+		if (window.__TAURI__?.invoke) {
+			resolvedFilePath = await window.__TAURI__.invoke(
 				"verify_and_prepare_video",
 				{
 					videoPath: incomingVideoPath,
@@ -254,18 +213,18 @@ window.loadVideo = async (incomingVideoPath) => {
 			);
 		}
 
-		// Strip out any invalid Windows internal UNC prefix strings if returned from the file check
-		finalMediaUrlSrc = finalMediaUrlSrc.replace(/^\\\\?\\/, "");
+		// Surgical clearance of native Windows extended UNC safety qualifiers
+		resolvedFilePath = resolvedFilePath.replace(/^\\\\?\\/, "");
 		console.log(
-			"[Loader Core] Resolved safe destination asset track path:",
-			finalMediaUrlSrc,
+			"[Loader Core] Video path mapping successfully resolved to:",
+			resolvedFilePath,
 		);
-	} catch (backendCommandException) {
+	} catch (err) {
 		console.error(
-			"[Loader Core] Pre-verification encoder command faulted:",
-			backendCommandException,
+			"[Loader Core] Backend verification checker failed. Falling back to source:",
+			err,
 		);
-		finalMediaUrlSrc = incomingVideoPath; // Use raw link fallback if backend thread chokes
+		resolvedFilePath = incomingVideoPath;
 	} finally {
 		if (optimizationOverlayNode) {
 			optimizationOverlayNode.classList.remove("opacity-100");
@@ -273,122 +232,64 @@ window.loadVideo = async (incomingVideoPath) => {
 		}
 	}
 
-	// 3. Locate the actual physical screen video tag inside the layout tree
+	// 3. Pin down the core HTML5 video rendering element tag
 	const videoElement =
-		document.querySelector("video") ||
-		document.getElementById("video-player") ||
-		player;
+		document.querySelector("video") || document.getElementById("video-player");
 	if (!videoElement) {
 		console.error(
-			"[Loader Core] CRITICAL FAILURE: HTML5 <video> node missing from DOM mapping canvas.",
+			"[Loader Core] CRITICAL EXCEPTION: HTML5 <video> element missing from DOM grid structure.",
 		);
 		return;
 	}
 
-	// 4. Securely translate the absolute local disk string into an authorized stream URL protocol link
-	let tauriStreamUrl = finalMediaUrlSrc;
+	// 4. Transform native drive references into authenticated network stream URLs
+	let validatedStreamUrl = resolvedFilePath;
 	if (window.__TAURI__) {
 		const convertFn =
 			window.__TAURI__.core?.convertFileSrc ||
 			window.__TAURI__.tauri?.convertFileSrc;
 		if (convertFn) {
-			tauriStreamUrl = convertFn(finalMediaUrlSrc);
+			validatedStreamUrl = convertFn(resolvedFilePath);
 		} else {
-			tauriStreamUrl = `https://asset.localhost/${encodeURIComponent(finalMediaUrlSrc)}`;
+			validatedStreamUrl = `https://asset.localhost/${encodeURIComponent(resolvedFilePath)}`;
 		}
 	}
 
-	console.log(
-		"[Loader Core] Driving HTML5 playback media pipe source parameter to target URL:",
-		tauriStreamUrl,
+	console.warn(
+		`%c[Loader Core] Pushing URL to hardware video track src: "${validatedStreamUrl}"`,
+		"color: #00ffcc; font-weight: bold;",
 	);
 
-	// Synchronize master application memory data models
-	const extractedFileName = finalMediaUrlSrc.split(/[/\\]/).pop();
-	videoFileName = extractedFileName;
-	videoFilePath = finalMediaUrlSrc;
-
-	if (!videoQueue || videoQueue.length === 0) {
-		videoQueue = [
-			{
-				videoId: 1,
-				videoName: "Video 1",
-				videoFileName: "",
-				videoFilePath: "",
-				processStartTime: 0,
-				processEndTime: 0,
-				appState: { markers: [] },
-			},
-		];
-	}
-	activeQueueIndex = 0;
-
-	videoQueue[0].videoFileName = videoFileName;
-	videoQueue[0].videoFilePath = videoFilePath;
-	videoQueue[0].videoName = videoFileName;
-
+	// Sync internal system memory global states
 	if (typeof currentVideo !== "undefined" && currentVideo) {
-		currentVideo.videoFilePath = finalMediaUrlSrc;
+		currentVideo.videoFilePath = resolvedFilePath;
 	}
 
-	// Set up temporary local catch blocks inside this scope to prevent silent player failures
+	// Attach immediate error tracking to catch hidden decoding runtime faults
 	videoElement.onerror = () => {
 		console.error(
-			"[Loader Core] DOM Media Pipeline reported loading error. State Code Ref:",
+			"[Loader Core] Browser multimedia layer rejected stream target!",
 			videoElement.error,
 		);
-		console.warn(
-			`[Loader Core] Defective URL source caught on hardware reject track: "${videoElement.src}"`,
-		);
-	};
-
-	// 5. Inject source stream links and execute browser level rendering paint triggers
-	try {
-		videoElement.src = tauriStreamUrl;
-		videoElement.preload = "auto";
-		videoElement.load();
-
-		// Run any internal post-load layouts present in your original logic sequence
-		toggleVideoPlaceholder(false);
-		if (typeof window.loadSubtitleTrack === "function") {
-			window.loadSubtitleTrack(videoFilePath);
-		}
-
-		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
-		if (typeof updateLoadButtonColor === "function") updateLoadButtonColor();
-		if (typeof updateMarkersList === "function") updateMarkersList();
-		saveLocalState();
-		if (typeof updateSliderTicks === "function") updateSliderTicks();
-
-		if (typeof enableMiniPlayerMode === "function") {
-			await enableMiniPlayerMode();
-		}
-
-		if (typeof window.repositionControls === "function")
-			setTimeout(window.repositionControls, 100);
-		if (typeof showPlaceholder === "function") showPlaceholder(false);
-
-		toConsole(
-			"Auto-loaded video from launch argument",
-			incomingVideoPath,
-			debuggin,
-		);
-		showToast("Video loaded.", "success");
-	} catch (videoElementLoadError) {
 		console.error(
-			"%c[CRITICAL RESOURCE FAILURE] Video Pipeline Stopped!",
-			"background: #ff0000; color: #fff; font-weight: bold; padding: 4px;",
-		);
-		console.warn(
-			`[CRITICAL RESOURCE FAILURE] Attempted to stream URL: "${tauriStreamUrl}"`,
-		);
-		console.log(
-			"[CRITICAL RESOURCE FAILURE] Underlying DOM Error Exception Object:",
-			videoElementLoadError,
+			"[Loader Core] Attempted source URL string was:",
+			videoElement.src,
 		);
 		if (typeof showToast === "function")
-			showToast("Media engine failed to resolve stream path safely", "error");
-	}
+			showToast(
+				"Media engine failed to parse safe stream address URL",
+				"error",
+			);
+	};
+
+	// 5. Fire core media track rehydration paint triggers
+	videoElement.src = validatedStreamUrl;
+	videoElement.load();
+
+	// Fire default post-load interface configurations
+	if (typeof window.repositionControls === "function")
+		setTimeout(window.repositionControls, 100);
+	if (typeof showPlaceholder === "function") showPlaceholder(false);
 };
 
 window.initializeLaunchArgumentHandler = async () => {
@@ -714,7 +615,7 @@ window.loadWaveformTimeline = async () => {
 	const wrapper = document.getElementById("peaks-timeline-wrapper");
 	const seekBarContainer = document.getElementById("seekBarContainer");
 
-	if (document.body.classList.contains("mini-player")) {
+	if (document.body.classList.contains("miniplayer-mode")) {
 		if (wrapper) wrapper.style.display = "none";
 		if (seekBarContainer) seekBarContainer.style.display = "block";
 		return;
@@ -1052,197 +953,115 @@ if (typeof window.currentViewMode === "undefined") {
 	window.currentViewMode = "normal"; // Choices: 'normal', 'cinema', 'miniplayer'
 }
 
-window.cycleViewMode = async (targetMode) => {
+// TARGET: Completely overhaul the window management logic block within window.cycleViewMode
+// TARGET: Completely overhaul the view state lifecycle configuration block inside window.cycleViewMode
+window.cycleViewMode = async () => {
 	const mainGrid = document.getElementById("mainLayoutGrid");
-	const modeBtn =
-		document.getElementById("expand-player-btn") ||
-		document.getElementById("toggleCinemaBtn") ||
-		document.getElementById("toggleMiniPlayerBtn") ||
-		document.querySelector(".view-mode-button");
+	const modeBtn = document.getElementById("expand-player-btn");
 
-	if (!mainGrid) {
-		console.error("[View System] Main layout grid target frame not found.");
-		return;
-	}
+	if (!mainGrid) return;
 
-	// 2. Rotate to the next chronological layout state
-	if (targetMode) {
-		window.currentViewMode = targetMode;
-	} else {
-		switch (window.currentViewMode) {
-			case "normal":
-				window.currentViewMode = "cinema";
-				break;
-			case "cinema":
-				window.currentViewMode = "miniplayer";
-				break;
-			default:
-				window.currentViewMode = "normal";
-				break;
-		}
+	// 1. Progress layout tracking states smoothly
+	switch (window.currentViewMode) {
+		case "normal":
+			window.currentViewMode = "cinema";
+			break;
+		case "cinema":
+			window.currentViewMode = "miniplayer";
+			break;
+		default:
+			window.currentViewMode = "normal";
+			break;
 	}
 
 	console.log(
 		`[View System] Shifting layout mode configuration to: ${window.currentViewMode.toUpperCase()}`,
 	);
 
-	// 3. Apply target class updates to the master viewport wrapper
-	// Remove all state variables first to keep state transitions completely clean
-	mainGrid.classList.remove(
-		"cinema-mode",
-		"miniplayer-mode",
-		"cinema-active",
-		"mini-player",
-	);
+	// 2. Reset marquee zoom/translation transforms on view mode transitions
+	const videoElement = document.querySelector("video");
+	const videoViewport = document.getElementById("video-viewport");
+	const videoWrapper = document.getElementById("video-wrapper-id");
+
+	for (const el of [videoElement, videoViewport, videoWrapper]) {
+		if (el) {
+			el.style.transform = "none";
+			el.style.left = "0";
+			el.style.top = "0";
+		}
+	}
+
+	if (videoWrapper) {
+		videoWrapper.style.width = "";
+		videoWrapper.style.height = "";
+	}
+
+	// 3. Unconditionally clear legacy state modifiers from body and grid layout structures
+	mainGrid.classList.remove("normal-mode", "cinema-mode", "miniplayer-mode");
 	document.body.classList.remove(
+		"normal-mode",
 		"cinema-mode",
 		"miniplayer-mode",
-		"cinema-active",
-		"mini-player",
 	);
 
-	// Sync local tracking state variable
-	isCinemaMode = window.currentViewMode === "cinema";
+	// 4. Standardized state assignment passing control entirely to the CSS engine
+	mainGrid.classList.add(`${window.currentViewMode}-mode`);
+	document.body.classList.add(`${window.currentViewMode}-mode`);
 
-	const mainContentArea = mainGrid.parentElement;
-	const controlBar = document.getElementById("mediaControlsContainer");
-	const wrapper = document.getElementById("peaks-timeline-wrapper");
-	const seekBarContainer = document.getElementById("seekBarContainer");
-	const expandBtn = document.getElementById("expandToEditorBtn");
-
-	// Clean up timers & reset control bar transformations
-	if (window.cinemaIdleTimer) {
-		clearTimeout(window.cinemaIdleTimer);
-		window.cinemaIdleTimer = null;
-	}
-	if (controlBar) {
-		controlBar.classList.remove("translate-y-full", "opacity-0");
-	}
-	document.body.classList.remove("hide-controls");
-
-	if (window.currentViewMode === "cinema") {
-		mainGrid.classList.add("cinema-mode", "cinema-active");
-		document.body.classList.add("cinema-mode", "cinema-active");
-		if (modeBtn) modeBtn.title = "Switch to Miniplayer View";
-		if (expandBtn) expandBtn.classList.add("hidden");
-
-		if (mainContentArea) {
-			mainContentArea.style.overflowY = "hidden";
-		}
-
-		// Handle Monitor Fullscreen
-		if (appWindow) {
-			appWindow.setFullscreen(true).catch((e) => console.error(e));
-		} else if (document.documentElement.requestFullscreen) {
-			document.documentElement
-				.requestFullscreen()
-				.catch((e) => console.warn(e));
-		}
-
-		// Reset inactivity timer
-		resetCinemaIdleTimer();
-
-		// Handle peaks timeline display
-		if (wrapper) wrapper.style.display = "none";
-
-		showToast("Cinema Mode Activated", "info");
-	} else if (window.currentViewMode === "miniplayer") {
-		mainGrid.classList.add("miniplayer-mode", "mini-player");
-		document.body.classList.add("miniplayer-mode", "mini-player");
-		if (modeBtn) modeBtn.title = "Switch to Normal View";
-		if (expandBtn) expandBtn.classList.remove("hidden");
-
-		if (mainContentArea) {
-			mainContentArea.style.overflowY = "auto";
-		}
-
-		// Exit Fullscreen
-		if (appWindow) {
-			appWindow.setFullscreen(false).catch((e) => console.error(e));
-		} else if (document.exitFullscreen && document.fullscreenElement) {
-			document.exitFullscreen().catch((e) => console.warn(e));
-		}
-
-		// Resize window to mini player dimensions
-		if (appWindow) {
-			try {
-				console.log(
-					"[View System] Shifting to Miniplayer: Scaling down to bounded dimensions...",
-				);
-				await appWindow.unmaximize(); // Restores from max size before resizing bounds
-
-				// Enforce our clean, compact floating widget dimension variables
-				const targetWidth = 580;
-				const targetHeight = 440; // High headroom accounts for timeline speed row
-
-				if (window.__TAURI__.window.LogicalSize) {
-					const factor = await appWindow.scaleFactor();
-					await appWindow.setSize(
-						new window.__TAURI__.window.LogicalSize(
-							targetWidth / factor,
-							targetHeight / factor,
-						),
-					);
-				} else {
-					await appWindow.setSize({
-						type: "Physical",
-						width: targetWidth,
-						height: targetHeight,
-					});
-				}
-			} catch (windowSizingError) {
-				console.error(
-					"[View System] Asynchronous window operation failed:",
-					windowSizingError,
-				);
-			}
-		}
-
-		if (wrapper) wrapper.style.display = "none";
-		if (seekBarContainer) seekBarContainer.style.display = "block";
-
-		showToast("Miniplayer Mode Activated", "info");
-	} else {
-		// Normal state defaults
-		if (modeBtn) modeBtn.title = "Switch to Cinema Mode";
-		if (expandBtn) expandBtn.classList.add("hidden");
-
-		if (mainContentArea) {
-			mainContentArea.style.overflowY = "auto";
-		}
-
-		// Exit Fullscreen
-		if (appWindow) {
-			appWindow.setFullscreen(false).catch((e) => console.error(e));
-		} else if (document.exitFullscreen && document.fullscreenElement) {
-			document.exitFullscreen().catch((e) => console.warn(e));
-		}
-
-		// Maximize window
-		if (appWindow) {
-			try {
-				console.log(
-					"[View System] Normal Mode Selected: Maximizing application dashboard container...",
-				);
-				await appWindow.maximize(); // Dynamic native window expansion
-			} catch (err) {
-				console.error(
-					"[View System] Asynchronous window transformation command failed:",
-					err,
-				);
-			}
-		}
-
-		if (wrapper) wrapper.style.display = "block";
-		if (seekBarContainer) seekBarContainer.style.display = "block";
-		window.loadWaveformTimeline();
-
-		showToast("Standard Layout Restored", "info");
+	if (modeBtn) {
+		if (window.currentViewMode === "normal")
+			modeBtn.title = "Switch to Cinema Mode";
+		else if (window.currentViewMode === "cinema")
+			modeBtn.title = "Switch to Miniplayer View";
+		else modeBtn.title = "Switch to Normal View";
 	}
 
-	// Trigger a video canvas alignment calculation adjust if needed
 	if (typeof window.repositionControls === "function") {
 		setTimeout(window.repositionControls, 50);
+	}
+
+	// 5. Native Tauri Window Boundary Manipulation Subsystem
+	if (window.__TAURI__?.window?.getCurrentWindow) {
+		try {
+			const appWindow = window.__TAURI__.window.getCurrentWindow();
+
+			if (window.currentViewMode === "normal") {
+				await appWindow.setFullscreen(false); // Clear any cinema hooks
+				await appWindow.setAlwaysOnTop(false);
+				await appWindow.setResizable(true);
+				await appWindow.maximize(); // Force standard maximized layout profile
+			} else if (window.currentViewMode === "cinema") {
+				await appWindow.setAlwaysOnTop(false);
+				await appWindow.setFullscreen(true); // Enforce absolute native fullscreen mode
+			} else if (window.currentViewMode === "miniplayer") {
+				await appWindow.setFullscreen(false);
+				await appWindow.unmaximize();
+				await appWindow.setResizable(true);
+
+				const targetWidth = 580;
+				const targetHeight = 440 + 44 + 40; // 524px logical height
+
+				const logicalSizeClass =
+					window.__TAURI__?.window?.LogicalSize ||
+					window.__TAURI__?.dpi?.LogicalSize;
+				if (logicalSizeClass) {
+					await appWindow.setSize(
+						new logicalSizeClass(targetWidth, targetHeight),
+					);
+				} else {
+					const factor = (await appWindow.scaleFactor()) || 1.0;
+					await appWindow.setSize({
+						type: "Physical",
+						width: Math.round(targetWidth * factor),
+						height: Math.round(targetHeight * factor),
+					});
+				}
+
+				await appWindow.setAlwaysOnTop(true); // Lock floating window on top
+			}
+		} catch (err) {
+			console.error("[View System] Asynchronous window operation failed:", err);
+		}
 	}
 };
 
@@ -1501,7 +1320,7 @@ const initializePlayer = () => {
 		toConsole("Video muted on load", "Success", debuggin);
 
 		if (videoFilePath) {
-			if (document.body.classList.contains("mini-player")) {
+			if (document.body.classList.contains("miniplayer-mode")) {
 				const wrapper = document.getElementById("peaks-timeline-wrapper");
 				if (wrapper) wrapper.style.display = "none";
 				const seekBarContainer = document.getElementById("seekBarContainer");
@@ -1575,36 +1394,6 @@ const initializePlayer = () => {
 			cancelAnimationFrame(window.playheadAnimationId);
 			window.playheadAnimationId = null;
 		}
-	});
-	player.addEventListener("error", (videoElementLoadError) => {
-		const failedUrlContext =
-			typeof videoFilePath !== "undefined" && videoFilePath
-				? videoFilePath
-				: player.src || "Unknown Path Variable";
-
-		console.error(
-			"%c[CRITICAL RESOURCE FAILURE] Video Pipeline Stopped!",
-			"background: #ff0000; color: #fff; font-weight: bold; padding: 4px;",
-		);
-		console.warn(
-			`[CRITICAL RESOURCE FAILURE] Attempted to stream URL: "${failedUrlContext}"`,
-		);
-		console.log(
-			"[CRITICAL RESOURCE FAILURE] Underlying DOM Error Exception Object:",
-			videoElementLoadError,
-		);
-
-		if (typeof showToast === "function") {
-			showToast(`Failed to load video from URL: ${failedUrlContext}`, "error");
-		} else {
-			alert(
-				`Failed to load the video from the provided URL: ${failedUrlContext}. Please click the video placeholder to select the video file manually.`,
-			);
-		}
-		player.src = "";
-		player.removeAttribute("src");
-		toggleVideoPlaceholder(true);
-		updateLoadButtonColor();
 	});
 
 	addMarkerBtn = document.getElementById("addMarkerBtn");
@@ -2193,9 +1982,12 @@ const initializePlayer = () => {
 	}
 	document.addEventListener("mousemove", resetCinemaIdleTimer);
 
-	marqueeOverlay.addEventListener("mousedown", startMarquee);
-	marqueeOverlay.addEventListener("mousemove", drawMarquee);
-	marqueeOverlay.addEventListener("mouseup", endMarquee);
+	const videoWrapper = document.getElementById("video-wrapper-id");
+	if (videoWrapper) {
+		videoWrapper.addEventListener("mousedown", window.startMarquee);
+		videoWrapper.addEventListener("mousemove", window.drawMarquee);
+		videoWrapper.addEventListener("mouseup", window.endMarquee);
+	}
 
 	const jumpToPreviousMarker = () => {
 		const activeVideo =
@@ -2404,56 +2196,62 @@ const initializePlayer = () => {
 };
 
 /** Activates mini-player mode layout. */
-// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine.
+// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
+window.startMarquee = (e) => {
+	const targetInput = e?.target || e?.srcElement;
+	console.log("utils.js:219 Marquee start:", e?.clientX, e?.clientY);
 
-/** Begins drawing the marquee selection box for zooming. */
-const startMarquee = (event) => {
-	// Safety guard initialization to stop string extraction crashes
-	const targetInput = event?.target;
-	const startIdx =
-		typeof selectionStart !== "undefined"
-			? selectionStart
-			: targetInput?.selectionStart || 0;
-
-	if (event.button !== 0) return;
-	if (event.target.closest(".zoom-controls")) return;
+	if (e?.button !== 0) return;
+	if (e?.target?.closest?.(".zoom-controls")) return;
 	isDrawing = true;
 	const rect = marqueeOverlay.getBoundingClientRect();
-	startX = event.clientX - rect.left;
-	startY = event.clientY - rect.top;
+	startX = (e?.clientX || 0) - rect.left;
+	startY = (e?.clientY || 0) - rect.top;
 
-	selectionStart.x = event.clientX;
-	selectionStart.y = event.clientY;
+	// Safe coordinate normalization
+	window.marqueeSelectionStartRef = { x: e?.clientX || 0, y: e?.clientY || 0 };
+	window.marqueeSelectionEndRef = { x: e?.clientX || 0, y: e?.clientY || 0 };
 
+	// Inject stacking context & display marquee rectangle box
+	marqueeRect.style.position = "absolute";
+	marqueeRect.style.zIndex = "50";
+	marqueeRect.style.pointerEvents = "none";
 	marqueeRect.style.left = `${startX}px`;
 	marqueeRect.style.top = `${startY}px`;
 	marqueeRect.style.width = "0px";
 	marqueeRect.style.height = "0px";
 	marqueeRect.style.display = "block";
-	toConsole("Marquee start", `(${startX}, ${startY})`, debuggin);
 };
 
-/** Updates the dimensions of the marquee selection box while dragging. */
-const drawMarquee = (event) => {
+window.drawMarquee = (e) => {
+	// Guard loop: ignore if tracking states haven't been mounted by startMarquee
+	if (!window.marqueeSelectionStartRef) return;
 	if (!isDrawing) return;
-	const rect = marqueeOverlay.getBoundingClientRect();
 
+	// Update ending coordinates continuously on move gestures
+	window.marqueeSelectionEndRef = { x: e?.clientX || 0, y: e?.clientY || 0 };
+
+	// Failsafe declaration bindings to guarantee old references never panic
+	const selectionStart = window.marqueeSelectionStartRef;
+	const selectionEnd = window.marqueeSelectionEndRef;
+
+	const rect = marqueeOverlay.getBoundingClientRect();
 	const wrapper = document.getElementById("video-wrapper-id");
 	const aspect = wrapper.offsetHeight / wrapper.offsetWidth;
 
-	const widthDelta = Math.abs(event.clientX - selectionStart.x);
+	const widthDelta = Math.abs(e.clientX - (selectionStart?.x || 0));
 	const calculatedHeightDelta = widthDelta * aspect;
 
-	let leftStyle = selectionStart.x - rect.left;
+	let leftStyle = (selectionStart?.x || 0) - rect.left;
 	const widthStyle = widthDelta;
-	if (event.clientX < selectionStart.x) {
-		leftStyle = event.clientX - rect.left;
+	if (e.clientX < (selectionStart?.x || 0)) {
+		leftStyle = e.clientX - rect.left;
 	}
 
-	let topStyle = selectionStart.y - rect.top;
+	let topStyle = (selectionStart?.y || 0) - rect.top;
 	const heightStyle = calculatedHeightDelta;
-	if (event.clientY < selectionStart.y) {
-		topStyle = selectionStart.y - rect.top - calculatedHeightDelta;
+	if (e.clientY < (selectionStart?.y || 0)) {
+		topStyle = (selectionStart?.y || 0) - rect.top - calculatedHeightDelta;
 	}
 
 	marqueeRect.style.left = `${leftStyle}px`;
@@ -2461,41 +2259,51 @@ const drawMarquee = (event) => {
 	marqueeRect.style.top = `${topStyle}px`;
 	marqueeRect.style.height = `${heightStyle}px`;
 
-	selectionEnd.x = event.clientX;
-	if (event.clientY >= selectionStart.y) {
-		selectionEnd.y = selectionStart.y + calculatedHeightDelta;
+	if (e.clientY >= (selectionStart?.y || 0)) {
+		selectionEnd.y = (selectionStart?.y || 0) + calculatedHeightDelta;
 	} else {
-		selectionEnd.y = selectionStart.y - calculatedHeightDelta;
+		selectionEnd.y = (selectionStart?.y || 0) - calculatedHeightDelta;
+	}
+
+	// Example native call trace safety:
+	if (typeof window.updateMarqueeOverlay === "function") {
+		window.updateMarqueeOverlay(selectionStart, selectionEnd);
 	}
 };
 
-/** Finalizes the marquee selection box and executes viewport zoom. */
-const endMarquee = (event) => {
-	const targetInput = event?.target;
-	const endIdx =
-		typeof selectionEnd !== "undefined"
-			? selectionEnd
-			: targetInput?.selectionEnd || 0;
-
-	if (!isDrawing) return;
-	if (event.button !== 0) return;
+window.endMarquee = (e) => {
+	if (!window.marqueeSelectionStartRef) return;
+	if (e?.button !== 0) return;
 	isDrawing = false;
 	marqueeRect.style.display = "none";
+
+	const selectionStart = window.marqueeSelectionStartRef;
+	const selectionEnd = window.marqueeSelectionEndRef || {
+		x: e?.clientX || 0,
+		y: e?.clientY || 0,
+	};
 
 	const videoElement = DOM.video;
 	const container = document.getElementById("video-wrapper-id");
 
-	const screenWidth = Math.abs(event.clientX - selectionStart.x);
-	const screenHeight = Math.abs(event.clientY - selectionStart.y);
+	const screenWidth = Math.abs(
+		(selectionEnd?.x || 0) - (selectionStart?.x || 0),
+	);
+	const screenHeight = Math.abs(
+		(selectionEnd?.y || 0) - (selectionStart?.y || 0),
+	);
 
 	if (screenWidth < 5 || screenHeight < 5) {
+		// Reset memory markers cleanly
+		window.marqueeSelectionStartRef = null;
+		window.marqueeSelectionEndRef = null;
 		return;
 	}
 
 	const boxCenterX =
-		Math.min(event.clientX, selectionStart.x) + screenWidth / 2;
+		Math.min(selectionEnd?.x || 0, selectionStart?.x || 0) + screenWidth / 2;
 	const boxCenterY =
-		Math.min(event.clientY, selectionStart.y) + screenHeight / 2;
+		Math.min(selectionEnd?.y || 0, selectionStart?.y || 0) + screenHeight / 2;
 
 	const containerRect = container.getBoundingClientRect();
 	const relativeCenterX = boxCenterX - containerRect.left;
@@ -2537,6 +2345,10 @@ const endMarquee = (event) => {
 		videoElement.style.transformOrigin = "0px 0px";
 		videoElement.style.transform = `translate(${window.translateX}px, ${window.translateY}px) scale(${window.zoomLevel})`;
 	}
+
+	// Clear memory trackers completely to terminate the drag cycle cleanly
+	window.marqueeSelectionStartRef = null;
+	window.marqueeSelectionEndRef = null;
 };
 
 /** Applies the current zoom and translation transform to the video element. */

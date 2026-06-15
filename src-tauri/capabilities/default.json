@@ -14,7 +14,10 @@
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
     "core:window:allow-set-size",
+    "core:window:allow-set-resizable",
+    "core:window:allow-set-title",
     "core:window:allow-set-fullscreen",
+    "core:window:allow-set-always-on-top",
     {
       "identifier": "fs:scope",
       "allow": ["**/*"]

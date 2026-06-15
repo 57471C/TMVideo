@@ -928,17 +928,23 @@ async fn verify_and_prepare_video(
         .await
         .map_err(|e| format!("Failed to initialize command thread execution: {}", e))?;
 
-    let stderr_output = String::from_utf8_lossy(&output.stderr);
+    // 1. Convert the entire stderr stream to lowercase for a bulletproof case-insensitive codec scan
+    let stderr_lowercase = String::from_utf8_lossy(&output.stderr).to_lowercase();
     
-    // 2. Parse string blocks to find active HEVC / H.265 compression indicators
-    let is_h265 = stderr_output.contains("hevc") || stderr_output.contains("h265");
+    // Explicitly print text length markers to your cargo terminal to verify execution flow
+    println!("[Proxy Backend] FFmpeg probe trace final output length: {} bytes", stderr_lowercase.len());
+    
+    // 2. Expand signature scanning patterns to catch any variation of high-efficiency tags
+    let is_h265 = stderr_lowercase.contains("hevc") || 
+                  stderr_lowercase.contains("h265") || 
+                  stderr_lowercase.contains("x265");
 
     if !is_h265 {
-        // Standard H.264 or web-native baseline file profile detected; bypass and return original asset path
+        println!("[Proxy Backend] Target identified as standard web-compatible container profile. Bypassing transcode loop.");
         return Ok(video_path);
     }
 
-    println!("[Proxy Core] H.265 stream signature intercepted. Starting fallback generation sequence...");
+    println!("[Proxy Backend] High-efficiency H.265/HEVC stream verified! Initiating proxy sequence allocation maps...");
 
     // 3. Generate a collision-free unique proxy filename using standard library memory hashing
     let mut hasher = DefaultHasher::new();
