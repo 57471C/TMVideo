@@ -1,6 +1,6 @@
 # TMVideo
 
-[![Version](https://img.shields.io/badge/version-0.4.1-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-0.4.2-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
 
 ## Overview
 
