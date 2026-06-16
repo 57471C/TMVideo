@@ -75,7 +75,7 @@
 					optimizationOverlayNode.classList.add("opacity-100", "flex");
 					const textLabel = optimizationOverlayNode.querySelector("p");
 					if (textLabel) {
-						textLabel.innerHTML =
+						textLabel.textContent =
 							"Optimizing high-efficiency tracking assets... This panel closes automatically when timeline canvas buffers finalize.";
 					}
 				}, 250);

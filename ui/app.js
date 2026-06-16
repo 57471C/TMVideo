@@ -761,7 +761,7 @@ window.loadWaveformTimeline = async () => {
 		// Trigger filmstrip thumbnail extraction
 		const videoTrack = document.getElementById("timeline-video-track");
 		if (videoTrack) {
-			videoTrack.innerHTML = "Developing Video Filmstrip Tracks...";
+			videoTrack.textContent = "Developing Video Filmstrip Tracks...";
 			window.setupVideoTrack();
 		}
 
@@ -791,7 +791,7 @@ window.loadWaveformTimeline = async () => {
 			.catch((err) => {
 				console.error("Error generating filmstrip thumbnails:", err);
 				if (videoTrack) {
-					videoTrack.innerHTML = "Failed to load filmstrip.";
+					videoTrack.textContent = "Failed to load filmstrip.";
 					window.setupVideoTrack();
 				}
 			});
@@ -3047,10 +3047,11 @@ const initializeTrimFeature = () => {
 			const row = document.createElement("div");
 			row.className =
 				"flex items-center justify-between gap-3 p-2 mb-1.5 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-700 text-xs sm:text-sm";
+			const safeFileName = escapeHTML(video.videoFileName || "Unknown Video");
 			row.innerHTML = `
         <div class="flex items-center gap-2 flex-1 min-w-0">
           <input type="checkbox" data-index="${index}" checked class="batch-video-checkbox rounded text-blue-600 focus:ring-blue-500 border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 w-4 h-4 cursor-pointer" />
-          <span class="font-medium truncate dark:text-zinc-300" title="${video.videoFileName || "Unknown Video"}">${video.videoFileName || "Unknown Video"}</span>
+          <span class="font-medium truncate dark:text-zinc-300" title="${safeFileName}">${safeFileName}</span>
         </div>
         <div class="flex items-center gap-3 w-40 justify-end">
           <progress id="batch-progress-${index}" value="0" max="100" class="w-24 h-1.5 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-700 accent-blue-600"></progress>
