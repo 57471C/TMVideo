@@ -1019,6 +1019,33 @@ async fn verify_and_prepare_video(
     Ok(clean_proxy_path)
 }
 
+fn clear_old_proxy_caches(app_handle: &tauri::AppHandle) -> std::io::Result<()> {
+    if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
+        if let Ok(entries) = std::fs::read_dir(cache_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                        if file_name.starts_with("proxy_") {
+                            if let Ok(metadata) = std::fs::metadata(&path) {
+                                if let Ok(modified) = metadata.modified() {
+                                    if let Ok(elapsed) = modified.elapsed() {
+                                        // If the proxy file hasn't been accessed/modified in 7 days, purge it
+                                        if elapsed.as_secs() > 7 * 24 * 3600 {
+                                            let _ = std::fs::remove_file(&path);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -1027,6 +1054,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
+      let _ = clear_old_proxy_caches(app.handle());
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
