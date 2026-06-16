@@ -4167,35 +4167,50 @@ const addVideoToQueue = async () => {
 	await switchVideoInQueue(videoQueue.length - 1);
 };
 
-/** Opens a file dialog and adds a newly selected video to the queue. */
-const addNewVideoToQueue = async () => {
-	if (!openDialog) {
-		alert("Loading local files requires the desktop app.");
-		return;
-	}
+async function addNewVideoToQueue(event) {
+  if (event) event.preventDefault();
+  
+  console.log("[Queue Subsystem] Invoking system native file selector...");
 
-	const selected = await openDialog({
-		multiple: false,
-		filters: [
-			{ name: "Video Files", extensions: ["mp4", "mkv", "avi", "webm"] },
-		],
-	});
+  // 1. Map explicit Tauri v2 dialog plugin endpoints
+  const nativeTauriOpenDialog = window.__TAURI__?.dialog?.open || 
+                                (window.__TAURI__?.core?.invoke ? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options) : null);
 
-	if (!selected) return;
+  if (!nativeTauriOpenDialog) {
+    console.error("[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.");
+    return;
+  }
 
-	const filePath = typeof selected === "object" ? selected.path : selected;
-	if (!filePath) return;
+  try {
+    // 2. Call the file selector securely using standard Tauri filter options
+    const selectedFilePathFile = await nativeTauriOpenDialog({
+      multiple: false,
+      title: "Select Target Video Asset for Processing Queue",
+      filters: [{
+        name: "Media Containers",
+        extensions: ["mp4", "mkv", "avi", "mov", "webm"]
+      }]
+    });
 
-	const extractedFileName = filePath.split(/[/\\]/).pop();
+    if (!selectedFilePathFile) {
+      console.log("[Queue Subsystem] User cancelled file selection dialog channel block.");
+      return;
+    }
 
-	const newItem = {
-		videoId: Date.now(),
-		videoName: extractedFileName,
-		videoFileName: extractedFileName,
-		videoFilePath: filePath,
-		processStartTime: 0,
-		processEndTime: 0,
-		appState: { markers: [] },
+    // 3. Pass the clean absolute string path token to your queue handler logic downstream
+    const filePath = typeof selectedFilePathFile === 'string' ? selectedFilePathFile : selectedFilePathFile.path;
+    console.log("[Queue Subsystem] Enqueuing verified target selection asset path:", filePath);
+
+    const extractedFileName = filePath.split(/[/\\]/).pop();
+
+    const newItem = {
+      videoId: Date.now(),
+      videoName: extractedFileName,
+      videoFileName: extractedFileName,
+      videoFilePath: filePath,
+      processStartTime: 0,
+      processEndTime: 0,
+      appState: { markers: [] },
 	};
 
 	saveLocalState();
@@ -4203,7 +4218,10 @@ const addNewVideoToQueue = async () => {
 
 	renderVideoQueueSelect();
 	await switchVideoInQueue(videoQueue.length - 1);
-};
+  } catch (dialogProcessException) {
+    console.error("[Queue Subsystem] Dialog process interaction channel failed:", dialogProcessException);
+  }
+}
 
 /** Renames the current video in the queue based on user input. */
 const editVideoInQueue = async () => {
