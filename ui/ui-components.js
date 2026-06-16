@@ -9,6 +9,11 @@ const ICONS = {
 	outType: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M15 4h4v16h-4zM5 12l6 6V6z"/></svg>`,
 };
 
+const openMarkerMenu = (e, index) => {
+	toggleTypeDropdown(e, index);
+};
+window.openMarkerMenu = openMarkerMenu;
+
 const toggleTypeDropdown = (e, index) => {
 	e.stopPropagation();
 	const menus = document.querySelectorAll('[id^="type-menu-"]');
@@ -136,7 +141,8 @@ const updateMarkersList = () => {
              <th scope="col" class="text-center w-24 whitespace-nowrap px-1">Duration</th>
               <th scope="col" class="text-center w-32 whitespace-nowrap pr-1 sm:pr-2">Actions</th>
            </tr>
-         </thead>`,
+         </thead>
+         <tbody id="markersTableBodyId">`,
 		];
 		for (let i = 0; i < markers.length; i += 1) {
 			const marker = markers[i];
@@ -194,7 +200,7 @@ const updateMarkersList = () => {
               </button>
               <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
               <div class="relative inline-block text-left marker-type-dropdown">
-                <button type="button" onclick="toggleTypeDropdown(event, ${i})" class="inline-flex items-center justify-center p-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer gap-1" id="type-btn-${i}">
+                <button type="button" class="inline-flex items-center justify-center p-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer gap-1 marker-context-trigger" data-marker-index="${i}" id="type-btn-${i}">
                   ${marker.type === "loop" ? `<span class="px-1 py-0.5 text-[9px] sm:text-[10px] font-bold rounded bg-cyan-100 dark:bg-cyan-950/40 text-cyan-800 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 leading-none select-none">${marker.loopCount || 1}</span>` : ""}
                   ${marker.type === "standard" ? ICONS.standard : marker.type === "jump" ? ICONS.jumpType : marker.type === "loop" ? ICONS.loopType : marker.type === "in" ? ICONS.inType : ICONS.outType}
                 </button>
@@ -252,11 +258,33 @@ const updateMarkersList = () => {
 		}
 
 		rows.push(`
+        </tbody>
       </table>
       <div id="markersTableFoot" class="sticky z-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] mt-[-1px] rounded-b-md"></div>
     `);
 
 		DOM.markersList.innerHTML = rows.join("");
+
+		const markerTableBody = document.getElementById("markersTableBodyId") || document.querySelector(".markers-table");
+
+		if (markerTableBody) {
+			markerTableBody.addEventListener("click", (event) => {
+				// Look up to find if a context trigger button was clicked
+				const triggerButton = event.target.closest(".marker-context-trigger");
+				if (triggerButton) {
+					event.preventDefault();
+					event.stopPropagation();
+
+					// Extract the safe integer attribute literal
+					const markerIndex = parseInt(triggerButton.getAttribute("data-marker-index"), 10);
+
+					// Safely invoke your existing context menu window open logic
+					if (typeof openMarkerMenu === "function") {
+						openMarkerMenu(event, markerIndex);
+					}
+				}
+			});
+		}
 
 		DOM.markersTableFoot = document.getElementById("markersTableFoot");
 		const table = DOM.markersList.querySelector("table");
