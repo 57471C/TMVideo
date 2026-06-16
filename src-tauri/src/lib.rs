@@ -915,8 +915,27 @@ async fn verify_and_prepare_video(
     use std::path::Path;
 
     let path = Path::new(&video_path);
+
+    // 1. Structural Sanity Check: Ensure the path is completely absolute and exists
+    if !path.is_absolute() {
+        return Err("Security Violation: Rejected un-normalized relative path trajectory.".to_string());
+    }
     if !path.exists() {
         return Err("Target media file path does not exist on disk".to_string());
+    }
+
+    // 2. Extension Validation: Whitelist valid media containers to drop script text-manifest entries (.vtt, .m3u8)
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let normalized_ext = ext.to_lowercase();
+        let valid_extensions = vec![
+            "mp4", "mkv", "avi", "mov", "webm", // Videos
+            "mp3", "wav", "m4a", "ogg", "aac",  // Audio
+        ];
+        if !valid_extensions.contains(&normalized_ext.as_str()) {
+            return Err(format!("Security Violation: Blocked processing for non-whitelisted container format: .{}", normalized_ext));
+        }
+    } else {
+        return Err("Rejected media tracking target with missing file format parameters.".to_string());
     }
 
     // 1. Probe the video metadata using the bundled static ffmpeg sidecar binary
