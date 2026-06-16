@@ -1,6 +1,6 @@
 # TMVideo
 
-[![Version](https://img.shields.io/badge/version-0.4.2-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-0.5.0-brightgreen)](https://github.com/57471C/TMVideo/blob/main/LICENSE)
 
 TMVideo is a premium, high-performance chapter bookmarking, timeline review, and video annotation tool. Built with a fast, frameworkless Vanilla JS/CSS frontend and a lightweight **Rust Tauri** backend, it bypasses standard browser sandbox memory limits to load and parse production-grade video assets instantly. 
 
@@ -39,7 +39,7 @@ A sleek, float-locked media companion designed to hover on top of your editing e
 
 ---
 
-## 🚀 Native OS Launch Subsystem
+## Native OS Launch Subsystem
 
 The application features deep Windows registry integration for automatic workspace routing depending on what file format you open directly from your operating system explorer context:
 
