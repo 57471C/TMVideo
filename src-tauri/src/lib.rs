@@ -1078,6 +1078,16 @@ pub fn run() {
         save_vtt_file,
         verify_and_prepare_video
         ]) 
+    .on_window_event(|window, event| {
+      if let tauri::WindowEvent::Destroyed = event {
+        let state = window.state::<FfmpegState>();
+        let mut guard = state.0.lock().unwrap();
+        if let Some(child) = guard.take() {
+          let _ = child.kill();
+          println!("[Cleanup] Terminated background FFmpeg sidecar process on window destruction.");
+        }
+      }
+    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
