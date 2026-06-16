@@ -187,18 +187,18 @@ const updateMarkersList = () => {
         <tr class="marker-row ${rowBgClass} border-b border-zinc-200 dark:border-zinc-700">
           <td class="pl-1 sm:pl-2 py-2">
             <div class="flex items-center gap-2">
-              <button onclick="jumpToMarkerTime(${marker.startTime})" class="flex-shrink-0 text-yellow-500 hover:text-yellow-400 transition-colors focus:outline-none" title="Jump here (Paused)">
+              <button class="flex-shrink-0 text-yellow-500 hover:text-yellow-400 transition-colors focus:outline-none marker-jump-trigger" data-time="${marker.startTime}" title="Jump here (Paused)">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="6" y="4" width="4" height="16"></rect>
                   <rect x="14" y="4" width="4" height="16"></rect>
                 </svg>
               </button>
-              <button onclick="playFromMarkerTime(${marker.startTime})" class="flex-shrink-0 text-green-500 hover:text-green-400 transition-colors focus:outline-none" title="Play from here">
+              <button class="flex-shrink-0 text-green-500 hover:text-green-400 transition-colors focus:outline-none marker-play-trigger" data-time="${marker.startTime}" title="Play from here">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
               </button>
-              <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200" value="${safeMarkerName}" onchange="updateMarkerName(${i}, this.value)" placeholder="Marker ${i + 1}">
+              <input type="text" class="bg-transparent border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1 w-full text-sm font-semibold text-zinc-900 dark:text-zinc-200 marker-name-input" data-marker-index="${i}" value="${safeMarkerName}" placeholder="Marker ${i + 1}">
               <div class="relative inline-block text-left marker-type-dropdown">
                 <button type="button" class="inline-flex items-center justify-center p-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none cursor-pointer gap-1 marker-context-trigger" data-marker-index="${i}" id="type-btn-${i}">
                   ${marker.type === "loop" ? `<span class="px-1 py-0.5 text-[9px] sm:text-[10px] font-bold rounded bg-cyan-100 dark:bg-cyan-950/40 text-cyan-800 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50 leading-none select-none">${marker.loopCount || 1}</span>` : ""}
@@ -206,31 +206,25 @@ const updateMarkersList = () => {
                 </button>
                 <div id="type-menu-${i}" class="hidden absolute left-0 mt-1 w-40 rounded-md shadow-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 focus:outline-none z-50">
                   <div class="py-1">
-                    <button onclick="updateMarkerType(${i}, 'standard')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                    <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="standard">
                       ${ICONS.standard} Standard
                     </button>
-                    <button onclick="updateMarkerType(${i}, 'jump')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                    <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="jump">
                       ${ICONS.jumpType} Jump
                     </button>
-                    <button onclick="updateMarkerType(${i}, 'loop')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between gap-2 cursor-pointer font-semibold">
+                    <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center justify-between gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="loop">
                       <span class="flex items-center gap-2">${ICONS.loopType} Loop</span>
                       <input type="text" 
-                             class="w-8 text-center text-xs bg-zinc-100 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded text-zinc-900 dark:text-zinc-100" 
+                             class="w-8 text-center text-xs bg-zinc-100 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded text-zinc-900 dark:text-zinc-100 loop-count-input" 
                              value="${String(marker.loopCount || 1).padStart(2, "0")}" 
                              placeholder="01" 
                              maxlength="2" 
-                             onclick="event.stopPropagation()" 
-                             onmousedown="event.stopPropagation()" 
-                             onmouseup="event.stopPropagation()" 
-                             onfocus="event.stopPropagation()" 
-                             onblur="event.stopPropagation()" 
-                             oninput="event.stopPropagation(); this.value = this.value.replace(/D/g, ''); const parsed = parseInt(this.value, 10); if (!isNaN(parsed)) { markers[${i}].loopCount = Math.min(99, Math.max(1, parsed)); } else { markers[${i}].loopCount = 1; } saveLocalState();"
-                             onchange="event.stopPropagation(); this.value = this.value.replace(/D/g, ''); const parsed = parseInt(this.value, 10); const finalVal = !isNaN(parsed) ? Math.min(99, Math.max(1, parsed)) : 1; markers[${i}].loopCount = finalVal; this.value = String(finalVal).padStart(2, '0'); saveLocalState(); updateMarkersList();">
+                             data-marker-index="${i}">
                     </button>
-                    <button onclick="updateMarkerType(${i}, 'in')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                    <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="in">
                       ${ICONS.inType} Set Video Start
                     </button>
-                    <button onclick="updateMarkerType(${i}, 'out')" class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold">
+                    <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="out">
                       ${ICONS.outType} Set Video End
                     </button>
                   </div>
@@ -241,7 +235,7 @@ const updateMarkersList = () => {
           <td class="text-center py-2">
             <span class="inline-flex items-center gap-1">
               <input type="text" id="${markerTimeInputId}" class="form-control w-28 px-1 text-center font-mono tabular-nums text-sm ${inputClass}" value="${formattedTime}">
-              <button onclick="syncMarkerToPlayhead(${i})" class="p-1 text-zinc-400 hover:text-blue-500 transition-colors" title="Sync to Playhead">${ICONS.capture}</button>
+              <button class="p-1 text-zinc-400 hover:text-blue-500 transition-colors marker-sync-trigger" data-marker-index="${i}" title="Sync to Playhead">${ICONS.capture}</button>
             </span>
           </td>
           <td class="text-center py-2">
@@ -250,7 +244,7 @@ const updateMarkersList = () => {
           <td class="text-center py-2 pr-1 sm:pr-2">
             <div class="flex gap-1.5 justify-center">
               
-              <button onclick="deleteMarker(${i})" class="btn btn-outline-danger p-1 flex items-center justify-center" title="Delete Marker">${ICONS.trash}</button>
+              <button class="btn btn-outline-danger p-1 flex items-center justify-center marker-delete-trigger" data-marker-index="${i}" title="Delete Marker">${ICONS.trash}</button>
             </div>
           </td>
         </tr>
@@ -269,20 +263,119 @@ const updateMarkersList = () => {
 
 		if (markerTableBody) {
 			markerTableBody.addEventListener("click", (event) => {
-				// Look up to find if a context trigger button was clicked
-				const triggerButton = event.target.closest(".marker-context-trigger");
-				if (triggerButton) {
+				// 1. Context trigger
+				const contextBtn = event.target.closest(".marker-context-trigger");
+				if (contextBtn) {
 					event.preventDefault();
 					event.stopPropagation();
-
-					// Extract the safe integer attribute literal
-					const markerIndex = parseInt(triggerButton.getAttribute("data-marker-index"), 10);
-
-					// Safely invoke your existing context menu window open logic
+					const markerIndex = parseInt(contextBtn.getAttribute("data-marker-index"), 10);
 					if (typeof openMarkerMenu === "function") {
 						openMarkerMenu(event, markerIndex);
 					}
+					return;
 				}
+
+				// 2. Jump trigger
+				const jumpBtn = event.target.closest(".marker-jump-trigger");
+				if (jumpBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					const time = parseFloat(jumpBtn.getAttribute("data-time"));
+					if (typeof jumpToMarkerTime === "function") {
+						jumpToMarkerTime(time);
+					}
+					return;
+				}
+
+				// 3. Play trigger
+				const playBtn = event.target.closest(".marker-play-trigger");
+				if (playBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					const time = parseFloat(playBtn.getAttribute("data-time"));
+					if (typeof playFromMarkerTime === "function") {
+						playFromMarkerTime(time);
+					}
+					return;
+				}
+
+				// 4. Sync trigger
+				const syncBtn = event.target.closest(".marker-sync-trigger");
+				if (syncBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					const markerIndex = parseInt(syncBtn.getAttribute("data-marker-index"), 10);
+					if (typeof syncMarkerToPlayhead === "function") {
+						syncMarkerToPlayhead(markerIndex);
+					}
+					return;
+				}
+
+				// 5. Delete trigger
+				const deleteBtn = event.target.closest(".marker-delete-trigger");
+				if (deleteBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					const markerIndex = parseInt(deleteBtn.getAttribute("data-marker-index"), 10);
+					if (typeof deleteMarker === "function") {
+						deleteMarker(markerIndex);
+					}
+					return;
+				}
+
+				// 6. Type dropdown items trigger
+				const typeBtn = event.target.closest(".marker-type-trigger");
+				if (typeBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					const markerIndex = parseInt(typeBtn.getAttribute("data-marker-index"), 10);
+					const type = typeBtn.getAttribute("data-type");
+					if (typeof updateMarkerType === "function") {
+						updateMarkerType(markerIndex, type);
+					}
+					return;
+				}
+			});
+
+			// Attach name input change listeners
+			markerTableBody.querySelectorAll(".marker-name-input").forEach((input) => {
+				input.addEventListener("change", (e) => {
+					const index = parseInt(input.getAttribute("data-marker-index"), 10);
+					if (typeof updateMarkerName === "function") {
+						updateMarkerName(index, input.value);
+					}
+				});
+			});
+
+			// Attach loop count input event handlers
+			markerTableBody.querySelectorAll(".loop-count-input").forEach((input) => {
+				const index = parseInt(input.getAttribute("data-marker-index"), 10);
+				input.addEventListener("click", (e) => e.stopPropagation());
+				input.addEventListener("mousedown", (e) => e.stopPropagation());
+				input.addEventListener("mouseup", (e) => e.stopPropagation());
+				input.addEventListener("focus", (e) => e.stopPropagation());
+				input.addEventListener("blur", (e) => e.stopPropagation());
+				input.addEventListener("input", (e) => {
+					e.stopPropagation();
+					input.value = input.value.replace(/\D/g, "");
+					const parsed = parseInt(input.value, 10);
+					if (!isNaN(parsed)) {
+						markers[index].loopCount = Math.min(99, Math.max(1, parsed));
+					} else {
+						markers[index].loopCount = 1;
+					}
+					saveLocalState();
+				});
+				input.addEventListener("change", (e) => {
+					e.stopPropagation();
+					input.value = input.value.replace(/\D/g, "");
+					const parsed = parseInt(input.value, 10);
+					const finalVal = !isNaN(parsed) ? Math.min(99, Math.max(1, parsed)) : 1;
+					markers[index].loopCount = finalVal;
+					input.value = String(finalVal).padStart(2, "0");
+					saveLocalState();
+					updateMarkersList();
+				});
 			});
 		}
 
