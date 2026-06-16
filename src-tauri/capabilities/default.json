@@ -20,7 +20,15 @@
     "core:window:allow-set-always-on-top",
     {
       "identifier": "fs:scope",
-      "allow": ["**/*"]
+      "allow": [
+        { "path": "$DOWNLOAD" },
+        { "path": "$LOCALDATA" },
+        { "path": "$CACHE" }
+      ],
+      "deny": [
+        { "path": "$HOME/.ssh/*" },
+        { "path": "$SYSTEM/*" }
+      ]
     },
     {
       "identifier": "shell:allow-spawn",
