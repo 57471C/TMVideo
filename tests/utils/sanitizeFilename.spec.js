@@ -1,21 +1,26 @@
+import { describe, it, expect } from 'vitest';
 global.durationMode = "hhmmssms";
+
 // Mock DOM objects before requiring ui/utils.js
+const ElementConstructor = function() {};
+global.Element = ElementConstructor;
+
 global.HTMLMediaElement = { prototype: {} };
 Object.defineProperty(global.HTMLMediaElement.prototype, 'src', {
   get: () => {},
   set: () => {},
   configurable: true,
 });
-global.Element = { prototype: { setAttribute: jest.fn() } };
 global.window = {
   activeOptimizations: new Set(),
   __TAURI__: {}
 };
 global.document = {
-  getElementById: jest.fn()
+  getElementById: () => {}
 };
 
-const { sanitizeFilename } = require('../../ui/utils.js');
+const utils = require('../../ui/utils.js');
+const sanitizeFilename = utils.sanitizeFilename;
 
 describe('sanitizeFilename', () => {
   it('should return the original string if it contains no invalid characters', () => {
