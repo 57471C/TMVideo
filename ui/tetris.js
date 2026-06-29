@@ -77,6 +77,15 @@
 	// Helper: pad scores with leading zeros
 	const padScore = (num) => String(num).padStart(5, "0");
 
+	const exitSecretGameUI = () => {
+		if (typeof toggleSettings === "function") {
+			toggleSettings(false);
+		}
+		if (typeof window.resetTrimModalUI === "function") {
+			window.resetTrimModalUI();
+		}
+	};
+
 	// Helper: Get high score from localStorage
 	const loadHighScore = () => {
 		const saved = localStorage.getItem("tetrisHighScore");
@@ -227,14 +236,7 @@
 			if (window.isSecretGame) {
 				gameOverButtons.push({
 					text: "Quit",
-					action: () => {
-						if (typeof toggleSettings === "function") {
-							toggleSettings(false);
-						}
-						if (typeof window.resetTrimModalUI === "function") {
-							window.resetTrimModalUI();
-						}
-					},
+					action: exitSecretGameUI,
 				});
 			}
 			showOverlay("Game Over", gameOverButtons);
@@ -518,14 +520,7 @@
 				if (window.isSecretGame) {
 					gameOverButtons.push({
 						text: "Quit",
-						action: () => {
-							if (typeof toggleSettings === "function") {
-								toggleSettings(false);
-							}
-							if (typeof window.resetTrimModalUI === "function") {
-								window.resetTrimModalUI();
-							}
-						},
+						action: exitSecretGameUI,
 					});
 				}
 				showOverlay("Game Over", gameOverButtons);
@@ -540,12 +535,7 @@
 		if (isProcessingComplete) return;
 
 		if (window.isSecretGame) {
-			if (typeof toggleSettings === "function") {
-				toggleSettings(false);
-			}
-			if (typeof window.resetTrimModalUI === "function") {
-				window.resetTrimModalUI();
-			}
+			exitSecretGameUI();
 			return;
 		}
 
@@ -657,9 +647,7 @@
 					saveHighScore();
 					// Clean up keyboard events
 					window.removeEventListener("keydown", handleInput);
-					if (typeof toggleSettings === "function") {
-						toggleSettings(false);
-					}
+					exitSecretGameUI();
 					// Restore normal dialog contents for future runs
 					document.getElementById("tetrisContainer").style.display = "none";
 					document.getElementById("tetrisContainer").classList.add("hidden");
