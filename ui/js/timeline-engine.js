@@ -226,6 +226,7 @@ const paintTimelineMarkersAndShading = () => {
 	if (!videoElement?.duration) return;
 
 	const duration = videoElement.duration;
+	const fragment = document.createDocumentFragment();
 
 	// Start/End Trimming Shading
 	const startMarker = markers.find(
@@ -238,7 +239,7 @@ const paintTimelineMarkersAndShading = () => {
 			"absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
 		startShade.style.left = "0%";
 		startShade.style.width = `${startPct}%`;
-		overlay.appendChild(startShade);
+		fragment.appendChild(startShade);
 	}
 
 	const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
@@ -248,7 +249,7 @@ const paintTimelineMarkersAndShading = () => {
 		endShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
 		endShade.style.left = `${endPct}%`;
 		endShade.style.width = `${100 - endPct}%`;
-		overlay.appendChild(endShade);
+		fragment.appendChild(endShade);
 	}
 
 	// Loop through markers sequentially
@@ -268,7 +269,7 @@ const paintTimelineMarkersAndShading = () => {
 					"absolute top-0 bottom-0 bg-zinc-500/20 dark:bg-zinc-900/40";
 				jumpShade.style.left = `${markerLeft}%`;
 				jumpShade.style.width = `${widthPct}%`;
-				overlay.appendChild(jumpShade);
+				fragment.appendChild(jumpShade);
 			}
 		}
 
@@ -284,7 +285,7 @@ const paintTimelineMarkersAndShading = () => {
 					"absolute top-0 bottom-0 bg-cyan-500/10 dark:bg-cyan-400/10";
 				loopShade.style.left = `${markerLeft}%`;
 				loopShade.style.width = `${widthPct}%`;
-				overlay.appendChild(loopShade);
+				fragment.appendChild(loopShade);
 			}
 		}
 
@@ -310,8 +311,10 @@ const paintTimelineMarkersAndShading = () => {
 				"absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-yellow-400 z-10";
 		}
 
-		overlay.appendChild(lineElement);
+		fragment.appendChild(lineElement);
 	}
+
+	overlay.appendChild(fragment);
 };
 
 window.syncTimelinePlayheadSmoothly = syncTimelinePlayheadSmoothly;
