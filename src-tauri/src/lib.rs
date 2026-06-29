@@ -643,7 +643,7 @@ async fn join_and_compress_videos(
 
         // Step 4: Final Compression Step
         let compression_args = vec![
-            "-y", "-i", intermediate_path_str, "-c:v", "libx264", "-crf", "23", "-preset",
+            "-y", "-i", intermediate_path_str, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", "-preset",
             "medium", "-c:a", "aac", "-b:a", "128k", temp_final_path_str,
         ];
 
