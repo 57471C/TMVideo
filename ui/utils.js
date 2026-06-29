@@ -307,7 +307,13 @@ const formatDurationValue = (val) => {
 if (typeof module !== "undefined" && module.exports) {
 	module.exports = {
 		sanitizeFilename,
-		formatDuration,
 		parseTimeStr,
+		parseTaktTime,
+		parseTimeFromHHMMSSMS,
+		formatDuration,
+		formatTaktTime,
+		formatTimeToHHMMSSMS,
+		formatDecimalMinutes,
+		formatDurationValue,
 	};
 }

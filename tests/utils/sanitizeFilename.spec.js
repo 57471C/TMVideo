@@ -1,3 +1,4 @@
+global.durationMode = "hhmmssms";
 // Mock DOM objects before requiring ui/utils.js
 global.HTMLMediaElement = { prototype: {} };
 Object.defineProperty(global.HTMLMediaElement.prototype, 'src', {
