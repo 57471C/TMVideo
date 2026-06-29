@@ -303,3 +303,16 @@ const formatDurationValue = (val) => {
 	if (durationMode === "ms") return `${val.toFixed(0)} ms`;
 	return `${formatDecimalMinutes(val)} min`;
 };
+
+if (typeof module !== "undefined" && module.exports) {
+	module.exports = {
+		parseTimeStr,
+		parseTaktTime,
+		parseTimeFromHHMMSSMS,
+		formatDuration,
+		formatTaktTime,
+		formatTimeToHHMMSSMS,
+		formatDecimalMinutes,
+		formatDurationValue,
+	};
+}
