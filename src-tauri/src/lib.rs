@@ -191,7 +191,10 @@ async fn resolve_subtitles(
     if output.status.success() {
         Ok(Some(vtt_str))
     } else {
-        let _ = std::fs::remove_file(&vtt_path);
+        let vtt_path_clone = vtt_path.clone();
+        tokio::spawn(async move {
+            let _ = tokio::fs::remove_file(vtt_path_clone).await;
+        });
         Ok(None)
     }
 }
@@ -903,7 +906,9 @@ async fn generate_timeline_thumbnails(
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file() && path.extension().is_some_and(|ext| ext == "jpg") {
-                    let _ = std::fs::remove_file(path);
+                    tokio::spawn(async move {
+                        let _ = tokio::fs::remove_file(path).await;
+                    });
                 }
             }
         }
