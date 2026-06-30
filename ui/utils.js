@@ -315,6 +315,7 @@ if (typeof module !== "undefined" && module.exports) {
 		formatDecimalMinutes,
 		formatDurationValue,
 		debounce,
-		escapeHTML
+		escapeHTML,
+		debounce
 	};
 }
