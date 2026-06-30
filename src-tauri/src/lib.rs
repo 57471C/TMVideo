@@ -571,15 +571,10 @@ async fn join_and_compress_videos(
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     // Cleanup temp files
-                    let mut tasks = Vec::new();
                     for clip in temp_clips {
-                        tasks.push(tokio::spawn(async move {
-                            let _ = tokio::fs::remove_file(clip).await;
-                        }));
+                        let _ = std::fs::remove_file(clip);
                     }
-                    for task in tasks {
-                        let _ = task.await;
-                    }
+
                     return Err(format!("Failed to trim segment {}: {}", i, stderr));
                 }
 
@@ -682,21 +677,12 @@ async fn join_and_compress_videos(
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let list_path_clone = list_path.clone();
                 let intermediate_path_clone = intermediate_path.clone();
-                let mut tasks = Vec::new();
-                tasks.push(tokio::spawn(async move {
-                    let _ = tokio::fs::remove_file(list_path_clone).await;
-                }));
-                tasks.push(tokio::spawn(async move {
-                    let _ = tokio::fs::remove_file(intermediate_path_clone).await;
-                }));
+                let _ = std::fs::remove_file(list_path_clone);
+                let _ = std::fs::remove_file(intermediate_path_clone);
                 for clip in temp_clips {
-                    tasks.push(tokio::spawn(async move {
-                        let _ = tokio::fs::remove_file(clip).await;
-                    }));
+                    let _ = std::fs::remove_file(clip);
                 }
-                for task in tasks {
-                    let _ = task.await;
-                }
+
                 return Err(format!("Filtergraph fallback failed: {}", stderr));
             }
         }
@@ -735,24 +721,13 @@ async fn join_and_compress_videos(
             let list_path_clone = list_path.clone();
             let intermediate_path_clone = intermediate_path.clone();
             let temp_final_path_clone = temp_final_path.clone();
-            let mut tasks = Vec::new();
-            tasks.push(tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(list_path_clone).await;
-            }));
-            tasks.push(tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(intermediate_path_clone).await;
-            }));
-            tasks.push(tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(temp_final_path_clone).await;
-            }));
+            let _ = std::fs::remove_file(list_path_clone);
+            let _ = std::fs::remove_file(intermediate_path_clone);
+            let _ = std::fs::remove_file(temp_final_path_clone);
             for clip in temp_clips {
-                tasks.push(tokio::spawn(async move {
-                    let _ = tokio::fs::remove_file(clip).await;
-                }));
+                let _ = std::fs::remove_file(clip);
             }
-            for task in tasks {
-                let _ = task.await;
-            }
+
             return Err(format!("Final compression failed: {}", stderr));
         }
 
@@ -768,20 +743,10 @@ async fn join_and_compress_videos(
             }
         }
 
-        let mut tasks = Vec::new();
-        tasks.push(tokio::spawn(async move {
-            let _ = tokio::fs::remove_file(intermediate_path).await;
-        }));
-        tasks.push(tokio::spawn(async move {
-            let _ = tokio::fs::remove_file(temp_final_path).await;
-        }));
+        let _ = std::fs::remove_file(intermediate_path);
+        let _ = std::fs::remove_file(temp_final_path);
         for clip in temp_clips {
-            tasks.push(tokio::spawn(async move {
-                let _ = tokio::fs::remove_file(clip).await;
-            }));
-        }
-        for task in tasks {
-            let _ = task.await;
+            let _ = std::fs::remove_file(clip);
         }
 
         Ok(final_path_str.to_string())
@@ -845,11 +810,8 @@ async fn get_waveform_data(
 
             let mut all_bytes = Vec::new();
             while let Some(event) = rx.recv().await {
-                match event {
-                    CommandEvent::Stdout(bytes) => {
-                        all_bytes.extend_from_slice(&bytes);
-                    }
-                    _ => {}
+                if let CommandEvent::Stdout(bytes) = event {
+                    all_bytes.extend_from_slice(&bytes);
                 }
             }
 
@@ -865,7 +827,7 @@ async fn get_waveform_data(
                     let val = if b == i8::MIN as u8 {
                         127
                     } else {
-                        (b as i8).abs() as u8
+                        (b as i8).unsigned_abs()
                     };
                     if val > max_val {
                         max_val = val;
@@ -932,7 +894,7 @@ async fn generate_timeline_thumbnails(
         if let Ok(entries) = std::fs::read_dir(&cache_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "jpg") {
                     let _ = std::fs::remove_file(path);
                 }
             }
@@ -970,7 +932,7 @@ async fn generate_timeline_thumbnails(
             let mut entry_paths = Vec::new();
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "jpg") {
                     entry_paths.push(path);
                 }
             }
@@ -1145,20 +1107,22 @@ async fn verify_and_prepare_video(
     Ok(clean_proxy_path)
 }
 
-fn clear_old_proxy_caches(app_handle: &tauri::AppHandle) -> std::io::Result<()> {
+async fn clear_old_proxy_caches(app_handle: tauri::AppHandle) -> std::io::Result<()> {
     if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
-        if let Ok(entries) = std::fs::read_dir(cache_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                        if file_name.starts_with("proxy_") {
-                            if let Ok(metadata) = std::fs::metadata(&path) {
-                                if let Ok(modified) = metadata.modified() {
-                                    if let Ok(elapsed) = modified.elapsed() {
-                                        // If the proxy file hasn't been accessed/modified in 7 days, purge it
-                                        if elapsed.as_secs() > 7 * 24 * 3600 {
-                                            let _ = std::fs::remove_file(&path);
+        if let Ok(mut entries) = tokio::fs::read_dir(cache_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(file_type) = entry.file_type().await {
+                    if file_type.is_file() {
+                        let path = entry.path();
+                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                            if file_name.starts_with("proxy_") {
+                                if let Ok(metadata) = entry.metadata().await {
+                                    if let Ok(modified) = metadata.modified() {
+                                        if let Ok(elapsed) = modified.elapsed() {
+                                            // If the proxy file hasn't been accessed/modified in 7 days, purge it
+                                            if elapsed.as_secs() > 7 * 24 * 3600 {
+                                                let _ = tokio::fs::remove_file(&path).await;
+                                            }
                                         }
                                     }
                                 }
@@ -1180,7 +1144,10 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
-      let _ = clear_old_proxy_caches(app.handle());
+      let app_handle = app.handle().clone();
+      tokio::spawn(async move {
+          let _ = clear_old_proxy_caches(app_handle).await;
+      });
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
