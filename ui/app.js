@@ -4697,3 +4697,8 @@ setTimeout(() => {
 		});
 	}
 }, 1500); // Waits for the initial master data rehydration layout pass to settle down
+
+// Export for testing in Node.js environment without breaking browser execution
+if (typeof module !== "undefined" && module.exports) {
+	module.exports = { parseFFmpegTime };
+}
