@@ -259,9 +259,7 @@ const updateMarkersList = () => {
 
 		DOM.markersList.innerHTML = rows.join("");
 
-		const markerTableBody =
-			document.getElementById("markersTableBodyId") ||
-			document.querySelector(".markers-table");
+		const markerTableBody = document.getElementById("markersTableBodyId") || document.querySelector(".markers-table");
 
 		if (markerTableBody) {
 			markerTableBody.addEventListener("click", (event) => {
@@ -270,10 +268,7 @@ const updateMarkersList = () => {
 				if (contextBtn) {
 					event.preventDefault();
 					event.stopPropagation();
-					const markerIndex = parseInt(
-						contextBtn.getAttribute("data-marker-index"),
-						10,
-					);
+					const markerIndex = parseInt(contextBtn.getAttribute("data-marker-index"), 10);
 					if (typeof openMarkerMenu === "function") {
 						openMarkerMenu(event, markerIndex);
 					}
@@ -309,10 +304,7 @@ const updateMarkersList = () => {
 				if (syncBtn) {
 					event.preventDefault();
 					event.stopPropagation();
-					const markerIndex = parseInt(
-						syncBtn.getAttribute("data-marker-index"),
-						10,
-					);
+					const markerIndex = parseInt(syncBtn.getAttribute("data-marker-index"), 10);
 					if (typeof syncMarkerToPlayhead === "function") {
 						syncMarkerToPlayhead(markerIndex);
 					}
@@ -324,10 +316,7 @@ const updateMarkersList = () => {
 				if (deleteBtn) {
 					event.preventDefault();
 					event.stopPropagation();
-					const markerIndex = parseInt(
-						deleteBtn.getAttribute("data-marker-index"),
-						10,
-					);
+					const markerIndex = parseInt(deleteBtn.getAttribute("data-marker-index"), 10);
 					if (typeof deleteMarker === "function") {
 						deleteMarker(markerIndex);
 					}
@@ -339,10 +328,7 @@ const updateMarkersList = () => {
 				if (typeBtn) {
 					event.preventDefault();
 					event.stopPropagation();
-					const markerIndex = parseInt(
-						typeBtn.getAttribute("data-marker-index"),
-						10,
-					);
+					const markerIndex = parseInt(typeBtn.getAttribute("data-marker-index"), 10);
 					const type = typeBtn.getAttribute("data-type");
 					if (typeof updateMarkerType === "function") {
 						updateMarkerType(markerIndex, type);
@@ -352,16 +338,14 @@ const updateMarkersList = () => {
 			});
 
 			// Attach name input change listeners
-			markerTableBody
-				.querySelectorAll(".marker-name-input")
-				.forEach((input) => {
-					input.addEventListener("change", (_e) => {
-						const index = parseInt(input.getAttribute("data-marker-index"), 10);
-						if (typeof updateMarkerName === "function") {
-							updateMarkerName(index, input.value);
-						}
-					});
+			markerTableBody.querySelectorAll(".marker-name-input").forEach((input) => {
+				input.addEventListener("change", (e) => {
+					const index = parseInt(input.getAttribute("data-marker-index"), 10);
+					if (typeof updateMarkerName === "function") {
+						updateMarkerName(index, input.value);
+					}
 				});
+			});
 
 			// Attach loop count input event handlers
 			markerTableBody.querySelectorAll(".loop-count-input").forEach((input) => {
@@ -375,7 +359,7 @@ const updateMarkersList = () => {
 					e.stopPropagation();
 					input.value = input.value.replace(/\D/g, "");
 					const parsed = parseInt(input.value, 10);
-					if (!Number.isNaN(parsed)) {
+					if (!isNaN(parsed)) {
 						markers[index].loopCount = Math.min(99, Math.max(1, parsed));
 					} else {
 						markers[index].loopCount = 1;
@@ -386,9 +370,7 @@ const updateMarkersList = () => {
 					e.stopPropagation();
 					input.value = input.value.replace(/\D/g, "");
 					const parsed = parseInt(input.value, 10);
-					const finalVal = !Number.isNaN(parsed)
-						? Math.min(99, Math.max(1, parsed))
-						: 1;
+					const finalVal = !isNaN(parsed) ? Math.min(99, Math.max(1, parsed)) : 1;
 					markers[index].loopCount = finalVal;
 					input.value = String(finalVal).padStart(2, "0");
 					saveLocalState();
