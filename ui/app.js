@@ -4313,6 +4313,8 @@ window.renderSidebarPlaylist = () => {
 	if (!container) return;
 	container.innerHTML = "";
 
+	const fragment = document.createDocumentFragment();
+
 	for (const [index, video] of videoQueue.entries()) {
 		const div = document.createElement("div");
 		div.className =
@@ -4420,8 +4422,10 @@ window.renderSidebarPlaylist = () => {
 			window.renderSidebarPlaylist();
 		});
 
-		container.appendChild(div);
+		fragment.appendChild(div);
 	}
+
+	container.appendChild(fragment);
 };
 
 // 5. Central LocalStorage Serialization Triggers

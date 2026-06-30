@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Perf Test</title>
+</head>
+<body>
+  <div id="sidebar-queue-list"></div>
+  <script>
+    window.DOM = {};
+    window.videoQueue = Array(200).fill().map((_, i) => ({ videoFileName: `Video_${i}.mp4` }));
+    window.activeQueueIndex = 0;
+    window.saveLocalState = () => {};
+    window.renderVideoQueueSelect = () => {};
+    window.switchVideoInQueue = async () => {};
+  </script>
+  <script src="../ui/app.js"></script>
+  <script>
+    if (!window.renderSidebarPlaylist) {
+        console.error("renderSidebarPlaylist not loaded");
+    }
+    const ITERATIONS = 1000;
+    const start = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) {
+      window.renderSidebarPlaylist();
+    }
+    const end = performance.now();
+    console.log(`Time taken: ${(end - start).toFixed(2)}ms for ${ITERATIONS} iterations of ${window.videoQueue.length} items`);
+  </script>
+</body>
+</html>
