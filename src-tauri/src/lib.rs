@@ -571,9 +571,11 @@ async fn join_and_compress_videos(
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     // Cleanup temp files
-                    for clip in temp_clips {
-                        let _ = std::fs::remove_file(clip);
-                    }
+                    tokio::spawn(async move {
+                        for clip in temp_clips {
+                            let _ = tokio::fs::remove_file(clip).await;
+                        }
+                    });
 
                     return Err(format!("Failed to trim segment {}: {}", i, stderr));
                 }
@@ -677,11 +679,13 @@ async fn join_and_compress_videos(
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let list_path_clone = list_path.clone();
                 let intermediate_path_clone = intermediate_path.clone();
-                let _ = std::fs::remove_file(list_path_clone);
-                let _ = std::fs::remove_file(intermediate_path_clone);
-                for clip in temp_clips {
-                    let _ = std::fs::remove_file(clip);
-                }
+                tokio::spawn(async move {
+                    let _ = tokio::fs::remove_file(list_path_clone).await;
+                    let _ = tokio::fs::remove_file(intermediate_path_clone).await;
+                    for clip in temp_clips {
+                        let _ = tokio::fs::remove_file(clip).await;
+                    }
+                });
 
                 return Err(format!("Filtergraph fallback failed: {}", stderr));
             }
@@ -721,12 +725,14 @@ async fn join_and_compress_videos(
             let list_path_clone = list_path.clone();
             let intermediate_path_clone = intermediate_path.clone();
             let temp_final_path_clone = temp_final_path.clone();
-            let _ = std::fs::remove_file(list_path_clone);
-            let _ = std::fs::remove_file(intermediate_path_clone);
-            let _ = std::fs::remove_file(temp_final_path_clone);
-            for clip in temp_clips {
-                let _ = std::fs::remove_file(clip);
-            }
+            tokio::spawn(async move {
+                let _ = tokio::fs::remove_file(list_path_clone).await;
+                let _ = tokio::fs::remove_file(intermediate_path_clone).await;
+                let _ = tokio::fs::remove_file(temp_final_path_clone).await;
+                for clip in temp_clips {
+                    let _ = tokio::fs::remove_file(clip).await;
+                }
+            });
 
             return Err(format!("Final compression failed: {}", stderr));
         }
@@ -735,19 +741,21 @@ async fn join_and_compress_videos(
         std::fs::copy(&temp_final_path, &final_path)
             .map_err(|e| format!("Failed to copy file across drives: {}", e))?;
 
-        let concat_list_str = list_path.to_string_lossy().to_string();
-        let concat_list_path = Path::new(&concat_list_str);
-        if concat_list_path.exists() {
-            if let Err(e) = std::fs::remove_file(concat_list_path) {
-                println!("Non-fatal warning: failed to delete temp list: {}", e);
+        tokio::spawn(async move {
+            let concat_list_str = list_path.to_string_lossy().to_string();
+            let concat_list_path = Path::new(&concat_list_str);
+            if tokio::fs::try_exists(concat_list_path).await.unwrap_or(false) {
+                if let Err(e) = tokio::fs::remove_file(concat_list_path).await {
+                    println!("Non-fatal warning: failed to delete temp list: {}", e);
+                }
             }
-        }
 
-        let _ = std::fs::remove_file(intermediate_path);
-        let _ = std::fs::remove_file(temp_final_path);
-        for clip in temp_clips {
-            let _ = std::fs::remove_file(clip);
-        }
+            let _ = tokio::fs::remove_file(intermediate_path).await;
+            let _ = tokio::fs::remove_file(temp_final_path).await;
+            for clip in temp_clips {
+                let _ = tokio::fs::remove_file(clip).await;
+            }
+        });
 
         Ok(final_path_str.to_string())
     })
