@@ -4,6 +4,7 @@
   "description": "A Windows Video Player/Editor with multiple view modes and encoding capabilities.",
   "main": "ui/index.html",
   "scripts": {
+    "test": "vitest run",
     "start": "tauri dev",
     "build:exe": "tauri build",
     "build:css": "tailwindcss -i ./ui/input.css -o ./ui/tailwind.css --minify",

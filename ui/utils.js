@@ -314,5 +314,6 @@ if (typeof module !== "undefined" && module.exports) {
 		formatTimeToHHMMSSMS,
 		formatDecimalMinutes,
 		formatDurationValue,
+		debounce
 	};
 }
