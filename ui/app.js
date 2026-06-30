@@ -1181,7 +1181,6 @@ window.cycleViewMode = async (targetMode) => {
 	}, 60);
 };
 
-// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
 // Centralized overlay presentation management engine
 window.triggerPlaybackOverlay = (messageText) => {
 	const overlayContainer =
@@ -2346,8 +2345,6 @@ const initializePlayer = () => {
 	updateLoadButtonColor();
 };
 
-/** Activates mini-player mode layout. */
-// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
 window.startMarquee = (e) => {
 	const targetInput = e?.target || e?.srcElement;
 	console.log("utils.js:219 Marquee start:", e?.clientX, e?.clientY);
@@ -3305,11 +3302,101 @@ async function processBatchQueue(presetType) {
 	isAborted = false;
 
 	try {
-		for (const index of checkedIndices) {
-			if (isAborted) break;
+		// 1. Prepare batch metadata & write temp files concurrently to avoid blocking the main queue loop with I/O waits
+		const batchPreparations = await Promise.all(
+			checkedIndices.map(async (index) => {
+				const video = videoQueue[index];
+				if (!video) return null;
 
-			const video = videoQueue[index];
-			if (!video) continue;
+				let baseName = video.videoFileName || `video_${index + 1}`;
+				const lastDot = baseName.lastIndexOf(".");
+				if (lastDot !== -1) {
+					baseName = baseName.substring(0, lastDot);
+				}
+				const exportName = `${baseName}_export.mp4`;
+
+				let actualOutputPath = exportName;
+				if (join) {
+					actualOutputPath = await join(actualOutputDir, exportName);
+				} else {
+					actualOutputPath = `${actualOutputDir}/${exportName}`;
+				}
+
+				let tempFilePath = null;
+				let exportDuration = 0;
+				let segments = [];
+				let prepError = null;
+
+				try {
+					const currentMarkers = video.appState?.markers || [];
+					currentMarkers.forEach((m) => {
+						if (!m.type) m.type = "standard";
+					});
+
+					segments = getExportSegments(
+						currentMarkers,
+						video.processEndTime || 0,
+					);
+
+					if (segments.length === 0) {
+						throw new Error("No segments to export.");
+					}
+
+					exportDuration = segments.reduce(
+						(sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1),
+						0,
+					);
+
+					const safePath = (video.videoFilePath || "").replace(/\\/g, "/");
+					let listContent = "";
+					for (const seg of segments) {
+						const loopCount = seg.loopCount || 1;
+						for (let l = 0; l < loopCount; l++) {
+							listContent += `file '${safePath}'\n`;
+							listContent += `inpoint ${seg.start}\n`;
+							listContent += `outpoint ${seg.end}\n`;
+						}
+					}
+
+					if (tempdir && join) {
+						const tempDir = await tempdir();
+						tempFilePath = await join(
+							tempDir,
+							`ffmpeg_concat_batch_${video.videoId || index}.txt`,
+						);
+					} else {
+						tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
+					}
+					await writeTextFile(tempFilePath, listContent);
+				} catch (e) {
+					prepError = e;
+				}
+
+				return {
+					index,
+					video,
+					actualOutputPath,
+					tempFilePath,
+					segments,
+					exportDuration,
+					prepError,
+				};
+			}),
+		);
+
+		for (const prep of batchPreparations) {
+			if (isAborted) break;
+			if (!prep) continue;
+
+			const {
+				index,
+				video,
+				actualOutputPath,
+				tempFilePath,
+				segments,
+				exportDuration,
+				prepError,
+			} = prep;
 
 			const rowContainer = document.getElementById(`batch-status-${index}`)
 				?.parentElement?.parentElement;
@@ -3336,63 +3423,18 @@ async function processBatchQueue(presetType) {
 				specificProgressBar.value = 0;
 			}
 
-			let baseName = video.videoFileName || `video_${index + 1}`;
-			const lastDot = baseName.lastIndexOf(".");
-			if (lastDot !== -1) {
-				baseName = baseName.substring(0, lastDot);
-			}
-			const exportName = `${baseName}_export.mp4`;
-
-			let actualOutputPath = exportName;
-			if (join) {
-				actualOutputPath = await join(actualOutputDir, exportName);
-			} else {
-				actualOutputPath = `${actualOutputDir}/${exportName}`;
-			}
-
-			let tempFilePath = null;
-
 			try {
+				if (prepError) {
+					throw prepError;
+				}
+
+				// The global variables are updated so other code logic continues to use them correctly if needed
 				markers = video.appState?.markers || [];
 				markers.forEach((m) => {
 					if (!m.type) m.type = "standard";
 				});
-
 				videoFileName = video.videoFileName || "";
 				videoFilePath = video.videoFilePath || "";
-
-				const segments = getExportSegments(markers, video.processEndTime || 0);
-
-				if (segments.length === 0) {
-					throw new Error("No segments to export.");
-				}
-
-				const exportDuration = segments.reduce(
-					(sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1),
-					0,
-				);
-
-				const safePath = video.videoFilePath.replace(/\\/g, "/");
-				let listContent = "";
-				for (const seg of segments) {
-					const loopCount = seg.loopCount || 1;
-					for (let l = 0; l < loopCount; l++) {
-						listContent += `file '${safePath}'\n`;
-						listContent += `inpoint ${seg.start}\n`;
-						listContent += `outpoint ${seg.end}\n`;
-					}
-				}
-
-				if (tempdir && join) {
-					const tempDir = await tempdir();
-					tempFilePath = await join(
-						tempDir,
-						`ffmpeg_concat_batch_${video.videoId || index}.txt`,
-					);
-				} else {
-					tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
-				}
-				await writeTextFile(tempFilePath, listContent);
 
 				const isCompression = presetType !== "copy";
 				const args = [
@@ -3418,6 +3460,8 @@ async function processBatchQueue(presetType) {
 						`scale=-2:${targetHeight}`,
 						"-c:v",
 						"libx264",
+						"-pix_fmt",
+						"yuv420p",
 						"-crf",
 						presetType === "low" ? "32" : presetType === "high" ? "18" : "26",
 						"-preset",
@@ -3695,6 +3739,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"32",
 					"-preset",
@@ -3708,6 +3754,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"18",
 					"-preset",
@@ -3721,6 +3769,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"26",
 					"-preset",
@@ -4168,59 +4218,77 @@ const addVideoToQueue = async () => {
 };
 
 async function addNewVideoToQueue(event) {
-  if (event) event.preventDefault();
-  
-  console.log("[Queue Subsystem] Invoking system native file selector...");
+	if (event) event.preventDefault();
 
-  // 1. Map explicit Tauri v2 dialog plugin endpoints
-  const nativeTauriOpenDialog = window.__TAURI__?.dialog?.open || 
-                                (window.__TAURI__?.core?.invoke ? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options) : null);
+	console.log("[Queue Subsystem] Invoking system native file selector...");
 
-  if (!nativeTauriOpenDialog) {
-    console.error("[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.");
-    return;
-  }
+	// 1. Map explicit Tauri v2 dialog plugin endpoints
+	const nativeTauriOpenDialog =
+		window.__TAURI__?.dialog?.open ||
+		(window.__TAURI__?.core?.invoke
+			? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options)
+			: null);
 
-  try {
-    // 2. Call the file selector securely using standard Tauri filter options
-    const selectedFilePathFile = await nativeTauriOpenDialog({
-      multiple: false,
-      title: "Select Target Video Asset for Processing Queue",
-      filters: [{
-        name: "Media Containers",
-        extensions: ["mp4", "mkv", "avi", "mov", "webm"]
-      }]
-    });
+	if (!nativeTauriOpenDialog) {
+		console.error(
+			"[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.",
+		);
+		return;
+	}
 
-    if (!selectedFilePathFile) {
-      console.log("[Queue Subsystem] User cancelled file selection dialog channel block.");
-      return;
-    }
+	try {
+		// 2. Call the file selector securely using standard Tauri filter options
+		const selectedFilePathFile = await nativeTauriOpenDialog({
+			multiple: false,
+			title: "Select Target Video Asset for Processing Queue",
+			filters: [
+				{
+					name: "Media Containers",
+					extensions: ["mp4", "mkv", "avi", "mov", "webm"],
+				},
+			],
+		});
 
-    // 3. Pass the clean absolute string path token to your queue handler logic downstream
-    const filePath = typeof selectedFilePathFile === 'string' ? selectedFilePathFile : selectedFilePathFile.path;
-    console.log("[Queue Subsystem] Enqueuing verified target selection asset path:", filePath);
+		if (!selectedFilePathFile) {
+			console.log(
+				"[Queue Subsystem] User cancelled file selection dialog channel block.",
+			);
+			return;
+		}
 
-    const extractedFileName = filePath.split(/[/\\]/).pop();
+		// 3. Pass the clean absolute string path token to your queue handler logic downstream
+		const filePath =
+			typeof selectedFilePathFile === "string"
+				? selectedFilePathFile
+				: selectedFilePathFile.path;
+		console.log(
+			"[Queue Subsystem] Enqueuing verified target selection asset path:",
+			filePath,
+		);
 
-    const newItem = {
-      videoId: Date.now(),
-      videoName: extractedFileName,
-      videoFileName: extractedFileName,
-      videoFilePath: filePath,
-      processStartTime: 0,
-      processEndTime: 0,
-      appState: { markers: [] },
-	};
+		const extractedFileName = filePath.split(/[/\\]/).pop();
 
-	saveLocalState();
-	videoQueue.push(newItem);
+		const newItem = {
+			videoId: Date.now(),
+			videoName: extractedFileName,
+			videoFileName: extractedFileName,
+			videoFilePath: filePath,
+			processStartTime: 0,
+			processEndTime: 0,
+			appState: { markers: [] },
+		};
 
-	renderVideoQueueSelect();
-	await switchVideoInQueue(videoQueue.length - 1);
-  } catch (dialogProcessException) {
-    console.error("[Queue Subsystem] Dialog process interaction channel failed:", dialogProcessException);
-  }
+		saveLocalState();
+		videoQueue.push(newItem);
+
+		renderVideoQueueSelect();
+		await switchVideoInQueue(videoQueue.length - 1);
+	} catch (dialogProcessException) {
+		console.error(
+			"[Queue Subsystem] Dialog process interaction channel failed:",
+			dialogProcessException,
+		);
+	}
 }
 
 /** Renames the current video in the queue based on user input. */
@@ -4244,6 +4312,8 @@ window.renderSidebarPlaylist = () => {
 	const container = document.getElementById("sidebar-queue-list");
 	if (!container) return;
 	container.innerHTML = "";
+
+	const fragment = document.createDocumentFragment();
 
 	for (const [index, video] of videoQueue.entries()) {
 		const div = document.createElement("div");
@@ -4352,8 +4422,10 @@ window.renderSidebarPlaylist = () => {
 			window.renderSidebarPlaylist();
 		});
 
-		container.appendChild(div);
+		fragment.appendChild(div);
 	}
+
+	container.appendChild(fragment);
 };
 
 // 5. Central LocalStorage Serialization Triggers
