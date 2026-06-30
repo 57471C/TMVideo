@@ -4168,59 +4168,77 @@ const addVideoToQueue = async () => {
 };
 
 async function addNewVideoToQueue(event) {
-  if (event) event.preventDefault();
-  
-  console.log("[Queue Subsystem] Invoking system native file selector...");
+	if (event) event.preventDefault();
 
-  // 1. Map explicit Tauri v2 dialog plugin endpoints
-  const nativeTauriOpenDialog = window.__TAURI__?.dialog?.open || 
-                                (window.__TAURI__?.core?.invoke ? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options) : null);
+	console.log("[Queue Subsystem] Invoking system native file selector...");
 
-  if (!nativeTauriOpenDialog) {
-    console.error("[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.");
-    return;
-  }
+	// 1. Map explicit Tauri v2 dialog plugin endpoints
+	const nativeTauriOpenDialog =
+		window.__TAURI__?.dialog?.open ||
+		(window.__TAURI__?.core?.invoke
+			? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options)
+			: null);
 
-  try {
-    // 2. Call the file selector securely using standard Tauri filter options
-    const selectedFilePathFile = await nativeTauriOpenDialog({
-      multiple: false,
-      title: "Select Target Video Asset for Processing Queue",
-      filters: [{
-        name: "Media Containers",
-        extensions: ["mp4", "mkv", "avi", "mov", "webm"]
-      }]
-    });
+	if (!nativeTauriOpenDialog) {
+		console.error(
+			"[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.",
+		);
+		return;
+	}
 
-    if (!selectedFilePathFile) {
-      console.log("[Queue Subsystem] User cancelled file selection dialog channel block.");
-      return;
-    }
+	try {
+		// 2. Call the file selector securely using standard Tauri filter options
+		const selectedFilePathFile = await nativeTauriOpenDialog({
+			multiple: false,
+			title: "Select Target Video Asset for Processing Queue",
+			filters: [
+				{
+					name: "Media Containers",
+					extensions: ["mp4", "mkv", "avi", "mov", "webm"],
+				},
+			],
+		});
 
-    // 3. Pass the clean absolute string path token to your queue handler logic downstream
-    const filePath = typeof selectedFilePathFile === 'string' ? selectedFilePathFile : selectedFilePathFile.path;
-    console.log("[Queue Subsystem] Enqueuing verified target selection asset path:", filePath);
+		if (!selectedFilePathFile) {
+			console.log(
+				"[Queue Subsystem] User cancelled file selection dialog channel block.",
+			);
+			return;
+		}
 
-    const extractedFileName = filePath.split(/[/\\]/).pop();
+		// 3. Pass the clean absolute string path token to your queue handler logic downstream
+		const filePath =
+			typeof selectedFilePathFile === "string"
+				? selectedFilePathFile
+				: selectedFilePathFile.path;
+		console.log(
+			"[Queue Subsystem] Enqueuing verified target selection asset path:",
+			filePath,
+		);
 
-    const newItem = {
-      videoId: Date.now(),
-      videoName: extractedFileName,
-      videoFileName: extractedFileName,
-      videoFilePath: filePath,
-      processStartTime: 0,
-      processEndTime: 0,
-      appState: { markers: [] },
-	};
+		const extractedFileName = filePath.split(/[/\\]/).pop();
 
-	saveLocalState();
-	videoQueue.push(newItem);
+		const newItem = {
+			videoId: Date.now(),
+			videoName: extractedFileName,
+			videoFileName: extractedFileName,
+			videoFilePath: filePath,
+			processStartTime: 0,
+			processEndTime: 0,
+			appState: { markers: [] },
+		};
 
-	renderVideoQueueSelect();
-	await switchVideoInQueue(videoQueue.length - 1);
-  } catch (dialogProcessException) {
-    console.error("[Queue Subsystem] Dialog process interaction channel failed:", dialogProcessException);
-  }
+		saveLocalState();
+		videoQueue.push(newItem);
+
+		renderVideoQueueSelect();
+		await switchVideoInQueue(videoQueue.length - 1);
+	} catch (dialogProcessException) {
+		console.error(
+			"[Queue Subsystem] Dialog process interaction channel failed:",
+			dialogProcessException,
+		);
+	}
 }
 
 /** Renames the current video in the queue based on user input. */
@@ -4625,3 +4643,8 @@ setTimeout(() => {
 		});
 	}
 }, 1500); // Waits for the initial master data rehydration layout pass to settle down
+
+// Export for testing in Node.js environment without breaking browser execution
+if (typeof module !== "undefined" && module.exports) {
+	module.exports = { parseFFmpegTime };
+}
