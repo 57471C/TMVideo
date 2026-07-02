@@ -966,19 +966,11 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	updateLoadButtonColor();
 };
 
-/** Captures a snapshot of the current video frame. */
-const takeSnapshot = () => {
-	if (!player?.src) {
-		showToast("No video loaded.", "error");
-		return;
-	}
-	const video = player;
-	const container = document.getElementById("video-wrapper-id");
-	if (!container) {
-		showToast("Error taking snapshot.", "error");
-		return;
-	}
-
+/**
+ * Calculates the visible rectangle of the video taking into account
+ * zoom, pan, and container aspect ratio.
+ */
+const calculateVisibleVideoRect = (video, container) => {
 	const containerWidth = container.offsetWidth;
 	const containerHeight = container.offsetHeight;
 
@@ -1027,6 +1019,14 @@ const takeSnapshot = () => {
 		sh = video.videoHeight - sy;
 	}
 
+	return { sx, sy, sw, sh };
+};
+
+/**
+ * Captures the specified rect of the video onto a canvas and downloads it.
+ */
+const downloadCanvasImage = (video, rect) => {
+	const { sx, sy, sw, sh } = rect;
 	const canvas = document.createElement("canvas");
 	canvas.width = sw;
 	canvas.height = sh;
@@ -1050,6 +1050,23 @@ const takeSnapshot = () => {
 		toConsole("Failed to take snapshot", error, debuggin);
 		showToast("Error taking snapshot.", "error");
 	}
+};
+
+/** Captures a snapshot of the current video frame. */
+const takeSnapshot = () => {
+	if (!player?.src) {
+		showToast("No video loaded.", "error");
+		return;
+	}
+	const video = player;
+	const container = document.getElementById("video-wrapper-id");
+	if (!container) {
+		showToast("Error taking snapshot.", "error");
+		return;
+	}
+
+	const rect = calculateVisibleVideoRect(video, container);
+	downloadCanvasImage(video, rect);
 };
 
 /** Toggles cinema mode layout and fullscreen state. */
