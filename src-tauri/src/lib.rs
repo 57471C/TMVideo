@@ -35,7 +35,7 @@ async fn run_ffmpeg(
 ) -> Result<String, String> {
     // 1. Check if there is already a running process
     {
-        let guard = state.0.lock().unwrap();
+        let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         if guard.is_some() {
             return Err("FFmpeg process is already running.".to_string());
         }
@@ -55,7 +55,7 @@ async fn run_ffmpeg(
 
     // 4. Store child in state
     {
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(child);
     }
 
@@ -77,7 +77,7 @@ async fn run_ffmpeg(
                     let line = String::from_utf8_lossy(&line_bytes).to_string();
                     // Store in log buffer
                     {
-                        let mut logs = stderr_logs_clone.lock().unwrap();
+                        let mut logs = stderr_logs_clone.lock().unwrap_or_else(|e| e.into_inner());
                         logs.push(line.clone());
                         if logs.len() > 100 {
                             logs.remove(0);
@@ -97,7 +97,7 @@ async fn run_ffmpeg(
         // Clear child from state
         let state = app_clone.state::<FfmpegState>();
         {
-            let mut guard = state.0.lock().unwrap();
+            let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
             *guard = None;
         }
 
@@ -112,7 +112,7 @@ async fn run_ffmpeg(
     match exit_code {
         Some(0) => Ok("Success".to_string()),
         Some(code) => {
-            let logs = stderr_logs.lock().unwrap().join("\n");
+            let logs = stderr_logs.lock().unwrap_or_else(|e| e.into_inner()).join("\n");
             Err(format!(
                 "FFmpeg failed with exit status code {}.\n\nLogs:\n{}",
                 code, logs
@@ -124,7 +124,7 @@ async fn run_ffmpeg(
 
 #[tauri::command]
 async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String> {
-    let mut guard = state.0.lock().unwrap();
+    let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(child) = guard.take() {
         let _ = child.kill();
     }
@@ -1196,7 +1196,7 @@ pub fn run() {
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Destroyed = event {
         let state = window.state::<FfmpegState>();
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(child) = guard.take() {
           let _ = child.kill();
           println!("[Cleanup] Terminated background FFmpeg sidecar process on window destruction.");
