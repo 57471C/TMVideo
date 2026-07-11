@@ -475,7 +475,6 @@ async fn join_and_compress_videos(
 
     tokio::task::spawn_blocking(move || {
         use std::env;
-        use std::io::Write;
         use std::path::Path;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -616,10 +615,17 @@ async fn join_and_compress_videos(
         }
 
         let mut list_file = std::fs::File::create(&list_path).map_err(|e| e.to_string())?;
+        let mut out_string = String::with_capacity(final_paths_to_concat.len() * 250);
         for path in &final_paths_to_concat {
             let safe_path = path.replace("\\", "/");
-            writeln!(list_file, "file '{}'", safe_path).map_err(|e| e.to_string())?;
+            out_string.push_str("file '");
+            out_string.push_str(&safe_path);
+            out_string.push_str("'\n");
         }
+        use std::io::Write;
+        list_file
+            .write_all(out_string.as_bytes())
+            .map_err(|e| e.to_string())?;
         list_file.sync_all().map_err(|e| e.to_string())?;
 
         let mut lossless_success = false;
@@ -747,7 +753,10 @@ async fn join_and_compress_videos(
         tokio::spawn(async move {
             let concat_list_str = list_path.to_string_lossy().to_string();
             let concat_list_path = Path::new(&concat_list_str);
-            if tokio::fs::try_exists(concat_list_path).await.unwrap_or(false) {
+            if tokio::fs::try_exists(concat_list_path)
+                .await
+                .unwrap_or(false)
+            {
                 if let Err(e) = tokio::fs::remove_file(concat_list_path).await {
                     println!("Non-fatal warning: failed to delete temp list: {}", e);
                 }
