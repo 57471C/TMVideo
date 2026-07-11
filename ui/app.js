@@ -59,6 +59,9 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 window.currentWaveformDataPath = null;
+
+// Cache the live collection of playheads globally
+const playheadsLiveCollection = document.getElementsByClassName("sequencer-playhead");
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -2037,9 +2040,8 @@ const initializePlayer = () => {
 				player.currentTime = time;
 				const duration = player.duration || 1;
 				const pct = (time / duration) * 100;
-				const playheads = document.querySelectorAll(".sequencer-playhead");
-				for (const ph of playheads) {
-					ph.style.left = `${pct}%`;
+				for (let i = 0; i < playheadsLiveCollection.length; i++) {
+					playheadsLiveCollection[i].style.left = `${pct}%`;
 				}
 			}
 		});
@@ -2558,9 +2560,8 @@ const seektimeupdate = () => {
 
 		if (duration > 0) {
 			const pct = (currentTime / duration) * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${pct}%`;
+			for (let i = 0; i < playheadsLiveCollection.length; i++) {
+				playheadsLiveCollection[i].style.left = `${pct}%`;
 			}
 		}
 

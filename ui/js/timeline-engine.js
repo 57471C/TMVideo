@@ -6,6 +6,10 @@
 window.playheadAnimationId = null;
 window.lastCheckedVideoTime = 0;
 
+// Cache the live HTMLCollection of playheads globally so we don't query the DOM repeatedly in the animation frame
+const timelinePlayheadsLive =
+	document.getElementsByClassName("sequencer-playhead");
+
 function syncTimelinePlayheadSmoothly() {
 	if (player && playerReady && player.duration) {
 		const currentVideoTime = player.currentTime;
@@ -45,9 +49,8 @@ function syncTimelinePlayheadSmoothly() {
 
 		const finalVideoTime = player.currentTime;
 		const completionPercent = (finalVideoTime / duration) * 100;
-		const playheads = document.querySelectorAll(".sequencer-playhead");
-		for (const ph of playheads) {
-			ph.style.left = `${completionPercent}%`;
+		for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+			timelinePlayheadsLive[i].style.left = `${completionPercent}%`;
 		}
 		window.lastCheckedVideoTime = finalVideoTime;
 	}
@@ -79,9 +82,8 @@ const paintTimelineRuler = (duration) => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		rulerTrack.dataset.hasClickListener = "true";
@@ -119,9 +121,10 @@ const setupVideoTrack = () => {
 	if (!videoTrack) return;
 
 	// Clear any old playheads
-	videoTrack.querySelectorAll(".sequencer-playhead").forEach((ph) => {
-		ph.remove();
-	});
+	const oldPlayheads = videoTrack.getElementsByClassName("sequencer-playhead");
+	while (oldPlayheads.length > 0) {
+		oldPlayheads[0].remove();
+	}
 	videoTrack.style.position = "relative";
 
 	const playhead = document.createElement("div");
@@ -139,9 +142,8 @@ const setupVideoTrack = () => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * player.duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		videoTrack.dataset.hasClickListener = "true";
@@ -170,9 +172,8 @@ const renderAudioWaveformCanvas = () => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * player.duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		audioTrack.dataset.hasClickListener = "true";
