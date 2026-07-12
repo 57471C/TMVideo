@@ -4325,125 +4325,162 @@ const editVideoInQueue = async () => {
 	showToast("Video renamed successfully.", "success");
 };
 
-/** Rebuilds the DOM list of videos for the left playlist sidebar. */
+let _sidebarPlaylistElements = [];
+
+/** Rebuilds the DOM list of videos for the left playlist sidebar using cached nodes and diffing for performance. */
 window.renderSidebarPlaylist = () => {
 	const container = document.getElementById("sidebar-queue-list");
 	if (!container) return;
-	container.innerHTML = "";
 
-	const fragment = document.createDocumentFragment();
+	const queueLen = videoQueue.length;
 
-	for (const [index, video] of videoQueue.entries()) {
-		const div = document.createElement("div");
-		div.className =
-			"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none";
+	// If the queue size has changed (added, removed, cleared), rebuild the DOM elements
+	if (_sidebarPlaylistElements.length !== queueLen) {
+		container.innerHTML = "";
+		_sidebarPlaylistElements = [];
+		const fragment = document.createDocumentFragment();
 
-		const numberPrefix = `${index + 1}. `;
-		const fileName = video.videoFileName || "Unknown File";
+		for (let index = 0; index < queueLen; index++) {
+			const div = document.createElement("div");
+			div.className =
+				"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none";
 
-		const span = document.createElement("span");
-		span.className = "truncate flex-1 pointer-events-none";
+			const span = document.createElement("span");
+			span.className = "truncate flex-1 pointer-events-none";
 
-		if (index === activeQueueIndex) {
-			div.classList.add(
-				"bg-zinc-200",
-				"dark:bg-zinc-800",
-				"border-zinc-300",
-				"dark:border-zinc-700",
-				"text-zinc-900",
-				"dark:text-white",
-				"font-semibold",
-			);
-			span.textContent = `▶ ${numberPrefix}${fileName}`;
-		} else {
-			div.classList.add(
-				"bg-zinc-100",
-				"dark:bg-zinc-800/40",
-				"border-transparent",
-				"text-zinc-700",
-				"dark:text-zinc-300",
-				"hover:bg-zinc-200",
-				"dark:hover:bg-zinc-700/60",
-			);
-			span.textContent = `${numberPrefix}${fileName}`;
-		}
-		div.appendChild(span);
+			// Action wrapper container for reorder buttons
+			const actionWrapper = document.createElement("div");
+			actionWrapper.className = "flex items-center gap-1.5 flex-shrink-0";
 
-		// Action wrapper container for reorder buttons
-		const actionWrapper = document.createElement("div");
-		actionWrapper.className = "flex items-center gap-1.5 flex-shrink-0";
-
-		// Move Up Button
-		const moveUpBtn = document.createElement("button");
-		moveUpBtn.type = "button";
-		moveUpBtn.className =
-			"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
-		moveUpBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
-		if (index === 0) {
-			moveUpBtn.disabled = true;
-		} else {
+			// Move Up Button
+			const moveUpBtn = document.createElement("button");
+			moveUpBtn.type = "button";
+			moveUpBtn.className =
+				"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
+			moveUpBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
 			moveUpBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
+				const idx = parseInt(moveUpBtn.dataset.index, 10);
+				if (idx <= 0) return;
+
 				// Swap items
-				const temp = videoQueue[index];
-				videoQueue[index] = videoQueue[index - 1];
-				videoQueue[index - 1] = temp;
+				const temp = videoQueue[idx];
+				videoQueue[idx] = videoQueue[idx - 1];
+				videoQueue[idx - 1] = temp;
 
 				// Adjust activeQueueIndex
-				if (activeQueueIndex === index) {
-					activeQueueIndex = index - 1;
-				} else if (activeQueueIndex === index - 1) {
-					activeQueueIndex = index;
+				if (activeQueueIndex === idx) {
+					activeQueueIndex = idx - 1;
+				} else if (activeQueueIndex === idx - 1) {
+					activeQueueIndex = idx;
 				}
 
 				saveLocalState();
 				renderVideoQueueSelect();
 				window.renderSidebarPlaylist();
 			});
-		}
-		actionWrapper.appendChild(moveUpBtn);
+			actionWrapper.appendChild(moveUpBtn);
 
-		// Move Down Button
-		const moveDownBtn = document.createElement("button");
-		moveDownBtn.type = "button";
-		moveDownBtn.className =
-			"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
-		moveDownBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-		if (index === videoQueue.length - 1) {
-			moveDownBtn.disabled = true;
-		} else {
+			// Move Down Button
+			const moveDownBtn = document.createElement("button");
+			moveDownBtn.type = "button";
+			moveDownBtn.className =
+				"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
+			moveDownBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 			moveDownBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
+				const idx = parseInt(moveDownBtn.dataset.index, 10);
+				if (idx >= videoQueue.length - 1) return;
+
 				// Swap items
-				const temp = videoQueue[index];
-				videoQueue[index] = videoQueue[index + 1];
-				videoQueue[index + 1] = temp;
+				const temp = videoQueue[idx];
+				videoQueue[idx] = videoQueue[idx + 1];
+				videoQueue[idx + 1] = temp;
 
 				// Adjust activeQueueIndex
-				if (activeQueueIndex === index) {
-					activeQueueIndex = index + 1;
-				} else if (activeQueueIndex === index + 1) {
-					activeQueueIndex = index;
+				if (activeQueueIndex === idx) {
+					activeQueueIndex = idx + 1;
+				} else if (activeQueueIndex === idx + 1) {
+					activeQueueIndex = idx;
 				}
 
 				saveLocalState();
 				renderVideoQueueSelect();
 				window.renderSidebarPlaylist();
 			});
+			actionWrapper.appendChild(moveDownBtn);
+
+			div.appendChild(span);
+			div.appendChild(actionWrapper);
+
+			div.addEventListener("click", async () => {
+				const idx = parseInt(div.dataset.index, 10);
+				await switchVideoInQueue(idx);
+				window.renderSidebarPlaylist();
+			});
+
+			_sidebarPlaylistElements.push({
+				div,
+				span,
+				moveUpBtn,
+				moveDownBtn,
+				lastVideoName: null,
+				lastActive: null,
+				lastIndex: -1,
+			});
+
+			fragment.appendChild(div);
 		}
-		actionWrapper.appendChild(moveDownBtn);
 
-		div.appendChild(actionWrapper);
-
-		div.addEventListener("click", async () => {
-			await switchVideoInQueue(index);
-			window.renderSidebarPlaylist();
-		});
-
-		fragment.appendChild(div);
+		container.appendChild(fragment);
 	}
 
-	container.appendChild(fragment);
+	// Update cached nodes conditionally
+	for (let index = 0; index < queueLen; index++) {
+		const els = _sidebarPlaylistElements[index];
+		const video = videoQueue[index];
+
+		const isActive = index === activeQueueIndex;
+		const videoName = video.videoFileName || "Unknown File";
+
+		const videoChanged = els.lastVideoName !== videoName;
+		const activeChanged = els.lastActive !== isActive;
+		const indexChanged = els.lastIndex !== index;
+
+		if (!videoChanged && !activeChanged && !indexChanged) {
+			continue;
+		}
+
+		if (videoChanged || activeChanged || indexChanged) {
+			const numberPrefix = `${index + 1}. `;
+			els.span.textContent = isActive
+				? `▶ ${numberPrefix}${videoName}`
+				: `${numberPrefix}${videoName}`;
+		}
+
+		if (activeChanged) {
+			if (isActive) {
+				els.div.className =
+					"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white font-semibold";
+			} else {
+				els.div.className =
+					"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none bg-zinc-100 dark:bg-zinc-800/40 border-transparent text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700/60";
+			}
+		}
+
+		if (indexChanged) {
+			els.moveUpBtn.dataset.index = index;
+			els.moveDownBtn.dataset.index = index;
+			els.div.dataset.index = index;
+
+			els.moveUpBtn.disabled = index === 0;
+			els.moveDownBtn.disabled = index === queueLen - 1;
+		}
+
+		els.lastVideoName = videoName;
+		els.lastActive = isActive;
+		els.lastIndex = index;
+	}
 };
 
 // 5. Central LocalStorage Serialization Triggers
