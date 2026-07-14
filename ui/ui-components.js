@@ -121,7 +121,8 @@ const updateStickyOffsets = () => {
 	}
 };
 
-const updateMarkersList = () => {
+let _updateMarkersListScheduled = false;
+const updateMarkersListImmediate = () => {
 	try {
 		if (!DOM.markersList) throw new Error("Markers list element not found");
 		const rows = [
@@ -432,6 +433,15 @@ const updateMarkersList = () => {
 	} catch (error) {
 		toConsole("updateMarkersList error", error.message, debuggin);
 	}
+};
+
+const updateMarkersList = () => {
+	if (_updateMarkersListScheduled) return;
+	_updateMarkersListScheduled = true;
+	requestAnimationFrame(() => {
+		_updateMarkersListScheduled = false;
+		updateMarkersListImmediate();
+	});
 };
 
 const updateVideoTimeSummary = () => {
