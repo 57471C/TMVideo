@@ -6,6 +6,8 @@
 window.playheadAnimationId = null;
 window.lastCheckedVideoTime = 0;
 
+let cachedVideoElement = null;
+
 // Cache the live HTMLCollection of playheads globally so we don't query the DOM repeatedly in the animation frame
 const timelinePlayheadsLive =
 	document.getElementsByClassName("sequencer-playhead");
@@ -223,7 +225,10 @@ const paintTimelineMarkersAndShading = () => {
 	if (!overlay) return;
 	overlay.innerHTML = "";
 
-	const videoElement = player || document.querySelector("video");
+	if (!cachedVideoElement && !player) {
+		cachedVideoElement = document.querySelector("video");
+	}
+	const videoElement = player || cachedVideoElement;
 	if (!videoElement?.duration) return;
 
 	const duration = videoElement.duration;
