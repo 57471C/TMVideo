@@ -62,6 +62,7 @@ window.currentWaveformDataPath = null;
 
 // Cache the live collection of playheads globally
 const playheadsLiveCollection = document.getElementsByClassName("sequencer-playhead");
+const batchVideoCheckboxesLive = document.getElementsByClassName("batch-video-checkbox");
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -3094,9 +3095,10 @@ const initializeTrimFeature = () => {
 			}
 
 			joinBtn.addEventListener("click", () => {
-				const checkboxes = document.querySelectorAll(".batch-video-checkbox");
 				const checkedSegments = [];
-				checkboxes.forEach((cb) => {
+				const len = batchVideoCheckboxesLive.length;
+				for (let i = 0; i < len; i++) {
+					const cb = batchVideoCheckboxesLive[i];
 					if (cb.checked) {
 						const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
 						const vid = videoQueue[idx];
@@ -3111,7 +3113,7 @@ const initializeTrimFeature = () => {
 							});
 						}
 					}
-				});
+				}
 				if (window.joinAndCompressVideos) {
 					window.joinAndCompressVideos(checkedSegments);
 				}
@@ -3270,13 +3272,14 @@ async function processBatchQueue(presetType) {
 		return;
 	}
 
-	const checkboxes = document.querySelectorAll(".batch-video-checkbox");
 	const checkedIndices = [];
-	checkboxes.forEach((cb) => {
+	const len = batchVideoCheckboxesLive.length;
+	for (let i = 0; i < len; i++) {
+		const cb = batchVideoCheckboxesLive[i];
 		if (cb.checked) {
 			checkedIndices.push(Number.parseInt(cb.getAttribute("data-index"), 10));
 		}
-	});
+	}
 
 	if (checkedIndices.length === 0) {
 		alert("Please select at least one video to export.");
