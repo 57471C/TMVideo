@@ -2015,9 +2015,11 @@ const initializePlayer = () => {
 
 	playPauseButton.addEventListener("click", () => {
 		if (player.paused) {
-			void player.play()?.catch((e) =>
-				console.warn("[Playback] play() blocked or unsupported:", e),
-			);
+			void player
+				.play()
+				?.catch((e) =>
+					console.warn("[Playback] play() blocked or unsupported:", e),
+				);
 		} else {
 			player.pause();
 		}
@@ -2313,9 +2315,11 @@ const initializePlayer = () => {
 				e.preventDefault();
 				if (!player.src) return;
 				if (player.paused) {
-					void player.play()?.catch((err) =>
-						console.warn("[Playback] play() blocked or unsupported:", err),
-					);
+					void player
+						.play()
+						?.catch((err) =>
+							console.warn("[Playback] play() blocked or unsupported:", err),
+						);
 				} else {
 					player.pause();
 				}
@@ -2673,12 +2677,14 @@ const seektimeupdate = () => {
 							if (window.activeLoopCount + 1 < (marker.loopCount || 1)) {
 								window.activeLoopCount++;
 								video.currentTime = marker.startTime;
-								void video.play()?.catch((err) =>
-									console.warn(
-										"[Playback] loop play() blocked or unsupported:",
-										err,
-									),
-								);
+								void video
+									.play()
+									?.catch((err) =>
+										console.warn(
+											"[Playback] loop play() blocked or unsupported:",
+											err,
+										),
+									);
 							} else {
 								window.activeLoopId = `exhausted_${marker.id}`;
 							}
@@ -2996,9 +3002,11 @@ const playFromMarkerTime = (markerIndexOrTime, type) => {
 	}
 	if (time !== undefined && time !== null) {
 		player.currentTime = time;
-		void player.play()?.catch((err) =>
-			console.warn("[Playback] play() blocked or unsupported:", err),
-		);
+		void player
+			.play()
+			?.catch((err) =>
+				console.warn("[Playback] play() blocked or unsupported:", err),
+			);
 		toConsole("Playing from marker time", time, debuggin);
 	}
 };
