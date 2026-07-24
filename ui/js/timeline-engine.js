@@ -6,6 +6,12 @@
 window.playheadAnimationId = null;
 window.lastCheckedVideoTime = 0;
 
+let cachedVideoElement = null;
+
+// Cache the live HTMLCollection of playheads globally so we don't query the DOM repeatedly in the animation frame
+const timelinePlayheadsLive =
+	document.getElementsByClassName("sequencer-playhead");
+
 function syncTimelinePlayheadSmoothly() {
 	if (player && playerReady && player.duration) {
 		const currentVideoTime = player.currentTime;
@@ -45,9 +51,8 @@ function syncTimelinePlayheadSmoothly() {
 
 		const finalVideoTime = player.currentTime;
 		const completionPercent = (finalVideoTime / duration) * 100;
-		const playheads = document.querySelectorAll(".sequencer-playhead");
-		for (const ph of playheads) {
-			ph.style.left = `${completionPercent}%`;
+		for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+			timelinePlayheadsLive[i].style.left = `${completionPercent}%`;
 		}
 		window.lastCheckedVideoTime = finalVideoTime;
 	}
@@ -79,9 +84,8 @@ const paintTimelineRuler = (duration) => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		rulerTrack.dataset.hasClickListener = "true";
@@ -119,9 +123,10 @@ const setupVideoTrack = () => {
 	if (!videoTrack) return;
 
 	// Clear any old playheads
-	videoTrack.querySelectorAll(".sequencer-playhead").forEach((ph) => {
-		ph.remove();
-	});
+	const oldPlayheads = videoTrack.getElementsByClassName("sequencer-playhead");
+	while (oldPlayheads.length > 0) {
+		oldPlayheads[0].remove();
+	}
 	videoTrack.style.position = "relative";
 
 	const playhead = document.createElement("div");
@@ -139,9 +144,8 @@ const setupVideoTrack = () => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * player.duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		videoTrack.dataset.hasClickListener = "true";
@@ -170,9 +174,8 @@ const renderAudioWaveformCanvas = () => {
 			const pct = clickX / rect.width;
 			player.currentTime = pct * player.duration;
 			const calculatedPercent = pct * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${calculatedPercent}%`;
+			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
+				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
 			}
 		});
 		audioTrack.dataset.hasClickListener = "true";
@@ -222,10 +225,14 @@ const paintTimelineMarkersAndShading = () => {
 	if (!overlay) return;
 	overlay.innerHTML = "";
 
-	const videoElement = player || document.querySelector("video");
+	if (!cachedVideoElement && !player) {
+		cachedVideoElement = document.querySelector("video");
+	}
+	const videoElement = player || cachedVideoElement;
 	if (!videoElement?.duration) return;
 
 	const duration = videoElement.duration;
+	const fragment = document.createDocumentFragment();
 
 	// Start/End Trimming Shading
 	const startMarker = markers.find(
@@ -238,7 +245,7 @@ const paintTimelineMarkersAndShading = () => {
 			"absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
 		startShade.style.left = "0%";
 		startShade.style.width = `${startPct}%`;
-		overlay.appendChild(startShade);
+		fragment.appendChild(startShade);
 	}
 
 	const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
@@ -248,7 +255,7 @@ const paintTimelineMarkersAndShading = () => {
 		endShade.className = "absolute top-0 bottom-0 bg-black/40 dark:bg-black/60";
 		endShade.style.left = `${endPct}%`;
 		endShade.style.width = `${100 - endPct}%`;
-		overlay.appendChild(endShade);
+		fragment.appendChild(endShade);
 	}
 
 	// Loop through markers sequentially
@@ -268,7 +275,7 @@ const paintTimelineMarkersAndShading = () => {
 					"absolute top-0 bottom-0 bg-zinc-500/20 dark:bg-zinc-900/40";
 				jumpShade.style.left = `${markerLeft}%`;
 				jumpShade.style.width = `${widthPct}%`;
-				overlay.appendChild(jumpShade);
+				fragment.appendChild(jumpShade);
 			}
 		}
 
@@ -284,7 +291,7 @@ const paintTimelineMarkersAndShading = () => {
 					"absolute top-0 bottom-0 bg-cyan-500/10 dark:bg-cyan-400/10";
 				loopShade.style.left = `${markerLeft}%`;
 				loopShade.style.width = `${widthPct}%`;
-				overlay.appendChild(loopShade);
+				fragment.appendChild(loopShade);
 			}
 		}
 
@@ -310,8 +317,10 @@ const paintTimelineMarkersAndShading = () => {
 				"absolute top-0 bottom-0 w-[2px] bg-amber-500 dark:bg-yellow-400 z-10";
 		}
 
-		overlay.appendChild(lineElement);
+		fragment.appendChild(lineElement);
 	}
+
+	overlay.appendChild(fragment);
 };
 
 window.syncTimelinePlayheadSmoothly = syncTimelinePlayheadSmoothly;

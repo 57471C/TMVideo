@@ -121,8 +121,8 @@ const updateStickyOffsets = () => {
 	}
 };
 
-const updateMarkersList = () => {
-	// Add this safety guard:
+let _updateMarkersListScheduled = false;
+const updateMarkersListImmediate = () => {
 	if (typeof player === "undefined" || !player) return;
 	try {
 		if (!DOM.markersList) throw new Error("Markers list element not found");
@@ -357,7 +357,7 @@ const updateMarkersList = () => {
 			markerTableBody
 				.querySelectorAll(".marker-name-input")
 				.forEach((input) => {
-					input.addEventListener("change", (_e) => {
+					input.addEventListener("change", (e) => {
 						const index = parseInt(input.getAttribute("data-marker-index"), 10);
 						if (typeof updateMarkerName === "function") {
 							updateMarkerName(index, input.value);
@@ -434,6 +434,15 @@ const updateMarkersList = () => {
 	} catch (error) {
 		toConsole("updateMarkersList error", error.message, debuggin);
 	}
+};
+
+const updateMarkersList = () => {
+	if (_updateMarkersListScheduled) return;
+	_updateMarkersListScheduled = true;
+	requestAnimationFrame(() => {
+		_updateMarkersListScheduled = false;
+		updateMarkersListImmediate();
+	});
 };
 
 const updateVideoTimeSummary = () => {

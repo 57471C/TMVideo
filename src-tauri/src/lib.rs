@@ -1,9 +1,8 @@
-
 use std::sync::Mutex;
-use tauri::Manager;
 use tauri::Emitter;
-use tauri_plugin_shell::ShellExt;
+use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
 
 #[derive(Default)]
 pub struct FfmpegState(pub Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
@@ -36,7 +35,7 @@ async fn run_ffmpeg(
 ) -> Result<String, String> {
     // 1. Check if there is already a running process
     {
-        let guard = state.0.lock().unwrap();
+        let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         if guard.is_some() {
             return Err("FFmpeg process is already running.".to_string());
         }
@@ -56,7 +55,7 @@ async fn run_ffmpeg(
 
     // 4. Store child in state
     {
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(child);
     }
 
@@ -78,7 +77,7 @@ async fn run_ffmpeg(
                     let line = String::from_utf8_lossy(&line_bytes).to_string();
                     // Store in log buffer
                     {
-                        let mut logs = stderr_logs_clone.lock().unwrap();
+                        let mut logs = stderr_logs_clone.lock().unwrap_or_else(|e| e.into_inner());
                         logs.push(line.clone());
                         if logs.len() > 100 {
                             logs.remove(0);
@@ -98,7 +97,7 @@ async fn run_ffmpeg(
         // Clear child from state
         let state = app_clone.state::<FfmpegState>();
         {
-            let mut guard = state.0.lock().unwrap();
+            let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
             *guard = None;
         }
 
@@ -106,24 +105,26 @@ async fn run_ffmpeg(
     });
 
     // Wait for the process to complete or fail
-    let exit_code = join_handle.await
+    let exit_code = join_handle
+        .await
         .map_err(|e| format!("Background thread panicked: {}", e))?;
 
     match exit_code {
         Some(0) => Ok("Success".to_string()),
         Some(code) => {
-            let logs = stderr_logs.lock().unwrap().join("\n");
-            Err(format!("FFmpeg failed with exit status code {}.\n\nLogs:\n{}", code, logs))
+            let logs = stderr_logs.lock().unwrap_or_else(|e| e.into_inner()).join("\n");
+            Err(format!(
+                "FFmpeg failed with exit status code {}.\n\nLogs:\n{}",
+                code, logs
+            ))
         }
-        None => {
-            Err("FFmpeg process ended unexpectedly or was terminated by signal.".to_string())
-        }
+        None => Err("FFmpeg process ended unexpectedly or was terminated by signal.".to_string()),
     }
 }
 
 #[tauri::command]
 async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String> {
-    let mut guard = state.0.lock().unwrap();
+    let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(child) = guard.take() {
         let _ = child.kill();
     }
@@ -133,13 +134,20 @@ async fn abort_ffmpeg(state: tauri::State<'_, FfmpegState>) -> Result<(), String
 // Triggering a recompile to pick up new icons
 
 #[tauri::command]
-async fn resolve_subtitles(app_handle: tauri::AppHandle, video_path: String) -> Result<Option<String>, String> {
+async fn resolve_subtitles(
+    app_handle: tauri::AppHandle,
+    video_path: String,
+) -> Result<Option<String>, String> {
     use std::path::Path;
 
     let v_path = Path::new(&video_path);
     let base_dir = v_path.parent().unwrap_or(Path::new(""));
-    let base_name = v_path.file_stem().unwrap_or_default().to_str().unwrap_or("video");
-    
+    let base_name = v_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or("video");
+
     let vtt_path = base_dir.join(format!("{}.vtt", base_name));
     let srt_path = base_dir.join(format!("{}.srt", base_name));
 
@@ -153,8 +161,15 @@ async fn resolve_subtitles(app_handle: tauri::AppHandle, video_path: String) -> 
         let srt_str = srt_path.to_string_lossy().into_owned();
         let vtt_str = vtt_path.to_string_lossy().into_owned();
 
-        let sidecar = app_handle.shell().sidecar("ffmpeg").map_err(|e| e.to_string())?;
-        let output = sidecar.args(["-y", "-i", &srt_str, &vtt_str]).output().await.map_err(|e| e.to_string())?;
+        let sidecar = app_handle
+            .shell()
+            .sidecar("ffmpeg")
+            .map_err(|e| e.to_string())?;
+        let output = sidecar
+            .args(["-y", "-i", &srt_str, &vtt_str])
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
 
         if output.status.success() {
             return Ok(Some(vtt_str));
@@ -163,13 +178,23 @@ async fn resolve_subtitles(app_handle: tauri::AppHandle, video_path: String) -> 
 
     // 3. Extract embedded soft-subtitles
     let vtt_str = vtt_path.to_string_lossy().into_owned();
-    let sidecar = app_handle.shell().sidecar("ffmpeg").map_err(|e| e.to_string())?;
-    let output = sidecar.args(["-y", "-i", &video_path, "-map", "0:s:0", &vtt_str]).output().await.map_err(|e| e.to_string())?;
+    let sidecar = app_handle
+        .shell()
+        .sidecar("ffmpeg")
+        .map_err(|e| e.to_string())?;
+    let output = sidecar
+        .args(["-y", "-i", &video_path, "-map", "0:s:0", &vtt_str])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
 
     if output.status.success() {
         Ok(Some(vtt_str))
     } else {
-        let _ = std::fs::remove_file(&vtt_path);
+        let vtt_path_clone = vtt_path.clone();
+        tokio::spawn(async move {
+            let _ = tokio::fs::remove_file(vtt_path_clone).await;
+        });
         Ok(None)
     }
 }
@@ -207,13 +232,16 @@ async fn save_tspz_bundle(
     let app = app_handle.clone();
 
     let emit = move |step: &str, percent: u32, message: &str, current: u32, total: u32| {
-        let _ = app.emit("package-progress", PackageProgressPayload {
-            step: step.to_string(),
-            percent,
-            message: message.to_string(),
-            current,
-            total,
-        });
+        let _ = app.emit(
+            "package-progress",
+            PackageProgressPayload {
+                step: step.to_string(),
+                percent,
+                message: message.to_string(),
+                current,
+                total,
+            },
+        );
     };
 
     emit("start", 0, "Creating archive…", 0, 0);
@@ -227,17 +255,19 @@ async fn save_tspz_bundle(
         use zip::write::SimpleFileOptions;
 
         let emit_b = |step: &str, percent: u32, message: &str, current: u32, total: u32| {
-            let _ = app2.emit("package-progress", PackageProgressPayload {
-                step: step.to_string(),
-                percent,
-                message: message.to_string(),
-                current,
-                total,
-            });
+            let _ = app2.emit(
+                "package-progress",
+                PackageProgressPayload {
+                    step: step.to_string(),
+                    percent,
+                    message: message.to_string(),
+                    current,
+                    total,
+                },
+            );
         };
 
-        let dest = File::create(&output_path)
-            .map_err(|e| format!("Cannot create archive: {e}"))?;
+        let dest = File::create(&output_path).map_err(|e| format!("Cannot create archive: {e}"))?;
         let mut zip = zip::ZipWriter::new(dest);
         let opts = SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
@@ -270,8 +300,8 @@ async fn save_tspz_bundle(
                 total,
             );
 
-            let mut src_file = File::open(src_path)
-                .map_err(|e| format!("Cannot open '{}': {e}", path_str))?;
+            let mut src_file =
+                File::open(src_path).map_err(|e| format!("Cannot open '{}': {e}", path_str))?;
             zip.start_file(&entry_name, opts)
                 .map_err(|e| format!("Cannot start entry '{}': {e}", entry_name))?;
             std::io::copy(&mut src_file, &mut zip)
@@ -315,13 +345,16 @@ async fn load_tspz_bundle(
         use std::io::Read;
 
         let emit = |step: &str, percent: u32, message: &str, current: u32, total: u32| {
-            let _ = app.emit("package-progress", PackageProgressPayload {
-                step: step.to_string(),
-                percent,
-                message: message.to_string(),
-                current,
-                total,
-            });
+            let _ = app.emit(
+                "package-progress",
+                PackageProgressPayload {
+                    step: step.to_string(),
+                    percent,
+                    message: message.to_string(),
+                    current,
+                    total,
+                },
+            );
         };
 
         emit("start", 0, "Opening archive…", 0, 0);
@@ -347,8 +380,9 @@ async fn load_tspz_bundle(
         let mut project_json = String::new();
         let mut video_paths: Vec<String> = Vec::new();
 
-        const VIDEO_EXTS: &[&str] =
-            &["mp4", "mkv", "avi", "mov", "webm", "mpg", "mpeg", "m4v", "flv"];
+        const VIDEO_EXTS: &[&str] = &[
+            "mp4", "mkv", "avi", "mov", "webm", "mpg", "mpeg", "m4v", "flv",
+        ];
 
         for i in 0..archive.len() {
             let mut entry = archive
@@ -383,8 +417,7 @@ async fn load_tspz_bundle(
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("Cannot create parent dir: {e}"))?;
             }
-            std::fs::write(&out_path, &buf)
-                .map_err(|e| format!("Cannot write '{name}': {e}"))?;
+            std::fs::write(&out_path, &buf).map_err(|e| format!("Cannot write '{name}': {e}"))?;
 
             let lower = name.to_lowercase();
             if lower == "project.tmv" {
@@ -442,7 +475,6 @@ async fn join_and_compress_videos(
 
     tokio::task::spawn_blocking(move || {
         use std::env;
-        use std::io::Write;
         use std::path::Path;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -490,7 +522,9 @@ async fn join_and_compress_videos(
         let final_path = base_dir.join(&output_file_name_clone);
 
         let list_path_str = list_path.to_str().ok_or("Invalid list path")?;
-        let intermediate_path_str = intermediate_path.to_str().ok_or("Invalid intermediate path")?;
+        let intermediate_path_str = intermediate_path
+            .to_str()
+            .ok_or("Invalid intermediate path")?;
         let temp_final_path_str = temp_final_path.to_str().ok_or("Invalid temp final path")?;
         let final_path_str = final_path.to_str().ok_or("Invalid final path")?;
 
@@ -511,7 +545,9 @@ async fn join_and_compress_videos(
             }
 
             let temp_output_path = temp_dir.join(format!("temp_seg_{}_{}.mp4", i, unique_id));
-            let temp_output_str = temp_output_path.to_str().ok_or("Invalid temp segment path")?;
+            let temp_output_str = temp_output_path
+                .to_str()
+                .ok_or("Invalid temp segment path")?;
 
             if needs_trim {
                 let ffmpeg_sidecar = app_handle_clone
@@ -537,9 +573,12 @@ async fn join_and_compress_videos(
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     // Cleanup temp files
-                    for clip in &temp_clips {
-                        let _ = std::fs::remove_file(clip);
-                    }
+                    tokio::spawn(async move {
+                        for clip in temp_clips {
+                            let _ = tokio::fs::remove_file(clip).await;
+                        }
+                    });
+
                     return Err(format!("Failed to trim segment {}: {}", i, stderr));
                 }
 
@@ -576,10 +615,17 @@ async fn join_and_compress_videos(
         }
 
         let mut list_file = std::fs::File::create(&list_path).map_err(|e| e.to_string())?;
+        let mut out_string = String::with_capacity(final_paths_to_concat.len() * 250);
         for path in &final_paths_to_concat {
             let safe_path = path.replace("\\", "/");
-            writeln!(list_file, "file '{}'", safe_path).map_err(|e| e.to_string())?;
+            out_string.push_str("file '");
+            out_string.push_str(&safe_path);
+            out_string.push_str("'\n");
         }
+        use std::io::Write;
+        list_file
+            .write_all(out_string.as_bytes())
+            .map_err(|e| e.to_string())?;
         list_file.sync_all().map_err(|e| e.to_string())?;
 
         let mut lossless_success = false;
@@ -590,7 +636,15 @@ async fn join_and_compress_videos(
                 .sidecar("ffmpeg")
                 .map_err(|e| e.to_string())?
                 .args([
-                    "-y", "-f", "concat", "-safe", "0", "-i", list_path_str, "-c", "copy",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    list_path_str,
+                    "-c",
+                    "copy",
                     intermediate_path_str,
                 ]);
 
@@ -632,19 +686,38 @@ async fn join_and_compress_videos(
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                let _ = std::fs::remove_file(&list_path);
-                let _ = std::fs::remove_file(&intermediate_path);
-                for clip in &temp_clips {
-                    let _ = std::fs::remove_file(clip);
-                }
+                let list_path_clone = list_path.clone();
+                let intermediate_path_clone = intermediate_path.clone();
+                tokio::spawn(async move {
+                    let _ = tokio::fs::remove_file(list_path_clone).await;
+                    let _ = tokio::fs::remove_file(intermediate_path_clone).await;
+                    for clip in temp_clips {
+                        let _ = tokio::fs::remove_file(clip).await;
+                    }
+                });
+
                 return Err(format!("Filtergraph fallback failed: {}", stderr));
             }
         }
 
         // Step 4: Final Compression Step
         let compression_args = vec![
-            "-y", "-i", intermediate_path_str, "-c:v", "libx264", "-crf", "23", "-preset",
-            "medium", "-c:a", "aac", "-b:a", "128k", temp_final_path_str,
+            "-y",
+            "-i",
+            intermediate_path_str,
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            temp_final_path_str,
         ];
 
         let ffmpeg_sidecar = app_handle_clone
@@ -653,17 +726,23 @@ async fn join_and_compress_videos(
             .map_err(|e| e.to_string())?
             .args(compression_args);
 
-        let output = tauri::async_runtime::block_on(ffmpeg_sidecar.output())
-            .map_err(|e| e.to_string())?;
+        let output =
+            tauri::async_runtime::block_on(ffmpeg_sidecar.output()).map_err(|e| e.to_string())?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let _ = std::fs::remove_file(&list_path);
-            let _ = std::fs::remove_file(&intermediate_path);
-            let _ = std::fs::remove_file(&temp_final_path);
-            for clip in &temp_clips {
-                let _ = std::fs::remove_file(clip);
-            }
+            let list_path_clone = list_path.clone();
+            let intermediate_path_clone = intermediate_path.clone();
+            let temp_final_path_clone = temp_final_path.clone();
+            tokio::spawn(async move {
+                let _ = tokio::fs::remove_file(list_path_clone).await;
+                let _ = tokio::fs::remove_file(intermediate_path_clone).await;
+                let _ = tokio::fs::remove_file(temp_final_path_clone).await;
+                for clip in temp_clips {
+                    let _ = tokio::fs::remove_file(clip).await;
+                }
+            });
+
             return Err(format!("Final compression failed: {}", stderr));
         }
 
@@ -671,25 +750,24 @@ async fn join_and_compress_videos(
         std::fs::copy(&temp_final_path, &final_path)
             .map_err(|e| format!("Failed to copy file across drives: {}", e))?;
 
-        let concat_list_str = list_path.to_string_lossy().to_string();
-        let concat_list_path = Path::new(&concat_list_str);
-        if concat_list_path.exists() {
-            if let Err(e) = std::fs::remove_file(concat_list_path) {
-                println!("Non-fatal warning: failed to delete temp list: {}", e);
+        tokio::spawn(async move {
+            let concat_list_str = list_path.to_string_lossy().to_string();
+            let concat_list_path = Path::new(&concat_list_str);
+            if tokio::fs::try_exists(concat_list_path)
+                .await
+                .unwrap_or(false)
+            {
+                if let Err(e) = tokio::fs::remove_file(concat_list_path).await {
+                    println!("Non-fatal warning: failed to delete temp list: {}", e);
+                }
             }
-        }
 
-        if intermediate_path.exists() {
-            let _ = std::fs::remove_file(&intermediate_path);
-        }
-        if temp_final_path.exists() {
-            let _ = std::fs::remove_file(&temp_final_path);
-        }
-        for clip in &temp_clips {
-            if clip.exists() {
-                let _ = std::fs::remove_file(clip);
+            let _ = tokio::fs::remove_file(intermediate_path).await;
+            let _ = tokio::fs::remove_file(temp_final_path).await;
+            for clip in temp_clips {
+                let _ = tokio::fs::remove_file(clip).await;
             }
-        }
+        });
 
         Ok(final_path_str.to_string())
     })
@@ -711,7 +789,9 @@ async fn get_waveform_data(
                 .map_err(|e| format!("Failed to find sidecar: {}", e))?
                 .args(["-i", &video_path]);
 
-            let probe_output = sidecar_probe.output().await
+            let probe_output = sidecar_probe
+                .output()
+                .await
                 .map_err(|e| format!("Failed to run probe: {}", e))?;
 
             let stderr_str = String::from_utf8_lossy(&probe_output.stderr);
@@ -750,11 +830,8 @@ async fn get_waveform_data(
 
             let mut all_bytes = Vec::new();
             while let Some(event) = rx.recv().await {
-                match event {
-                    CommandEvent::Stdout(bytes) => {
-                        all_bytes.extend_from_slice(&bytes);
-                    }
-                    _ => {}
+                if let CommandEvent::Stdout(bytes) = event {
+                    all_bytes.extend_from_slice(&bytes);
                 }
             }
 
@@ -770,7 +847,7 @@ async fn get_waveform_data(
                     let val = if b == i8::MIN as u8 {
                         127
                     } else {
-                        (b as i8).abs() as u8
+                        (b as i8).unsigned_abs()
                     };
                     if val > max_val {
                         max_val = val;
@@ -837,8 +914,10 @@ async fn generate_timeline_thumbnails(
         if let Ok(entries) = std::fs::read_dir(&cache_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
-                    let _ = std::fs::remove_file(path);
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "jpg") {
+                    tokio::spawn(async move {
+                        let _ = tokio::fs::remove_file(path).await;
+                    });
                 }
             }
         }
@@ -875,7 +954,7 @@ async fn generate_timeline_thumbnails(
             let mut entry_paths = Vec::new();
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().map_or(false, |ext| ext == "jpg") {
+                if path.is_file() && path.extension().is_some_and(|ext| ext == "jpg") {
                     entry_paths.push(path);
                 }
             }
@@ -896,8 +975,8 @@ async fn generate_timeline_thumbnails(
 
 #[tauri::command]
 fn save_vtt_file(video_path: String, vtt_text: String) -> Result<(), String> {
-    use std::path::Path;
     use std::fs;
+    use std::path::Path;
     let path = Path::new(&video_path);
     let vtt_path = path.with_extension("vtt");
     fs::write(vtt_path, vtt_text)
@@ -909,16 +988,18 @@ async fn verify_and_prepare_video(
     app_handle: tauri::AppHandle,
     video_path: String,
 ) -> Result<String, String> {
+    use std::collections::hash_map::DefaultHasher;
     use std::fs;
     use std::hash::{Hash, Hasher};
-    use std::collections::hash_map::DefaultHasher;
     use std::path::Path;
 
     let path = Path::new(&video_path);
 
     // 1. Structural Sanity Check: Ensure the path is completely absolute and exists
     if !path.is_absolute() {
-        return Err("Security Violation: Rejected un-normalized relative path trajectory.".to_string());
+        return Err(
+            "Security Violation: Rejected un-normalized relative path trajectory.".to_string(),
+        );
     }
     if !path.exists() {
         return Err("Target media file path does not exist on disk".to_string());
@@ -929,18 +1010,25 @@ async fn verify_and_prepare_video(
         let normalized_ext = ext.to_lowercase();
         let valid_extensions = vec![
             "mp4", "mkv", "avi", "mov", "webm", // Videos
-            "mp3", "wav", "m4a", "ogg", "aac",  // Audio
+            "mp3", "wav", "m4a", "ogg", "aac", // Audio
         ];
         if !valid_extensions.contains(&normalized_ext.as_str()) {
-            return Err(format!("Security Violation: Blocked processing for non-whitelisted container format: .{}", normalized_ext));
+            return Err(format!(
+                "Security Violation: Blocked processing for non-whitelisted container format: .{}",
+                normalized_ext
+            ));
         }
     } else {
-        return Err("Rejected media tracking target with missing file format parameters.".to_string());
+        return Err(
+            "Rejected media tracking target with missing file format parameters.".to_string(),
+        );
     }
 
     // 1. Probe the video metadata using the bundled static ffmpeg sidecar binary
     // Running input query without destination targets sends stream information directly to stderr
-    let output = app_handle.shell().sidecar("ffmpeg")
+    let output = app_handle
+        .shell()
+        .sidecar("ffmpeg")
         .map_err(|e| format!("FFmpeg sidecar component mapping failure: {}", e))?
         .args(["-i", &video_path])
         .output()
@@ -949,14 +1037,17 @@ async fn verify_and_prepare_video(
 
     // 1. Convert the entire stderr stream to lowercase for a bulletproof case-insensitive codec scan
     let stderr_lowercase = String::from_utf8_lossy(&output.stderr).to_lowercase();
-    
+
     // Explicitly print text length markers to your cargo terminal to verify execution flow
-    println!("[Proxy Backend] FFmpeg probe trace final output length: {} bytes", stderr_lowercase.len());
-    
+    println!(
+        "[Proxy Backend] FFmpeg probe trace final output length: {} bytes",
+        stderr_lowercase.len()
+    );
+
     // 2. Expand signature scanning patterns to catch any variation of high-efficiency tags
-    let is_h265 = stderr_lowercase.contains("hevc") || 
-                  stderr_lowercase.contains("h265") || 
-                  stderr_lowercase.contains("x265");
+    let is_h265 = stderr_lowercase.contains("hevc")
+        || stderr_lowercase.contains("h265")
+        || stderr_lowercase.contains("x265");
 
     if !is_h265 {
         println!("[Proxy Backend] Target identified as standard web-compatible container profile. Bypassing transcode loop.");
@@ -972,9 +1063,12 @@ async fn verify_and_prepare_video(
     let proxy_filename = format!("proxy_{:x}.mp4", hash_value);
 
     // Resolve target path metrics inside the system's local application cache context area
-    let cache_dir = app_handle.path()
-        .app_cache_dir()
-        .map_err(|e| format!("System environment failed to map absolute local cache boundaries: {}", e))?;
+    let cache_dir = app_handle.path().app_cache_dir().map_err(|e| {
+        format!(
+            "System environment failed to map absolute local cache boundaries: {}",
+            e
+        )
+    })?;
 
     if !cache_dir.exists() {
         fs::create_dir_all(&cache_dir)
@@ -987,26 +1081,39 @@ async fn verify_and_prepare_video(
     // 4. If a transcoded version of this specific asset doesn't exist yet, build it using ultrafast parameters
     if !proxy_destination_path.exists() {
         let _ = app_handle.emit("transcode-needed", ());
-        println!("[Proxy Core] Encoding clean proxy container instance to location: {}", proxy_path_str);
-        
-        let transcode_output = app_handle.shell().sidecar("ffmpeg")
+        println!(
+            "[Proxy Core] Encoding clean proxy container instance to location: {}",
+            proxy_path_str
+        );
+
+        let transcode_output = app_handle
+            .shell()
+            .sidecar("ffmpeg")
             .map_err(|e| format!("FFmpeg sidecar instance context invalid: {}", e))?
             .args([
-                "-i", &video_path,
-                "-c:v", "libx264",
-                "-preset", "ultrafast",   // Minimizes disk-writing times for near-instant proxy conversion
-                "-crf", "23",            // Balances timeline parsing quality with low compute payloads
-                "-pix_fmt", "yuv420p",   // CRITICAL FIX: Downsamples 10-bit streams to 8-bit color space for web-engine compatibility
-                "-c:a", "aac",           // Stabilizes browser WebView audio engine playback loops
-                "-y",                    // Implicitly forces overwrite safety
-                &proxy_path_str
+                "-i",
+                &video_path,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast", // Minimizes disk-writing times for near-instant proxy conversion
+                "-crf",
+                "23", // Balances timeline parsing quality with low compute payloads
+                "-pix_fmt",
+                "yuv420p", // CRITICAL FIX: Downsamples 10-bit streams to 8-bit color space for web-engine compatibility
+                "-c:a",
+                "aac", // Stabilizes browser WebView audio engine playback loops
+                "-y",  // Implicitly forces overwrite safety
+                &proxy_path_str,
             ])
             .output()
             .await
             .map_err(|e| format!("Transcode pipeline execution faulted: {}", e))?;
 
         if !transcode_output.status.success() {
-            return Err("FFmpeg process mapping failed to finalize stream conversion cleanly".to_string());
+            return Err(
+                "FFmpeg process mapping failed to finalize stream conversion cleanly".to_string(),
+            );
         }
         println!("[Proxy Core] Transcoding task finished successfully.");
     } else {
@@ -1015,24 +1122,29 @@ async fn verify_and_prepare_video(
 
     // 5. Send path reference indicator strings back up to your JavaScript window
     let clean_proxy_path = proxy_path_str.replace("\\\\?\\", "");
-    println!("[Proxy Core] Returning sanitized path tracking string to frontend: {}", clean_proxy_path);
+    println!(
+        "[Proxy Core] Returning sanitized path tracking string to frontend: {}",
+        clean_proxy_path
+    );
     Ok(clean_proxy_path)
 }
 
-fn clear_old_proxy_caches(app_handle: &tauri::AppHandle) -> std::io::Result<()> {
+async fn clear_old_proxy_caches(app_handle: tauri::AppHandle) -> std::io::Result<()> {
     if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
-        if let Ok(entries) = std::fs::read_dir(cache_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                        if file_name.starts_with("proxy_") {
-                            if let Ok(metadata) = std::fs::metadata(&path) {
-                                if let Ok(modified) = metadata.modified() {
-                                    if let Ok(elapsed) = modified.elapsed() {
-                                        // If the proxy file hasn't been accessed/modified in 7 days, purge it
-                                        if elapsed.as_secs() > 7 * 24 * 3600 {
-                                            let _ = std::fs::remove_file(&path);
+        if let Ok(mut entries) = tokio::fs::read_dir(cache_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(file_type) = entry.file_type().await {
+                    if file_type.is_file() {
+                        let path = entry.path();
+                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                            if file_name.starts_with("proxy_") {
+                                if let Ok(metadata) = entry.metadata().await {
+                                    if let Ok(modified) = metadata.modified() {
+                                        if let Ok(elapsed) = modified.elapsed() {
+                                            // If the proxy file hasn't been accessed/modified in 7 days, purge it
+                                            if elapsed.as_secs() > 7 * 24 * 3600 {
+                                                let _ = tokio::fs::remove_file(&path).await;
+                                            }
                                         }
                                     }
                                 }
@@ -1048,13 +1160,16 @@ fn clear_old_proxy_caches(app_handle: &tauri::AppHandle) -> std::io::Result<()> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+    tauri::Builder::default()
     .manage(FfmpegState(Mutex::new(None)))
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
-      let _ = clear_old_proxy_caches(app.handle());
+      let app_handle = app.handle().clone();
+      tokio::spawn(async move {
+          let _ = clear_old_proxy_caches(app_handle).await;
+      });
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -1066,8 +1181,8 @@ pub fn run() {
     })
      // Add this line to register your new commands:
     .invoke_handler(tauri::generate_handler![
-        get_startup_file, 
-        get_launch_argument, 
+        get_startup_file,
+        get_launch_argument,
         run_ffmpeg, abort_ffmpeg,
         save_tspz_bundle,
         load_tspz_bundle,
@@ -1077,11 +1192,11 @@ pub fn run() {
         generate_timeline_thumbnails,
         save_vtt_file,
         verify_and_prepare_video
-        ]) 
+        ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Destroyed = event {
         let state = window.state::<FfmpegState>();
-        let mut guard = state.0.lock().unwrap();
+        let mut guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(child) = guard.take() {
           let _ = child.kill();
           println!("[Cleanup] Terminated background FFmpeg sidecar process on window destruction.");
@@ -1091,4 +1206,3 @@ pub fn run() {
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
-

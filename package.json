@@ -4,13 +4,15 @@
   "description": "A Windows Video Player/Editor with multiple view modes and encoding capabilities.",
   "main": "ui/index.html",
   "scripts": {
+    "test": "vitest run",
     "start": "tauri dev",
     "build:exe": "tauri build",
     "build:css": "tailwindcss -i ./ui/input.css -o ./ui/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./ui/input.css -o ./ui/tailwind.css --watch",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "test": "vitest run"
   },
   "keywords": [
     "tmvideo",
@@ -25,8 +27,10 @@
     "@tailwindcss/cli": "^4.3.0",
     "@tauri-apps/cli": "^2.0.0",
     "husky": "^9.1.6",
+    "jsdom": "^29.1.1",
     "lint-staged": "^15.2.10",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "vitest": "^4.1.9"
   },
   "lint-staged": {
     "**/*.{js,json,css,html,md}": [

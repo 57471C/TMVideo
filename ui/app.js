@@ -66,6 +66,10 @@ let volumeSlider;
 let activeFFmpegChild = null;
 let isAborted = false;
 window.currentWaveformDataPath = null;
+
+// Cache the live collection of playheads globally
+const playheadsLiveCollection = document.getElementsByClassName("sequencer-playhead");
+const batchVideoCheckboxesLive = document.getElementsByClassName("batch-video-checkbox");
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -969,19 +973,11 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	updateLoadButtonColor();
 };
 
-/** Captures a snapshot of the current video frame. */
-const takeSnapshot = () => {
-	if (!player?.src) {
-		showToast("No video loaded.", "error");
-		return;
-	}
-	const video = player;
-	const container = document.getElementById("video-wrapper-id");
-	if (!container) {
-		showToast("Error taking snapshot.", "error");
-		return;
-	}
-
+/**
+ * Calculates the visible rectangle of the video taking into account
+ * zoom, pan, and container aspect ratio.
+ */
+const calculateVisibleVideoRect = (video, container) => {
 	const containerWidth = container.offsetWidth;
 	const containerHeight = container.offsetHeight;
 
@@ -1030,6 +1026,14 @@ const takeSnapshot = () => {
 		sh = video.videoHeight - sy;
 	}
 
+	return { sx, sy, sw, sh };
+};
+
+/**
+ * Captures the specified rect of the video onto a canvas and downloads it.
+ */
+const downloadCanvasImage = (video, rect) => {
+	const { sx, sy, sw, sh } = rect;
 	const canvas = document.createElement("canvas");
 	canvas.width = sw;
 	canvas.height = sh;
@@ -1053,6 +1057,23 @@ const takeSnapshot = () => {
 		toConsole("Failed to take snapshot", error, debuggin);
 		showToast("Error taking snapshot.", "error");
 	}
+};
+
+/** Captures a snapshot of the current video frame. */
+const takeSnapshot = () => {
+	if (!player?.src) {
+		showToast("No video loaded.", "error");
+		return;
+	}
+	const video = player;
+	const container = document.getElementById("video-wrapper-id");
+	if (!container) {
+		showToast("Error taking snapshot.", "error");
+		return;
+	}
+
+	const rect = calculateVisibleVideoRect(video, container);
+	downloadCanvasImage(video, rect);
 };
 
 /** Toggles cinema mode layout and fullscreen state. */
@@ -1184,7 +1205,6 @@ window.cycleViewMode = async (targetMode) => {
 	}, 60);
 };
 
-// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
 // Centralized overlay presentation management engine
 window.triggerPlaybackOverlay = (messageText) => {
 	const overlayContainer =
@@ -2018,9 +2038,8 @@ const initializePlayer = () => {
 				player.currentTime = time;
 				const duration = player.duration || 1;
 				const pct = (time / duration) * 100;
-				const playheads = document.querySelectorAll(".sequencer-playhead");
-				for (const ph of playheads) {
-					ph.style.left = `${pct}%`;
+				for (let i = 0; i < playheadsLiveCollection.length; i++) {
+					playheadsLiveCollection[i].style.left = `${pct}%`;
 				}
 			}
 		});
@@ -2331,8 +2350,6 @@ const initializePlayer = () => {
 	updateLoadButtonColor();
 };
 
-/** Activates mini-player mode layout. */
-// Refactored viewing mode functions relocated to unified cycleViewMode cycler engine
 window.startMarquee = (e) => {
 	const targetInput = e?.target || e?.srcElement;
 	console.log("utils.js:219 Marquee start:", e?.clientX, e?.clientY);
@@ -2519,9 +2536,8 @@ const seektimeupdate = () => {
 
 		if (duration > 0) {
 			const pct = (currentTime / duration) * 100;
-			const playheads = document.querySelectorAll(".sequencer-playhead");
-			for (const ph of playheads) {
-				ph.style.left = `${pct}%`;
+			for (let i = 0; i < playheadsLiveCollection.length; i++) {
+				playheadsLiveCollection[i].style.left = `${pct}%`;
 			}
 		}
 
@@ -3054,9 +3070,10 @@ const initializeTrimFeature = () => {
 			}
 
 			joinBtn.addEventListener("click", () => {
-				const checkboxes = document.querySelectorAll(".batch-video-checkbox");
 				const checkedSegments = [];
-				checkboxes.forEach((cb) => {
+				const len = batchVideoCheckboxesLive.length;
+				for (let i = 0; i < len; i++) {
+					const cb = batchVideoCheckboxesLive[i];
 					if (cb.checked) {
 						const idx = Number.parseInt(cb.getAttribute("data-index"), 10);
 						const vid = videoQueue[idx];
@@ -3071,7 +3088,7 @@ const initializeTrimFeature = () => {
 							});
 						}
 					}
-				});
+				}
 				if (window.joinAndCompressVideos) {
 					window.joinAndCompressVideos(checkedSegments);
 				}
@@ -3230,13 +3247,14 @@ async function processBatchQueue(presetType) {
 		return;
 	}
 
-	const checkboxes = document.querySelectorAll(".batch-video-checkbox");
 	const checkedIndices = [];
-	checkboxes.forEach((cb) => {
+	const len = batchVideoCheckboxesLive.length;
+	for (let i = 0; i < len; i++) {
+		const cb = batchVideoCheckboxesLive[i];
 		if (cb.checked) {
 			checkedIndices.push(Number.parseInt(cb.getAttribute("data-index"), 10));
 		}
-	});
+	}
 
 	if (checkedIndices.length === 0) {
 		alert("Please select at least one video to export.");
@@ -3280,11 +3298,101 @@ async function processBatchQueue(presetType) {
 	isAborted = false;
 
 	try {
-		for (const index of checkedIndices) {
-			if (isAborted) break;
+		// 1. Prepare batch metadata & write temp files concurrently to avoid blocking the main queue loop with I/O waits
+		const batchPreparations = await Promise.all(
+			checkedIndices.map(async (index) => {
+				const video = videoQueue[index];
+				if (!video) return null;
 
-			const video = videoQueue[index];
-			if (!video) continue;
+				let baseName = video.videoFileName || `video_${index + 1}`;
+				const lastDot = baseName.lastIndexOf(".");
+				if (lastDot !== -1) {
+					baseName = baseName.substring(0, lastDot);
+				}
+				const exportName = `${baseName}_export.mp4`;
+
+				let actualOutputPath = exportName;
+				if (join) {
+					actualOutputPath = await join(actualOutputDir, exportName);
+				} else {
+					actualOutputPath = `${actualOutputDir}/${exportName}`;
+				}
+
+				let tempFilePath = null;
+				let exportDuration = 0;
+				let segments = [];
+				let prepError = null;
+
+				try {
+					const currentMarkers = video.appState?.markers || [];
+					currentMarkers.forEach((m) => {
+						if (!m.type) m.type = "standard";
+					});
+
+					segments = getExportSegments(
+						currentMarkers,
+						video.processEndTime || 0,
+					);
+
+					if (segments.length === 0) {
+						throw new Error("No segments to export.");
+					}
+
+					exportDuration = segments.reduce(
+						(sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1),
+						0,
+					);
+
+					const safePath = (video.videoFilePath || "").replace(/\\/g, "/");
+					let listContent = "";
+					for (const seg of segments) {
+						const loopCount = seg.loopCount || 1;
+						for (let l = 0; l < loopCount; l++) {
+							listContent += `file '${safePath}'\n`;
+							listContent += `inpoint ${seg.start}\n`;
+							listContent += `outpoint ${seg.end}\n`;
+						}
+					}
+
+					if (tempdir && join) {
+						const tempDir = await tempdir();
+						tempFilePath = await join(
+							tempDir,
+							`ffmpeg_concat_batch_${video.videoId || index}.txt`,
+						);
+					} else {
+						tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
+					}
+					await writeTextFile(tempFilePath, listContent);
+				} catch (e) {
+					prepError = e;
+				}
+
+				return {
+					index,
+					video,
+					actualOutputPath,
+					tempFilePath,
+					segments,
+					exportDuration,
+					prepError,
+				};
+			}),
+		);
+
+		for (const prep of batchPreparations) {
+			if (isAborted) break;
+			if (!prep) continue;
+
+			const {
+				index,
+				video,
+				actualOutputPath,
+				tempFilePath,
+				segments,
+				exportDuration,
+				prepError,
+			} = prep;
 
 			const rowContainer = document.getElementById(`batch-status-${index}`)
 				?.parentElement?.parentElement;
@@ -3311,63 +3419,18 @@ async function processBatchQueue(presetType) {
 				specificProgressBar.value = 0;
 			}
 
-			let baseName = video.videoFileName || `video_${index + 1}`;
-			const lastDot = baseName.lastIndexOf(".");
-			if (lastDot !== -1) {
-				baseName = baseName.substring(0, lastDot);
-			}
-			const exportName = `${baseName}_export.mp4`;
-
-			let actualOutputPath = exportName;
-			if (join) {
-				actualOutputPath = await join(actualOutputDir, exportName);
-			} else {
-				actualOutputPath = `${actualOutputDir}/${exportName}`;
-			}
-
-			let tempFilePath = null;
-
 			try {
+				if (prepError) {
+					throw prepError;
+				}
+
+				// The global variables are updated so other code logic continues to use them correctly if needed
 				markers = video.appState?.markers || [];
 				markers.forEach((m) => {
 					if (!m.type) m.type = "standard";
 				});
-
 				videoFileName = video.videoFileName || "";
 				videoFilePath = video.videoFilePath || "";
-
-				const segments = getExportSegments(markers, video.processEndTime || 0);
-
-				if (segments.length === 0) {
-					throw new Error("No segments to export.");
-				}
-
-				const exportDuration = segments.reduce(
-					(sum, seg) => sum + (seg.end - seg.start) * (seg.loopCount || 1),
-					0,
-				);
-
-				const safePath = video.videoFilePath.replace(/\\/g, "/");
-				let listContent = "";
-				for (const seg of segments) {
-					const loopCount = seg.loopCount || 1;
-					for (let l = 0; l < loopCount; l++) {
-						listContent += `file '${safePath}'\n`;
-						listContent += `inpoint ${seg.start}\n`;
-						listContent += `outpoint ${seg.end}\n`;
-					}
-				}
-
-				if (tempdir && join) {
-					const tempDir = await tempdir();
-					tempFilePath = await join(
-						tempDir,
-						`ffmpeg_concat_batch_${video.videoId || index}.txt`,
-					);
-				} else {
-					tempFilePath = `${actualOutputPath.substring(0, actualOutputPath.lastIndexOf("."))}_concat_list.txt`;
-				}
-				await writeTextFile(tempFilePath, listContent);
 
 				const isCompression = presetType !== "copy";
 				const args = [
@@ -3393,6 +3456,8 @@ async function processBatchQueue(presetType) {
 						`scale=-2:${targetHeight}`,
 						"-c:v",
 						"libx264",
+						"-pix_fmt",
+						"yuv420p",
 						"-crf",
 						presetType === "low" ? "32" : presetType === "high" ? "18" : "26",
 						"-preset",
@@ -3670,6 +3735,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"32",
 					"-preset",
@@ -3683,6 +3750,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"18",
 					"-preset",
@@ -3696,6 +3765,8 @@ async function executeExport(presetType) {
 					`scale=-2:${targetHeight}`,
 					"-c:v",
 					"libx264",
+					"-pix_fmt",
+					"yuv420p",
 					"-crf",
 					"26",
 					"-preset",
@@ -4228,120 +4299,161 @@ const editVideoInQueue = async () => {
 	showToast("Video renamed successfully.", "success");
 };
 
-/** Rebuilds the DOM list of videos for the left playlist sidebar. */
+let _sidebarPlaylistElements = [];
+
+/** Rebuilds the DOM list of videos for the left playlist sidebar using cached nodes and diffing for performance. */
 window.renderSidebarPlaylist = () => {
 	const container = document.getElementById("sidebar-queue-list");
 	if (!container) return;
-	container.innerHTML = "";
 
-	for (const [index, video] of videoQueue.entries()) {
-		const div = document.createElement("div");
-		div.className =
-			"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none";
+	const queueLen = videoQueue.length;
 
-		const numberPrefix = `${index + 1}. `;
-		const fileName = video.videoFileName || "Unknown File";
+	// If the queue size has changed (added, removed, cleared), rebuild the DOM elements
+	if (_sidebarPlaylistElements.length !== queueLen) {
+		container.innerHTML = "";
+		_sidebarPlaylistElements = [];
+		const fragment = document.createDocumentFragment();
 
-		const span = document.createElement("span");
-		span.className = "truncate flex-1 pointer-events-none";
+		for (let index = 0; index < queueLen; index++) {
+			const div = document.createElement("div");
+			div.className =
+				"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none";
 
-		if (index === activeQueueIndex) {
-			div.classList.add(
-				"bg-zinc-200",
-				"dark:bg-zinc-800",
-				"border-zinc-300",
-				"dark:border-zinc-700",
-				"text-zinc-900",
-				"dark:text-white",
-				"font-semibold",
-			);
-			span.textContent = `▶ ${numberPrefix}${fileName}`;
-		} else {
-			div.classList.add(
-				"bg-zinc-100",
-				"dark:bg-zinc-800/40",
-				"border-transparent",
-				"text-zinc-700",
-				"dark:text-zinc-300",
-				"hover:bg-zinc-200",
-				"dark:hover:bg-zinc-700/60",
-			);
-			span.textContent = `${numberPrefix}${fileName}`;
-		}
-		div.appendChild(span);
+			const span = document.createElement("span");
+			span.className = "truncate flex-1 pointer-events-none";
 
-		// Action wrapper container for reorder buttons
-		const actionWrapper = document.createElement("div");
-		actionWrapper.className = "flex items-center gap-1.5 flex-shrink-0";
+			// Action wrapper container for reorder buttons
+			const actionWrapper = document.createElement("div");
+			actionWrapper.className = "flex items-center gap-1.5 flex-shrink-0";
 
-		// Move Up Button
-		const moveUpBtn = document.createElement("button");
-		moveUpBtn.type = "button";
-		moveUpBtn.className =
-			"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
-		moveUpBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
-		if (index === 0) {
-			moveUpBtn.disabled = true;
-		} else {
+			// Move Up Button
+			const moveUpBtn = document.createElement("button");
+			moveUpBtn.type = "button";
+			moveUpBtn.className =
+				"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
+			moveUpBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`;
 			moveUpBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
+				const idx = parseInt(moveUpBtn.dataset.index, 10);
+				if (idx <= 0) return;
+
 				// Swap items
-				const temp = videoQueue[index];
-				videoQueue[index] = videoQueue[index - 1];
-				videoQueue[index - 1] = temp;
+				const temp = videoQueue[idx];
+				videoQueue[idx] = videoQueue[idx - 1];
+				videoQueue[idx - 1] = temp;
 
 				// Adjust activeQueueIndex
-				if (activeQueueIndex === index) {
-					activeQueueIndex = index - 1;
-				} else if (activeQueueIndex === index - 1) {
-					activeQueueIndex = index;
+				if (activeQueueIndex === idx) {
+					activeQueueIndex = idx - 1;
+				} else if (activeQueueIndex === idx - 1) {
+					activeQueueIndex = idx;
 				}
 
 				saveLocalState();
 				renderVideoQueueSelect();
 				window.renderSidebarPlaylist();
 			});
-		}
-		actionWrapper.appendChild(moveUpBtn);
+			actionWrapper.appendChild(moveUpBtn);
 
-		// Move Down Button
-		const moveDownBtn = document.createElement("button");
-		moveDownBtn.type = "button";
-		moveDownBtn.className =
-			"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
-		moveDownBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-		if (index === videoQueue.length - 1) {
-			moveDownBtn.disabled = true;
-		} else {
+			// Move Down Button
+			const moveDownBtn = document.createElement("button");
+			moveDownBtn.type = "button";
+			moveDownBtn.className =
+				"p-1 rounded hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer flex items-center justify-center transition-colors";
+			moveDownBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 			moveDownBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
+				const idx = parseInt(moveDownBtn.dataset.index, 10);
+				if (idx >= videoQueue.length - 1) return;
+
 				// Swap items
-				const temp = videoQueue[index];
-				videoQueue[index] = videoQueue[index + 1];
-				videoQueue[index + 1] = temp;
+				const temp = videoQueue[idx];
+				videoQueue[idx] = videoQueue[idx + 1];
+				videoQueue[idx + 1] = temp;
 
 				// Adjust activeQueueIndex
-				if (activeQueueIndex === index) {
-					activeQueueIndex = index + 1;
-				} else if (activeQueueIndex === index + 1) {
-					activeQueueIndex = index;
+				if (activeQueueIndex === idx) {
+					activeQueueIndex = idx + 1;
+				} else if (activeQueueIndex === idx + 1) {
+					activeQueueIndex = idx;
 				}
 
 				saveLocalState();
 				renderVideoQueueSelect();
 				window.renderSidebarPlaylist();
 			});
+			actionWrapper.appendChild(moveDownBtn);
+
+			div.appendChild(span);
+			div.appendChild(actionWrapper);
+
+			div.addEventListener("click", async () => {
+				const idx = parseInt(div.dataset.index, 10);
+				await switchVideoInQueue(idx);
+				window.renderSidebarPlaylist();
+			});
+
+			_sidebarPlaylistElements.push({
+				div,
+				span,
+				moveUpBtn,
+				moveDownBtn,
+				lastVideoName: null,
+				lastActive: null,
+				lastIndex: -1,
+			});
+
+			fragment.appendChild(div);
 		}
-		actionWrapper.appendChild(moveDownBtn);
 
-		div.appendChild(actionWrapper);
+		container.appendChild(fragment);
+	}
 
-		div.addEventListener("click", async () => {
-			await switchVideoInQueue(index);
-			window.renderSidebarPlaylist();
-		});
+	// Update cached nodes conditionally
+	for (let index = 0; index < queueLen; index++) {
+		const els = _sidebarPlaylistElements[index];
+		const video = videoQueue[index];
 
-		container.appendChild(div);
+		const isActive = index === activeQueueIndex;
+		const videoName = video.videoFileName || "Unknown File";
+
+		const videoChanged = els.lastVideoName !== videoName;
+		const activeChanged = els.lastActive !== isActive;
+		const indexChanged = els.lastIndex !== index;
+
+		if (!videoChanged && !activeChanged && !indexChanged) {
+			continue;
+		}
+
+		if (videoChanged || activeChanged || indexChanged) {
+			const numberPrefix = `${index + 1}. `;
+			els.span.textContent = isActive
+				? `▶ ${numberPrefix}${videoName}`
+				: `${numberPrefix}${videoName}`;
+		}
+
+		if (activeChanged) {
+			if (isActive) {
+				els.div.className =
+					"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white font-semibold";
+			} else {
+				els.div.className =
+					"flex items-center justify-between gap-2 p-2.5 rounded mb-1.5 cursor-pointer text-sm transition-colors border select-none bg-zinc-100 dark:bg-zinc-800/40 border-transparent text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700/60";
+			}
+		}
+
+		if (indexChanged) {
+			els.moveUpBtn.dataset.index = index;
+			els.moveDownBtn.dataset.index = index;
+			els.div.dataset.index = index;
+
+			els.moveUpBtn.disabled = index === 0;
+			els.moveDownBtn.disabled = index === queueLen - 1;
+		}
+
+		els.lastVideoName = videoName;
+		els.lastActive = isActive;
+		els.lastIndex = index;
 	}
 };
 
@@ -4614,3 +4726,8 @@ setTimeout(() => {
 		});
 	}
 }, 1500); // Waits for the initial master data rehydration layout pass to settle down
+
+// Export for testing in Node.js environment without breaking browser execution
+if (typeof module !== "undefined" && module.exports) {
+	module.exports = { parseFFmpegTime };
+}
