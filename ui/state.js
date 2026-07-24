@@ -225,31 +225,10 @@ const loadLocalState = () => {
 		if (!m.type) m.type = "standard";
 	}
 
-	// Sync UI
+	// Sync UI only — media src is set by callers via window.loadVideo
+	// (verify_and_prepare_video proxy). Avoid convertFileSrc here so H.265 works.
 	if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
 	if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
-
-	if (videoQueue && videoQueue.length > 0) {
-		const currentVideo = videoQueue[activeQueueIndex];
-		if (currentVideo?.videoFilePath) {
-			const isTauri =
-				window.TAURI !== undefined || window.__TAURI__ !== undefined;
-			const tauriObj = window.TAURI || window.__TAURI__;
-			if (isTauri && tauriObj?.core?.convertFileSrc) {
-				const assetUrl = tauriObj.core.convertFileSrc(
-					currentVideo.videoFilePath,
-				);
-				player.src = assetUrl;
-				player.preload = "auto";
-				toggleVideoPlaceholder(false);
-				player.load();
-
-				if (typeof window.loadSubtitleTrack === "function") {
-					window.loadSubtitleTrack(currentVideo.videoFilePath);
-				}
-			}
-		}
-	}
 };
 
 const exportToJSON = async (isSaveAs = false) => {
@@ -344,7 +323,16 @@ const exportToJSON = async (isSaveAs = false) => {
 	}
 };
 
-const importFromJSON = (jsonText) => {
+/**
+ * Import a project JSON payload into memory and (optionally) load the active video.
+ * @param {string} jsonText
+ * @param {{ skipVideoLoad?: boolean }} [options]
+ *   skipVideoLoad: when true, only hydrate state (used by .tmvz extract which
+ *   re-links temp paths then calls window.loadVideo itself).
+ */
+const importFromJSON = async (jsonText, options = {}) => {
+	const { skipVideoLoad = false } = options;
+
 	if (typeof window.resetVideoViewport === "function") {
 		window.resetVideoViewport(player);
 	}
@@ -378,35 +366,38 @@ const importFromJSON = (jsonText) => {
 		if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
 		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 
-		DOM.markersList.innerHTML = "";
+		if (DOM.markersList) DOM.markersList.innerHTML = "";
 
 		// Handle Video Relinking
 		if (typeof window.resetClosedCaptions === "function") {
 			window.resetClosedCaptions();
 		}
 		player.pause();
-		const isTauri = window.__TAURI__ !== undefined;
-		if (isTauri && videoFilePath) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-			player.preload = "auto";
-			toggleVideoPlaceholder(false);
-			if (typeof window.loadSubtitleTrack === "function") {
-				window.loadSubtitleTrack(videoFilePath);
+
+		if (!skipVideoLoad) {
+			const isTauri = window.__TAURI__ !== undefined;
+			if (isTauri && videoFilePath && typeof window.loadVideo === "function") {
+				// Filesystem path — route through H.265 proxy
+				await window.loadVideo(videoFilePath);
+			} else if (videoFileName && videoBlobCache[videoFileName]) {
+				// Browser blob cache — intentional exception
+				player.src = videoBlobCache[videoFileName];
+				player.preload = "metadata";
+				toggleVideoPlaceholder(false);
+				const ccTrack = document.getElementById("ccTrack");
+				if (ccTrack) ccTrack.src = "";
+				if (typeof updateLoadButtonColor === "function")
+					updateLoadButtonColor();
+			} else {
+				player.src = "";
+				player.removeAttribute("src");
+				DOM.videoPlaceholder.textContent = videoFileName
+					? `Project loaded. Click here to locate video: ${videoFileName}`
+					: "Load a video to get started";
+				toggleVideoPlaceholder(true);
+				if (typeof updateLoadButtonColor === "function")
+					updateLoadButtonColor();
 			}
-		} else if (videoFileName && videoBlobCache[videoFileName]) {
-			player.src = videoBlobCache[videoFileName];
-			player.preload = "metadata";
-			toggleVideoPlaceholder(false);
-			const ccTrack = document.getElementById("ccTrack");
-			if (ccTrack) ccTrack.src = "";
-		} else {
-			player.src = "";
-			player.removeAttribute("src");
-			DOM.videoPlaceholder.textContent = videoFileName
-				? `Project loaded. Click here to locate video: ${videoFileName}`
-				: "Load a video to get started";
-			toggleVideoPlaceholder(true);
 		}
 
 		if (typeof updateMarkersList === "function") updateMarkersList();

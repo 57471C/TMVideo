@@ -182,6 +182,18 @@ window.clearAllPreviousProjectData = () => {
 	if (typeof updateSliderTicks === "function") updateSliderTicks();
 };
 
+/**
+ * Canonical video load path for filesystem sources.
+ * Always runs verify_and_prepare_video (H.265 proxy) before convertFileSrc.
+ * Callers should set videoFileName/videoFilePath (source path) first when known;
+ * this function backfills them when missing (e.g. drag-drop / launch args).
+ *
+ * Intentional exceptions that do NOT go through this helper:
+ * - Blob/ObjectURL browser picks (no disk path; HTML5 only)
+ * - HTTP(S) URL query param `?v=` rehydrate
+ * - Clearing player.src on project reset / empty queue slot
+ * - Post-export reload of an FFmpeg H.264/copy output (already playback-safe)
+ */
 window.loadVideo = async (incomingVideoPath) => {
 	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
 		console.error(
@@ -251,13 +263,12 @@ window.loadVideo = async (incomingVideoPath) => {
 		}
 
 		// 2. Pass track path metrics down to our backend Rust transcoding checker command
-		if (window.__TAURI__?.invoke) {
-			resolvedFilePath = await window.__TAURI__.invoke(
-				"verify_and_prepare_video",
-				{
-					videoPath: incomingVideoPath,
-				},
-			);
+		const invokeFn =
+			window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+		if (invokeFn) {
+			resolvedFilePath = await invokeFn("verify_and_prepare_video", {
+				videoPath: incomingVideoPath,
+			});
 		}
 
 		// Surgical clearance of native Windows extended UNC safety qualifiers
@@ -293,7 +304,10 @@ window.loadVideo = async (incomingVideoPath) => {
 
 	// 3. Pin down the core HTML5 video rendering element tag
 	const videoElement =
-		document.querySelector("video") || document.getElementById("video-player");
+		document.querySelector("video") ||
+		document.getElementById("video-player") ||
+		document.getElementById("my_video") ||
+		(typeof player !== "undefined" ? player : null);
 	if (!videoElement) {
 		console.error(
 			"[Loader Core] CRITICAL EXCEPTION: HTML5 <video> element missing from DOM grid structure.",
@@ -302,6 +316,7 @@ window.loadVideo = async (incomingVideoPath) => {
 	}
 
 	// 4. Transform native drive references into authenticated network stream URLs
+	// Playback uses the proxy path when HEVC; project globals keep the source path.
 	let validatedStreamUrl = resolvedFilePath;
 	if (window.__TAURI__) {
 		const convertFn =
@@ -319,9 +334,14 @@ window.loadVideo = async (incomingVideoPath) => {
 		"color: #00ffcc; font-weight: bold;",
 	);
 
-	// Sync internal system memory global states
-	if (typeof currentVideo !== "undefined" && currentVideo) {
-		currentVideo.videoFilePath = resolvedFilePath;
+	// Sync globals: keep original source path for project save / subtitles / re-verify
+	videoFilePath = incomingVideoPath;
+	if (!videoFileName) {
+		videoFileName = incomingVideoPath.split(/[/\\]/).pop() || "";
+	}
+	if (videoQueue[activeQueueIndex]) {
+		videoQueue[activeQueueIndex].videoFilePath = videoFilePath;
+		videoQueue[activeQueueIndex].videoFileName = videoFileName;
 	}
 
 	// Attach immediate error tracking to catch hidden decoding runtime faults
@@ -343,12 +363,22 @@ window.loadVideo = async (incomingVideoPath) => {
 
 	// 5. Fire core media track rehydration paint triggers
 	videoElement.src = validatedStreamUrl;
+	videoElement.preload = "auto";
 	videoElement.load();
 
 	// Fire default post-load interface configurations
-	if (typeof window.repositionControls === "function")
+	if (typeof toggleVideoPlaceholder === "function") {
+		toggleVideoPlaceholder(false);
+	}
+	if (typeof updateLoadButtonColor === "function") {
+		updateLoadButtonColor();
+	}
+	if (typeof window.loadSubtitleTrack === "function") {
+		window.loadSubtitleTrack(incomingVideoPath);
+	}
+	if (typeof window.repositionControls === "function") {
 		setTimeout(window.repositionControls, 100);
-	if (typeof showPlaceholder === "function") showPlaceholder(false);
+	}
 };
 
 window.initializeLaunchArgumentHandler = async () => {
@@ -402,7 +432,9 @@ window.initializeLaunchArgumentHandler = async () => {
 									},
 								);
 
-								importFromJSON(result.project_json);
+								// skipVideoLoad: paths in JSON point at original locations;
+								// re-link to extracted temp paths before loading via proxy.
+								importFromJSON(result.project_json, { skipVideoLoad: true });
 
 								if (result.video_paths && result.video_paths.length > 0) {
 									result.video_paths.forEach((tempPath, i) => {
@@ -416,14 +448,9 @@ window.initializeLaunchArgumentHandler = async () => {
 									});
 									const active = videoQueue[activeQueueIndex];
 									if (active?.videoFilePath) {
-										const url = window.__TAURI__.core.convertFileSrc(
-											active.videoFilePath,
-										);
-										player.src = url;
-										player.preload = "auto";
-										player.load();
-										toggleVideoPlaceholder(false);
-										window.loadSubtitleTrack(active.videoFilePath);
+										videoFilePath = active.videoFilePath;
+										videoFileName = active.videoFileName || "";
+										await window.loadVideo(active.videoFilePath);
 									}
 									saveLocalState();
 									renderVideoQueueSelect();
@@ -446,7 +473,7 @@ window.initializeLaunchArgumentHandler = async () => {
 						} else {
 							const jsonText =
 								await window.__TAURI__.fs.readTextFile(launchPath);
-							importFromJSON(jsonText);
+							await importFromJSON(jsonText);
 						}
 
 						toConsole(
@@ -916,6 +943,7 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	window.resetClosedCaptions();
 
 	if (isTauriPath) {
+		// Tauri dialog path: route through loadVideo (verify_and_prepare_video proxy)
 		const filePath =
 			typeof fileOrPath === "object" ? fileOrPath.path : fileOrPath;
 		videoFileName =
@@ -924,34 +952,30 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 				: filePath.split(/[/\\]/).pop();
 		videoFilePath = filePath;
 		saveLocalState();
-
-		const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-		player.src = tauriAssetUrl;
-		player.preload = "auto";
-		window.loadSubtitleTrack(videoFilePath);
+		await window.loadVideo(filePath);
 	} else {
 		const file = fileOrPath;
 		videoFileName = file.name;
-		videoFilePath = file.path || ""; // Tauri injects the absolute path here
+		videoFilePath = file.path || ""; // Tauri may inject absolute path on drop/input
 		saveLocalState();
 
 		const isTauri = window.__TAURI__ !== undefined;
 		if (isTauri && videoFilePath) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-			player.preload = "auto";
-			window.loadSubtitleTrack(videoFilePath);
+			// Disk path available: proxy path for H.265
+			await window.loadVideo(videoFilePath);
 		} else {
+			// Browser-only blob path — intentional exception (no filesystem path)
 			const fileURL = URL.createObjectURL(file);
 			videoBlobCache[videoFileName] = fileURL;
 			player.src = fileURL;
 			player.preload = "metadata";
+			player.load();
 			const ccTrack = document.getElementById("ccTrack");
 			if (ccTrack) ccTrack.src = "";
+			toggleVideoPlaceholder(false);
+			updateLoadButtonColor();
 		}
 	}
-
-	player.load();
 
 	if (!isRelinking) {
 		markers = [];
@@ -969,8 +993,6 @@ const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
 	saveLocalState();
 	renderVideoQueueSelect();
 	updateSliderTicks();
-
-	updateLoadButtonColor();
 };
 
 /**
@@ -1546,23 +1568,19 @@ const initializePlayer = () => {
 
 	loadLocalState();
 
-	if (videoQueue && videoQueue.length > 0) {
-		const currentVideo = videoQueue[activeQueueIndex];
-		if (currentVideo?.videoFilePath) {
-			const isTauri = window.__TAURI__ !== undefined;
-			if (isTauri && window.__TAURI__.core?.convertFileSrc) {
-				const assetUrl = window.__TAURI__.core.convertFileSrc(
-					currentVideo.videoFilePath,
-				);
-				player.src = assetUrl;
-				player.preload = "auto";
-				player.load();
-				toggleVideoPlaceholder(false);
-				if (typeof window.loadSubtitleTrack === "function") {
-					window.loadSubtitleTrack(currentVideo.videoFilePath);
-				}
-			}
-		}
+	// Rehydrate active media through the proxy path (H.265-safe).
+	// loadLocalState only restores memory; it no longer sets player.src.
+	if (videoFilePath && window.__TAURI__) {
+		window.loadVideo(videoFilePath).catch((err) => {
+			toConsole("Error rehydrating video on startup", err, debuggin);
+		});
+	} else if (videoFileName && videoBlobCache[videoFileName]) {
+		// Browser blob cache — intentional exception (no filesystem path)
+		player.src = videoBlobCache[videoFileName];
+		player.preload = "metadata";
+		player.load();
+		toggleVideoPlaceholder(false);
+		updateLoadButtonColor();
 	}
 
 	updateMarkersList();
@@ -1686,6 +1704,7 @@ const initializePlayer = () => {
 		}
 	});
 
+	// Intentional exception: HTTP(S) URL rehydrate — not a filesystem path
 	const urlParams = new URLSearchParams(window.location.search);
 	const videoUrl = urlParams.get("v");
 	if (videoUrl) {
@@ -1694,6 +1713,8 @@ const initializePlayer = () => {
 		videoFileName = videoUrl.split("/").pop().split("?")[0] || videoUrl;
 		player.src = videoUrl;
 		player.load();
+		toggleVideoPlaceholder(false);
+		updateLoadButtonColor();
 		saveLocalState();
 	}
 
@@ -1741,8 +1762,8 @@ const initializePlayer = () => {
 							},
 						);
 
-						// Populate project from the extracted JSON
-						importFromJSON(result.project_json);
+						// skipVideoLoad: re-link extracted temp paths before proxy load
+						importFromJSON(result.project_json, { skipVideoLoad: true });
 
 						// Re-link each video using the extracted temp paths
 						if (result.video_paths && result.video_paths.length > 0) {
@@ -1755,17 +1776,11 @@ const initializePlayer = () => {
 									);
 								}
 							});
-							// Reload the active video with the temp path
 							const active = videoQueue[activeQueueIndex];
 							if (active?.videoFilePath) {
-								const url = window.__TAURI__.core.convertFileSrc(
-									active.videoFilePath,
-								);
-								player.src = url;
-								player.preload = "auto";
-								player.load();
-								toggleVideoPlaceholder(false);
-								window.loadSubtitleTrack(active.videoFilePath);
+								videoFilePath = active.videoFilePath;
+								videoFileName = active.videoFileName || "";
+								await window.loadVideo(active.videoFilePath);
 							}
 							saveLocalState();
 							renderVideoQueueSelect();
@@ -1799,7 +1814,7 @@ const initializePlayer = () => {
 					localStorage.setItem("projectFilePath", projectFilePath);
 					const jsonText =
 						await window.__TAURI__.fs.readTextFile(projectFilePath);
-					importFromJSON(jsonText);
+					await importFromJSON(jsonText);
 				}
 			} catch (e) {
 				toConsole("Error loading project via Tauri", e, debuggin);
@@ -1820,65 +1835,8 @@ const initializePlayer = () => {
 			if (!proceed) return;
 		}
 
-		window.resetClosedCaptions();
-		player.pause();
-		player.src = "";
-		player.removeAttribute("src");
-		player.load();
-
-		markers = [];
-		videoFileName = "";
-
-		// Free memory by revoking old video blob URLs
-		for (const key in videoBlobCache) {
-			URL.revokeObjectURL(videoBlobCache[key]);
-			delete videoBlobCache[key];
-		}
-		videoFilePath = "";
-		projectFilePath = "";
-		localStorage.removeItem("projectFilePath");
-		projectName = "";
-		projectComments = "";
-		processStartTime = 0;
-		processEndTime = 0;
-
-		videoQueue = [
-			{
-				videoId: 1,
-				videoName: "Video 1",
-				videoFileName: "",
-				videoFilePath: "",
-				processStartTime: 0,
-				processEndTime: 0,
-				appState: { markers: [] },
-			},
-		];
-		activeQueueIndex = 0;
-		renderVideoQueueSelect();
-
-		if (DOM.projectNameInput) DOM.projectNameInput.value = "";
-
-		DOM.videoPlaceholder.textContent = "Load a video to get started";
-		toggleVideoPlaceholder(true);
-		updateLoadButtonColor();
-		updateMarkersList();
-
-		// Hard visual reset of timeline graphics panels
-		const videoTrack = document.getElementById("timeline-video-track");
-		if (videoTrack) videoTrack.innerHTML = "";
-		const audioTrack = document.getElementById("timeline-audio-track");
-		if (audioTrack) audioTrack.innerHTML = "";
-		const rulerTrack = document.getElementById("timeline-ruler-track");
-		if (rulerTrack) rulerTrack.innerHTML = "";
-		const overlayTrack = document.getElementById("timeline-marker-overlay");
-		if (overlayTrack) overlayTrack.innerHTML = "";
-
-		window.currentWaveformData = [];
-		window.currentWaveformDataPath = null;
-
-		saveLocalState();
-		updateSliderTicks();
-
+		window.clearAllPreviousProjectData();
+		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 		showToast("New project started.", "success");
 	});
 	loadVideoButton?.addEventListener("click", async () => {
@@ -2737,6 +2695,8 @@ const updateLoadButtonColor = () => {
 		}
 	}
 };
+// Exposed for classic scripts (state.js) and loadVideo post-load UI sync
+window.updateLoadButtonColor = updateLoadButtonColor;
 
 /** Toggles the visibility of the "no video loaded" placeholder element. */
 const toggleVideoPlaceholder = (show) => {
@@ -2760,6 +2720,7 @@ const toggleVideoPlaceholder = (show) => {
 		);
 	}
 };
+window.toggleVideoPlaceholder = toggleVideoPlaceholder;
 
 /** Opens or closes the settings side panel. */
 const toggleSettings = (show) => {
@@ -3943,13 +3904,19 @@ async function executeExport(presetType) {
 		videoFilePath = actualOutputPath;
 		videoFileName = actualOutputPath.replace(/^.*[\\/]/, "");
 
-		const tauriAssetUrl =
-			window.__TAURI__?.core?.convertFileSrc?.(videoFilePath);
-		player.src = tauriAssetUrl;
-		player.preload = "auto";
-		player.load();
-		toggleVideoPlaceholder(false);
-		window.loadSubtitleTrack(videoFilePath);
+		// Intentional exception: FFmpeg export output is already H.264/copy (playback-safe).
+		// Still prefer loadVideo so any future re-encode paths stay consistent.
+		if (typeof window.loadVideo === "function") {
+			await window.loadVideo(videoFilePath);
+		} else {
+			const tauriAssetUrl =
+				window.__TAURI__?.core?.convertFileSrc?.(videoFilePath);
+			player.src = tauriAssetUrl;
+			player.preload = "auto";
+			player.load();
+			toggleVideoPlaceholder(false);
+			window.loadSubtitleTrack(videoFilePath);
+		}
 
 		saveLocalState();
 		updateMarkersList();
@@ -4060,17 +4027,15 @@ const switchVideoInQueue = async (index) => {
 	const isTauri = window.__TAURI__ !== undefined;
 
 	if (isTauri && videoFilePath) {
-		const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-		player.src = tauriAssetUrl;
-		player.preload = "auto";
-		toggleVideoPlaceholder(false);
-		window.loadSubtitleTrack(videoFilePath);
+		await window.loadVideo(videoFilePath);
 	} else if (videoFileName && videoBlobCache[videoFileName]) {
+		// Browser blob cache — intentional exception
 		player.src = videoBlobCache[videoFileName];
 		player.preload = "metadata";
 		toggleVideoPlaceholder(false);
 		const ccTrack = document.getElementById("ccTrack");
 		if (ccTrack) ccTrack.src = "";
+		updateLoadButtonColor();
 	} else {
 		player.src = "";
 		player.removeAttribute("src");
@@ -4078,8 +4043,8 @@ const switchVideoInQueue = async (index) => {
 			? `Video switched. Click here to locate video: ${videoFileName}`
 			: "Load a video to get started";
 		toggleVideoPlaceholder(true);
+		updateLoadButtonColor();
 	}
-	updateLoadButtonColor();
 
 	if (!DOM.settingsPanel.classList.contains("translate-x-full")) {
 		toggleSettings(true);
@@ -4142,17 +4107,15 @@ const removeCurrentVideo = async () => {
 		window.resetClosedCaptions();
 		const isTauri = window.__TAURI__ !== undefined;
 		if (isTauri && videoFilePath) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-			player.preload = "auto";
-			toggleVideoPlaceholder(false);
-			window.loadSubtitleTrack(videoFilePath);
+			await window.loadVideo(videoFilePath);
 		} else if (videoFileName && videoBlobCache[videoFileName]) {
+			// Browser blob cache — intentional exception
 			player.src = videoBlobCache[videoFileName];
 			player.preload = "metadata";
 			toggleVideoPlaceholder(false);
 			const ccTrack = document.getElementById("ccTrack");
 			if (ccTrack) ccTrack.src = "";
+			updateLoadButtonColor();
 		} else {
 			player.src = "";
 			player.removeAttribute("src");
@@ -4160,8 +4123,8 @@ const removeCurrentVideo = async () => {
 				? `Video switched. Click here to locate video: ${videoFileName}`
 				: "Load a video to get started";
 			toggleVideoPlaceholder(true);
+			updateLoadButtonColor();
 		}
-		updateLoadButtonColor();
 		updateSliderTicks();
 		saveLocalState();
 		showToast(`Switched to: ${currentVideo.videoName}`, "success");
