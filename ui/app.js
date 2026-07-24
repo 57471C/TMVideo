@@ -1173,69 +1173,87 @@ const takeSnapshot = () => {
 
 /** Cycles layout mode: normal ↔ cinema ↔ miniplayer (or explicit target). */
 // window.currentViewMode is initialized once at module top
+window._viewModeTransitioning = false;
+
 window.cycleViewMode = async (targetMode) => {
+	// Serialize: ignore re-entry while native window ops / CSS settle
+	if (window._viewModeTransitioning) {
+		console.log(
+			"[View System] Transition already in progress; ignoring concurrent cycleViewMode.",
+		);
+		return;
+	}
+	window._viewModeTransitioning = true;
+
 	const mainGrid = document.getElementById("mainLayoutGrid");
 	const modeBtn = document.getElementById("expand-player-btn");
 
-	if (!mainGrid) return;
+	if (!mainGrid) {
+		window._viewModeTransitioning = false;
+		return;
+	}
 
-	// Check for direct explicit state routing overrides
-	if (
-		targetMode &&
-		["normal", "cinema", "miniplayer"].includes(targetMode.toLowerCase())
-	) {
-		window.currentViewMode = targetMode.toLowerCase();
-	} else {
-		// Fall back to default progressive carousel rotation loops
-		switch (window.currentViewMode) {
-			case "normal":
-				window.currentViewMode = "cinema";
-				break;
-			case "cinema":
-				window.currentViewMode = "miniplayer";
-				break;
-			default:
-				window.currentViewMode = "normal";
-				break;
+	try {
+		// 1. Decide target mode
+		if (
+			targetMode &&
+			["normal", "cinema", "miniplayer"].includes(targetMode.toLowerCase())
+		) {
+			window.currentViewMode = targetMode.toLowerCase();
+		} else {
+			// Progressive carousel: normal → cinema → miniplayer → normal
+			switch (window.currentViewMode) {
+				case "normal":
+					window.currentViewMode = "cinema";
+					break;
+				case "cinema":
+					window.currentViewMode = "miniplayer";
+					break;
+				default:
+					window.currentViewMode = "normal";
+					break;
+			}
 		}
-	}
 
-	console.log(
-		`[View System] Shifting layout mode configuration to: ${window.currentViewMode.toUpperCase()}`,
-	);
+		const mode = window.currentViewMode;
+		console.log(
+			`[View System] Shifting layout mode configuration to: ${mode.toUpperCase()}`,
+		);
 
-	// 2. Reset marquee zoom/translation transforms on view mode transitions
-	const videoElement = document.querySelector("video");
-	const videoViewport = document.getElementById("video-viewport");
-	const videoWrapper = document.getElementById("video-wrapper-id");
+		// 2. Reset marquee zoom/translation transforms on view mode transitions
+		const videoElement = document.querySelector("video");
+		const videoViewport = document.getElementById("video-viewport");
+		const videoWrapper = document.getElementById("video-wrapper-id");
 
-	for (const el of [videoElement, videoViewport, videoWrapper]) {
-		if (el) {
-			el.style.transform = "none";
-			el.style.left = "0";
-			el.style.top = "0";
+		for (const el of [videoElement, videoViewport, videoWrapper]) {
+			if (el) {
+				el.style.transform = "none";
+				el.style.left = "0";
+				el.style.top = "0";
+			}
 		}
-	}
 
-	if (videoWrapper) {
-		videoWrapper.style.width = "";
-		videoWrapper.style.height = "";
-	}
+		if (videoWrapper) {
+			videoWrapper.style.width = "";
+			videoWrapper.style.height = "";
+		}
 
-	// 3. Native Tauri Window Boundary Manipulation Subsystem (Asynchronous native operations run first)
-	if (window.__TAURI__?.window?.getCurrentWindow) {
-		try {
+		// 3. Native Tauri window ops (canonical per mode)
+		if (window.__TAURI__?.window?.getCurrentWindow) {
 			const appWindow = window.__TAURI__.window.getCurrentWindow();
 
-			if (window.currentViewMode === "normal") {
-				await appWindow.setFullscreen(false); // Clear any cinema hooks
+			if (mode === "normal") {
+				// fullscreen false, alwaysOnTop false, resizable true, maximize
+				await appWindow.setFullscreen(false);
 				await appWindow.setAlwaysOnTop(false);
 				await appWindow.setResizable(true);
-				await appWindow.maximize(); // Force standard maximized layout profile
-			} else if (window.currentViewMode === "cinema") {
+				await appWindow.maximize();
+			} else if (mode === "cinema") {
+				// alwaysOnTop false, fullscreen true
 				await appWindow.setAlwaysOnTop(false);
-				await appWindow.setFullscreen(true); // Enforce absolute native fullscreen mode
-			} else if (window.currentViewMode === "miniplayer") {
+				await appWindow.setFullscreen(true);
+			} else if (mode === "miniplayer") {
+				// fullscreen false, unmaximize, setSize(~580x524), alwaysOnTop true
 				await appWindow.setFullscreen(false);
 				await appWindow.unmaximize();
 				await appWindow.setResizable(true);
@@ -1259,39 +1277,44 @@ window.cycleViewMode = async (targetMode) => {
 					});
 				}
 
-				await appWindow.setAlwaysOnTop(true); // Lock floating window on top
+				await appWindow.setAlwaysOnTop(true);
 			}
-		} catch (err) {
-			console.error("[View System] Asynchronous window operation failed:", err);
 		}
-	}
 
-	// 4. Stamping new layout mode class hooks onto DOM inside 60ms timeout to avoid repaint glitches
-	setTimeout(() => {
-		// Clear legacy state modifiers from body and grid layout structures
-		mainGrid.classList.remove("normal-mode", "cinema-mode", "miniplayer-mode");
+		// 4. Apply CSS classes immediately after window ops (no arbitrary 60ms delay)
+		mainGrid.classList.remove(
+			"normal-mode",
+			"cinema-mode",
+			"miniplayer-mode",
+			"hide-controls",
+		);
 		document.body.classList.remove(
 			"normal-mode",
 			"cinema-mode",
 			"miniplayer-mode",
 		);
-
-		// Standardized state assignment passing control entirely to the CSS engine
-		mainGrid.classList.add(`${window.currentViewMode}-mode`);
-		document.body.classList.add(`${window.currentViewMode}-mode`);
+		mainGrid.classList.add(`${mode}-mode`);
+		document.body.classList.add(`${mode}-mode`);
 
 		if (modeBtn) {
-			if (window.currentViewMode === "normal")
-				modeBtn.title = "Switch to Cinema Mode";
-			else if (window.currentViewMode === "cinema")
-				modeBtn.title = "Switch to Miniplayer View";
+			if (mode === "normal") modeBtn.title = "Switch to Cinema Mode";
+			else if (mode === "cinema") modeBtn.title = "Switch to Miniplayer View";
 			else modeBtn.title = "Switch to Normal View";
 		}
 
+		// One frame for layout paint, then light control/timeline re-sync
+		await new Promise((resolve) => requestAnimationFrame(resolve));
 		if (typeof window.repositionControls === "function") {
 			window.repositionControls();
 		}
-	}, 60);
+		if (typeof window.setupVideoTrack === "function") {
+			window.setupVideoTrack();
+		}
+	} catch (err) {
+		console.error("[View System] View mode transition failed:", err);
+	} finally {
+		window._viewModeTransitioning = false;
+	}
 };
 
 // Centralized overlay presentation management engine
