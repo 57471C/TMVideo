@@ -121,9 +121,22 @@ const updateStickyOffsets = () => {
 	}
 };
 
+/** Resolve video element — app.js `let player` is module-scoped; use window.player. */
+const getMarkersPlayer = () =>
+	window.player ||
+	(typeof player !== "undefined" ? player : null) ||
+	document.getElementById("my_video") ||
+	document.querySelector("video");
+
 let _updateMarkersListScheduled = false;
 const updateMarkersListImmediate = () => {
+	const playerEl = getMarkersPlayer();
+	if (!playerEl) return;
 	try {
+		// Re-bind if scripts raced DOM or prior import cleared the ref
+		if (!DOM.markersList) {
+			DOM.markersList = document.getElementById("markersList");
+		}
 		if (!DOM.markersList) throw new Error("Markers list element not found");
 		const rows = [
 			`<table class="table table-fixed w-full font-mono text-base tabular-nums [&_th]:align-middle [&_td]:align-middle [&_th]:text-sm sm:[&_th]:text-base [&_td]:text-sm sm:[&_td]:text-base [&_th]:py-1 [&_th]:h-5">
@@ -153,8 +166,8 @@ const updateMarkersListImmediate = () => {
 			const isNegative = marker.startTime < 0;
 			const isInvalid =
 				isNegative ||
-				marker.startTime < processStartTime ||
-				(processEndTime > 0 && marker.startTime > processEndTime);
+				marker.startTime < clipInTime ||
+				(clipOutTime > 0 && marker.startTime > clipOutTime);
 			const inputClass = isInvalid ? "text-red-500 dark:text-red-400" : "";
 			const rowBgClass = isNegative
 				? "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
@@ -164,13 +177,13 @@ const updateMarkersListImmediate = () => {
 			let duration = 0;
 			if (i < markers.length - 1) {
 				duration = markers[i + 1].startTime - marker.startTime;
-			} else if (typeof player !== "undefined" && player) {
+			} else if (playerEl) {
 				const activeVideo = videoQueue[activeQueueIndex] || {};
 				const endLimit =
 					activeVideo.virtualEndTime !== null &&
 					activeVideo.virtualEndTime !== undefined
 						? activeVideo.virtualEndTime
-						: player.duration;
+						: playerEl.duration;
 				duration = endLimit - marker.startTime;
 			}
 			if (duration < 0) duration = 0;
@@ -223,10 +236,10 @@ const updateMarkersListImmediate = () => {
                              data-marker-index="${i}">
                     </button>
                     <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="in">
-                      ${ICONS.inType} Set Video Start
+                      ${ICONS.inType} Set Clip In
                     </button>
                     <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="out">
-                      ${ICONS.outType} Set Video End
+                      ${ICONS.outType} Set Clip Out
                     </button>
                   </div>
                 </div>
@@ -287,8 +300,8 @@ const updateMarkersListImmediate = () => {
 					event.preventDefault();
 					event.stopPropagation();
 					const time = parseFloat(jumpBtn.getAttribute("data-time"));
-					if (typeof jumpToMarkerTime === "function") {
-						jumpToMarkerTime(time);
+					if (typeof window.jumpToMarkerTime === "function") {
+						window.jumpToMarkerTime(time);
 					}
 					return;
 				}
@@ -299,8 +312,8 @@ const updateMarkersListImmediate = () => {
 					event.preventDefault();
 					event.stopPropagation();
 					const time = parseFloat(playBtn.getAttribute("data-time"));
-					if (typeof playFromMarkerTime === "function") {
-						playFromMarkerTime(time);
+					if (typeof window.playFromMarkerTime === "function") {
+						window.playFromMarkerTime(time);
 					}
 					return;
 				}
@@ -314,8 +327,8 @@ const updateMarkersListImmediate = () => {
 						syncBtn.getAttribute("data-marker-index"),
 						10,
 					);
-					if (typeof syncMarkerToPlayhead === "function") {
-						syncMarkerToPlayhead(markerIndex);
+					if (typeof window.syncMarkerToPlayhead === "function") {
+						window.syncMarkerToPlayhead(markerIndex);
 					}
 					return;
 				}
@@ -329,8 +342,8 @@ const updateMarkersListImmediate = () => {
 						deleteBtn.getAttribute("data-marker-index"),
 						10,
 					);
-					if (typeof deleteMarker === "function") {
-						deleteMarker(markerIndex);
+					if (typeof window.deleteMarker === "function") {
+						window.deleteMarker(markerIndex);
 					}
 					return;
 				}
@@ -345,55 +358,91 @@ const updateMarkersListImmediate = () => {
 						10,
 					);
 					const type = typeBtn.getAttribute("data-type");
-					if (typeof updateMarkerType === "function") {
-						updateMarkerType(markerIndex, type);
+					if (typeof window.updateMarkerType === "function") {
+						window.updateMarkerType(markerIndex, type);
+					}
+					return;
+				}
+
+				// 7. Add Marker (button is re-created each render)
+				const addBtn = event.target.closest("#addMarkerBtn");
+				if (addBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					if (typeof window.addMarker === "function") {
+						window.addMarker();
 					}
 					return;
 				}
 			});
 
-			// Attach name input change listeners
+			// Attach name input change listeners (terry/tetris easter egg via updateMarkerName)
 			markerTableBody
 				.querySelectorAll(".marker-name-input")
 				.forEach((input) => {
-					input.addEventListener("change", (e) => {
+					input.addEventListener("change", () => {
 						const index = parseInt(input.getAttribute("data-marker-index"), 10);
-						if (typeof updateMarkerName === "function") {
-							updateMarkerName(index, input.value);
+						if (typeof window.updateMarkerName === "function") {
+							window.updateMarkerName(index, input.value);
 						}
 					});
 				});
 
 			// Attach loop count input event handlers
+			// Editing ## must also set type === "loop" (badge, cyan band, seektimeupdate)
+			const applyLoopCountEdit = (
+				index,
+				rawValue,
+				{ reRender = false } = {},
+			) => {
+				const digits = String(rawValue ?? "").replace(/\D/g, "");
+				const parsed = parseInt(digits, 10);
+				const finalVal = !Number.isNaN(parsed)
+					? Math.min(99, Math.max(1, parsed))
+					: 1;
+				if (!markers[index]) return finalVal;
+				markers[index].type = "loop";
+				markers[index].loopCount = finalVal;
+				saveLocalState();
+				if (reRender) {
+					if (typeof window.updateMarkersList === "function") {
+						window.updateMarkersList();
+					} else if (typeof updateMarkersList === "function") {
+						updateMarkersList();
+					}
+					if (typeof window.paintTimelineMarkersAndShading === "function") {
+						window.paintTimelineMarkersAndShading();
+					}
+				}
+				return finalVal;
+			};
+
 			markerTableBody.querySelectorAll(".loop-count-input").forEach((input) => {
 				const index = parseInt(input.getAttribute("data-marker-index"), 10);
 				input.addEventListener("click", (e) => e.stopPropagation());
 				input.addEventListener("mousedown", (e) => e.stopPropagation());
 				input.addEventListener("mouseup", (e) => e.stopPropagation());
 				input.addEventListener("focus", (e) => e.stopPropagation());
-				input.addEventListener("blur", (e) => e.stopPropagation());
+				input.addEventListener("blur", (e) => {
+					e.stopPropagation();
+					// Commit type=loop + count on blur so badge/timeline update without waiting for change
+					const finalVal = applyLoopCountEdit(index, input.value, {
+						reRender: true,
+					});
+					input.value = String(finalVal).padStart(2, "0");
+				});
 				input.addEventListener("input", (e) => {
 					e.stopPropagation();
 					input.value = input.value.replace(/\D/g, "");
-					const parsed = parseInt(input.value, 10);
-					if (!isNaN(parsed)) {
-						markers[index].loopCount = Math.min(99, Math.max(1, parsed));
-					} else {
-						markers[index].loopCount = 1;
-					}
-					saveLocalState();
+					// Persist type+count while typing; defer re-render to avoid focus loss
+					applyLoopCountEdit(index, input.value, { reRender: false });
 				});
 				input.addEventListener("change", (e) => {
 					e.stopPropagation();
-					input.value = input.value.replace(/\D/g, "");
-					const parsed = parseInt(input.value, 10);
-					const finalVal = !isNaN(parsed)
-						? Math.min(99, Math.max(1, parsed))
-						: 1;
-					markers[index].loopCount = finalVal;
+					const finalVal = applyLoopCountEdit(index, input.value, {
+						reRender: true,
+					});
 					input.value = String(finalVal).padStart(2, "0");
-					saveLocalState();
-					updateMarkersList();
 				});
 			});
 		}
@@ -426,7 +475,11 @@ const updateMarkersListImmediate = () => {
 			}
 		}
 
-		if (typeof updateSliderTicks === "function") updateSliderTicks();
+		if (typeof window.updateSliderTicks === "function") {
+			window.updateSliderTicks();
+		} else if (typeof updateSliderTicks === "function") {
+			updateSliderTicks();
+		}
 		if (typeof window.paintTimelineMarkersAndShading === "function") {
 			window.paintTimelineMarkersAndShading();
 		}
@@ -443,42 +496,44 @@ const updateMarkersList = () => {
 		updateMarkersListImmediate();
 	});
 };
+// Classic-script globals + window aliases for module consumers
+window.updateMarkersList = updateMarkersList;
 
 const updateVideoTimeSummary = () => {
 	try {
-		const footer = document.getElementById("markersTableFoot");
+		let footer = document.getElementById("markersTableFoot");
+		// Footer is created by updateMarkersListImmediate; ensure shell exists first
 		if (!footer) {
-			toConsole(
-				"updateVideoTimeSummary skipped",
-				"markersTableFoot is null",
-				debuggin,
-			);
+			const playerEl = getMarkersPlayer();
+			if (playerEl && DOM.markersList) {
+				updateMarkersListImmediate();
+				footer = document.getElementById("markersTableFoot");
+			}
+		}
+		if (!footer) {
+			// Still missing — list not ready yet; silent skip (avoid spam)
 			return;
 		}
 
+		const playerEl = getMarkersPlayer();
 		const activeVideo =
 			(typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
 
 		const startMarker = markers.find(
 			(m) => m.type === "in" || m.type === "start",
 		);
-		processStartTime = startMarker ? startMarker.startTime : 0;
+		clipInTime = startMarker ? startMarker.startTime : 0;
 
 		const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
 		if (endMarker) {
-			processEndTime = endMarker.startTime;
-		} else if (
-			typeof player !== "undefined" &&
-			player &&
-			player.duration &&
-			!preserveProcessTimes
-		) {
-			processEndTime = player.duration;
-		} else if (!preserveProcessTimes) {
-			processEndTime = 0;
+			clipOutTime = endMarker.startTime;
+		} else if (playerEl?.duration && !preserveClipBounds) {
+			clipOutTime = playerEl.duration;
+		} else if (!preserveClipBounds) {
+			clipOutTime = 0;
 		}
 
-		let duration = processEndTime - processStartTime;
+		let duration = clipOutTime - clipInTime;
 		if (duration < 0) duration = 0;
 
 		if (markers.length > 0) {
@@ -488,7 +543,7 @@ const updateVideoTimeSummary = () => {
 					if (i < markers.length - 1) {
 						markerDur = markers[i + 1].startTime - markers[i].startTime;
 					} else {
-						markerDur = processEndTime - markers[i].startTime;
+						markerDur = clipOutTime - markers[i].startTime;
 					}
 					if (markerDur > 0) {
 						duration -= markerDur;
@@ -498,18 +553,18 @@ const updateVideoTimeSummary = () => {
 		}
 		if (duration < 0) duration = 0;
 
-		const formattedStartTime = formatTimeToHHMMSSMS(processStartTime);
-		const formattedEndTime = formatTimeToHHMMSSMS(processEndTime);
+		const formattedStartTime = formatTimeToHHMMSSMS(clipInTime);
+		const formattedEndTime = formatTimeToHHMMSSMS(clipOutTime);
 		const formattedDuration = formatTimeToHHMMSSMS(duration);
 
 		footer.innerHTML = `
       <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 w-full py-1 text-sm font-medium">
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-          <span>Video Start Time:</span>
+          <span>Clip In:</span>
           <span id="videoStartTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedStartTime}</span>
         </span>
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-          <span>Video End Time:</span>
+          <span>Clip Out:</span>
           <span id="videoEndTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedEndTime}</span>
         </span>
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
@@ -521,3 +576,4 @@ const updateVideoTimeSummary = () => {
 		toConsole("updateVideoTimeSummary error", error.message, debuggin);
 	}
 };
+window.updateVideoTimeSummary = updateVideoTimeSummary;

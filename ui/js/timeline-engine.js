@@ -8,12 +8,23 @@ window.lastCheckedVideoTime = 0;
 
 let cachedVideoElement = null;
 
+/** Resolve the video element — module-scoped `player` in app.js is not visible here. */
+const getPlayer = () =>
+	window.player ||
+	document.querySelector("video") ||
+	document.getElementById("my_video");
+
+const isPlayerReady = () =>
+	window.playerReady === true ||
+	(typeof playerReady !== "undefined" && playerReady);
+
 // Cache the live HTMLCollection of playheads globally so we don't query the DOM repeatedly in the animation frame
 const timelinePlayheadsLive =
 	document.getElementsByClassName("sequencer-playhead");
 
 function syncTimelinePlayheadSmoothly() {
-	if (player && playerReady && player.duration) {
+	const player = getPlayer();
+	if (player && isPlayerReady() && player.duration) {
 		const currentVideoTime = player.currentTime;
 		const duration = player.duration;
 
@@ -62,6 +73,9 @@ function syncTimelinePlayheadSmoothly() {
 }
 
 const paintTimelineRuler = (duration) => {
+	const player = getPlayer();
+	if (!player || !duration) return;
+
 	const rulerTrack = document.getElementById("timeline-ruler-track");
 	if (!rulerTrack) return;
 	rulerTrack.innerHTML = "";
@@ -72,17 +86,19 @@ const paintTimelineRuler = (duration) => {
 	const playhead = document.createElement("div");
 	playhead.className =
 		"sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
-	playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+	playhead.style.left = `${((player.currentTime || 0) / duration) * 100}%`;
 	rulerTrack.appendChild(playhead);
 
 	// Add click to seek
 	if (!rulerTrack.dataset.hasClickListener) {
 		rulerTrack.addEventListener("click", (e) => {
+			const p = getPlayer();
+			if (!p) return;
 			if (e.target.classList.contains("sequencer-playhead")) return;
 			const rect = rulerTrack.getBoundingClientRect();
 			const clickX = e.clientX - rect.left;
 			const pct = clickX / rect.width;
-			player.currentTime = pct * duration;
+			p.currentTime = pct * duration;
 			const calculatedPercent = pct * 100;
 			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
 				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
@@ -119,8 +135,9 @@ const paintTimelineRuler = (duration) => {
 };
 
 const setupVideoTrack = () => {
+	const player = getPlayer();
 	const videoTrack = document.getElementById("timeline-video-track");
-	if (!videoTrack) return;
+	if (!videoTrack || !player) return;
 
 	// Clear any old playheads
 	const oldPlayheads = videoTrack.getElementsByClassName("sequencer-playhead");
@@ -133,16 +150,18 @@ const setupVideoTrack = () => {
 	playhead.className =
 		"sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
 	const duration = player.duration || 1;
-	playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+	playhead.style.left = `${((player.currentTime || 0) / duration) * 100}%`;
 	videoTrack.appendChild(playhead);
 
 	// Add click to seek
 	if (!videoTrack.dataset.hasClickListener) {
 		videoTrack.addEventListener("click", (e) => {
+			const p = getPlayer();
+			if (!p?.duration) return;
 			const rect = videoTrack.getBoundingClientRect();
 			const clickX = e.clientX - rect.left;
 			const pct = clickX / rect.width;
-			player.currentTime = pct * player.duration;
+			p.currentTime = pct * p.duration;
 			const calculatedPercent = pct * 100;
 			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
 				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
@@ -153,8 +172,9 @@ const setupVideoTrack = () => {
 };
 
 const renderAudioWaveformCanvas = () => {
+	const player = getPlayer();
 	const audioTrack = document.getElementById("timeline-audio-track");
-	if (!audioTrack) return;
+	if (!audioTrack || !player) return;
 	audioTrack.innerHTML = "";
 	audioTrack.style.position = "relative";
 
@@ -163,16 +183,18 @@ const renderAudioWaveformCanvas = () => {
 	playhead.className =
 		"sequencer-playhead absolute top-0 bottom-0 w-0.5 bg-blue-600 dark:bg-blue-500 pointer-events-none z-30";
 	const duration = player.duration || 1;
-	playhead.style.left = `${(player.currentTime / duration) * 100}%`;
+	playhead.style.left = `${((player.currentTime || 0) / duration) * 100}%`;
 	audioTrack.appendChild(playhead);
 
 	// Add click to seek
 	if (!audioTrack.dataset.hasClickListener) {
 		audioTrack.addEventListener("click", (e) => {
+			const p = getPlayer();
+			if (!p?.duration) return;
 			const rect = audioTrack.getBoundingClientRect();
 			const clickX = e.clientX - rect.left;
 			const pct = clickX / rect.width;
-			player.currentTime = pct * player.duration;
+			p.currentTime = pct * p.duration;
 			const calculatedPercent = pct * 100;
 			for (let i = 0; i < timelinePlayheadsLive.length; i++) {
 				timelinePlayheadsLive[i].style.left = `${calculatedPercent}%`;
@@ -225,6 +247,7 @@ const paintTimelineMarkersAndShading = () => {
 	if (!overlay) return;
 	overlay.innerHTML = "";
 
+	const player = getPlayer();
 	if (!cachedVideoElement && !player) {
 		cachedVideoElement = document.querySelector("video");
 	}

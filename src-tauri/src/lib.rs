@@ -112,7 +112,10 @@ async fn run_ffmpeg(
     match exit_code {
         Some(0) => Ok("Success".to_string()),
         Some(code) => {
-            let logs = stderr_logs.lock().unwrap_or_else(|e| e.into_inner()).join("\n");
+            let logs = stderr_logs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .join("\n");
             Err(format!(
                 "FFmpeg failed with exit status code {}.\n\nLogs:\n{}",
                 code, logs
@@ -191,10 +194,7 @@ async fn resolve_subtitles(
     if output.status.success() {
         Ok(Some(vtt_str))
     } else {
-        let vtt_path_clone = vtt_path.clone();
-        tokio::spawn(async move {
-            let _ = tokio::fs::remove_file(vtt_path_clone).await;
-        });
+        let _ = std::fs::remove_file(&vtt_path);
         Ok(None)
     }
 }
@@ -1035,34 +1035,80 @@ async fn verify_and_prepare_video(
         .await
         .map_err(|e| format!("Failed to initialize command thread execution: {}", e))?;
 
-    // 1. Convert the entire stderr stream to lowercase for a bulletproof case-insensitive codec scan
+    // Convert stderr to lowercase for case-insensitive codec scan
     let stderr_lowercase = String::from_utf8_lossy(&output.stderr).to_lowercase();
 
-    // Explicitly print text length markers to your cargo terminal to verify execution flow
     println!(
         "[Proxy Backend] FFmpeg probe trace final output length: {} bytes",
         stderr_lowercase.len()
     );
 
-    // 2. Expand signature scanning patterns to catch any variation of high-efficiency tags
-    let is_h265 = stderr_lowercase.contains("hevc")
-        || stderr_lowercase.contains("h265")
-        || stderr_lowercase.contains("x265");
+    // Detect HEVC only from codec-bearing lines / tags — avoid bare "hevc"/"x265"
+    // matches buried in unrelated stderr text (paths, titles, library banners).
+    let is_h265 = {
+        let mut hit: Option<&'static str> = None;
+        for line in stderr_lowercase.lines() {
+            let line = line.trim();
+            // FFmpeg stream dump: "Stream #0:0: Video: hevc (Main)..." / "Video: h264"
+            let is_video_line = line.contains("video:") || line.contains("video :");
+            if !is_video_line {
+                continue;
+            }
+            if line.contains("hevc")
+                || line.contains("h265")
+                || line.contains("hev1")
+                || line.contains("hvc1")
+            {
+                hit = Some("video-line hevc/h265/hev1/hvc1");
+                break;
+            }
+            // Explicit H.264/AVC on a Video: line — keep scanning for another HEVC stream
+            if line.contains("h264") || line.contains("avc1") || line.contains(" avc ") {
+                println!("[Proxy Backend] Probe saw H.264/AVC video line (non-HEVC candidate)");
+            }
+        }
+        if hit.is_none() {
+            if stderr_lowercase.contains("video: hevc")
+                || stderr_lowercase.contains("video: h265")
+            {
+                hit = Some("video: hevc|h265");
+            } else if stderr_lowercase.contains("codec_name=hevc")
+                || stderr_lowercase.contains("codec_name=h265")
+            {
+                hit = Some("codec_name=hevc|h265");
+            } else if stderr_lowercase.contains("(hevc)")
+                || stderr_lowercase.contains("(h265)")
+            {
+                // Parenthesized codec id next to stream metadata — still reasonably specific
+                hit = Some("codec-tag (hevc)|(h265)");
+            }
+        }
+        if let Some(branch) = hit {
+            println!("[Proxy Backend] HEVC branch fired: {}", branch);
+            true
+        } else {
+            false
+        }
+    };
 
+    // Non-HEVC: always return the original path — never a proxy
     if !is_h265 {
-        println!("[Proxy Backend] Target identified as standard web-compatible container profile. Bypassing transcode loop.");
+        println!(
+            "[Proxy Backend] Target identified as non-HEVC (e.g. H.264). Returning original path; no proxy."
+        );
         return Ok(video_path);
     }
 
-    println!("[Proxy Backend] High-efficiency H.265/HEVC stream verified! Initiating proxy sequence allocation maps...");
+    println!(
+        "[Proxy Backend] High-efficiency H.265/HEVC stream verified! Initiating proxy sequence..."
+    );
 
-    // 3. Generate a collision-free unique proxy filename using standard library memory hashing
+    // Generate a collision-free unique proxy filename
     let mut hasher = DefaultHasher::new();
     video_path.hash(&mut hasher);
     let hash_value = hasher.finish();
     let proxy_filename = format!("proxy_{:x}.mp4", hash_value);
 
-    // Resolve target path metrics inside the system's local application cache context area
     let cache_dir = app_handle.path().app_cache_dir().map_err(|e| {
         format!(
             "System environment failed to map absolute local cache boundaries: {}",
@@ -1075,10 +1121,38 @@ async fn verify_and_prepare_video(
             .map_err(|e| format!("Failed to create storage folder cache matrices: {}", e))?;
     }
 
-    let proxy_destination_path = cache_dir.join(proxy_filename);
+    let proxy_destination_path = cache_dir.join(&proxy_filename);
     let proxy_path_str = proxy_destination_path.to_string_lossy().to_string();
 
-    // 4. If a transcoded version of this specific asset doesn't exist yet, build it using ultrafast parameters
+    // Reject tiny / corrupt cached proxies so a bad encode cannot stick forever
+    const MIN_PROXY_BYTES: u64 = 64_000;
+    if proxy_destination_path.exists() {
+        match fs::metadata(&proxy_destination_path) {
+            Ok(meta) if meta.len() >= MIN_PROXY_BYTES => {
+                println!(
+                    "[Proxy Core] Valid cached proxy ({} bytes). Skipping re-encode.",
+                    meta.len()
+                );
+            }
+            Ok(meta) => {
+                println!(
+                    "[Proxy Core] Cached proxy too small ({} bytes < {}). Deleting and re-encoding.",
+                    meta.len(),
+                    MIN_PROXY_BYTES
+                );
+                let _ = fs::remove_file(&proxy_destination_path);
+            }
+            Err(e) => {
+                println!(
+                    "[Proxy Core] Could not stat cached proxy ({}); deleting and re-encoding.",
+                    e
+                );
+                let _ = fs::remove_file(&proxy_destination_path);
+            }
+        }
+    }
+
+    // Build proxy if missing (or just deleted as invalid)
     if !proxy_destination_path.exists() {
         let _ = app_handle.emit("transcode-needed", ());
         println!(
@@ -1096,14 +1170,14 @@ async fn verify_and_prepare_video(
                 "-c:v",
                 "libx264",
                 "-preset",
-                "ultrafast", // Minimizes disk-writing times for near-instant proxy conversion
+                "ultrafast",
                 "-crf",
-                "23", // Balances timeline parsing quality with low compute payloads
+                "23",
                 "-pix_fmt",
-                "yuv420p", // CRITICAL FIX: Downsamples 10-bit streams to 8-bit color space for web-engine compatibility
+                "yuv420p",
                 "-c:a",
-                "aac", // Stabilizes browser WebView audio engine playback loops
-                "-y",  // Implicitly forces overwrite safety
+                "aac",
+                "-y",
                 &proxy_path_str,
             ])
             .output()
@@ -1115,15 +1189,34 @@ async fn verify_and_prepare_video(
                 "FFmpeg process mapping failed to finalize stream conversion cleanly".to_string(),
             );
         }
-        println!("[Proxy Core] Transcoding task finished successfully.");
-    } else {
-        println!("[Proxy Core] Matching cached proxy reference located. Skipping duplicate transcoding run.");
+
+        // Validate newly written proxy before returning it
+        match fs::metadata(&proxy_destination_path) {
+            Ok(meta) if meta.len() >= MIN_PROXY_BYTES => {
+                println!(
+                    "[Proxy Core] Transcoding finished successfully ({} bytes).",
+                    meta.len()
+                );
+            }
+            Ok(meta) => {
+                let _ = fs::remove_file(&proxy_destination_path);
+                return Err(format!(
+                    "Proxy encode produced undersized file ({} bytes); refusing to use it",
+                    meta.len()
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Proxy encode finished but output is unreadable: {}",
+                    e
+                ));
+            }
+        }
     }
 
-    // 5. Send path reference indicator strings back up to your JavaScript window
     let clean_proxy_path = proxy_path_str.replace("\\\\?\\", "");
     println!(
-        "[Proxy Core] Returning sanitized path tracking string to frontend: {}",
+        "[Proxy Core] Returning sanitized proxy path to frontend: {}",
         clean_proxy_path
     );
     Ok(clean_proxy_path)
@@ -1166,19 +1259,19 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
-      let app_handle = app.handle().clone();
-      tokio::spawn(async move {
-          let _ = clear_old_proxy_caches(app_handle).await;
-      });
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
+  let app_handle = app.handle().clone();
+  tauri::async_runtime::spawn(async move {
+      let _ = clear_old_proxy_caches(app_handle).await;
+  });
+  if cfg!(debug_assertions) {
+    app.handle().plugin(
+      tauri_plugin_log::Builder::default()
+        .level(log::LevelFilter::Info)
+        .build(),
+    )?;
+  }
+  Ok(())
+})
      // Add this line to register your new commands:
     .invoke_handler(tauri::generate_handler![
         get_startup_file,

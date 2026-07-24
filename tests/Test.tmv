@@ -2,8 +2,6 @@
   "projectMeta": {
     "projectName": "Test",
     "projectComments": "",
-    "masterParts": [],
-    "masterLabour": [],
     "lastSaved": "2026-05-31T08:08:12.584Z",
     "appVersion": "0.1.0"
   },
@@ -17,8 +15,8 @@
       "videoName": "Video 1",
       "videoFileName": "TMV jump test1.mp4",
       "videoFilePath": "C:\\Users\\Terry.minett\\Downloads\\TMV jump test1.mp4",
-      "processStartTime": 0,
-      "processEndTime": 10.000001000000001,
+      "clipInTime": 0,
+      "clipOutTime": 10.000001000000001,
       "appState": {
         "markers": [
           {
@@ -47,8 +45,8 @@
       "videoName": "trimmed_1-2.Push.vs.Pull.with.Kanban-Mfg.mp4",
       "videoFileName": "trimmed_1-2.Push.vs.Pull.with.Kanban-Mfg.mp4",
       "videoFilePath": "C:\\Users\\Terry.minett\\Downloads\\trimmed_1-2.Push.vs.Pull.with.Kanban-Mfg.mp4",
-      "processStartTime": 0,
-      "processEndTime": 0,
+      "clipInTime": 0,
+      "clipOutTime": 0,
       "appState": {
         "markers": [
           {

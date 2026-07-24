@@ -3,12 +3,12 @@
  * # AI CONTEXT MAP
  *
  * ## GLOBAL STATE STRUCTURE
- * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `processStartTime`, `processEndTime`, and `appState` (which holds `markers`).
+ * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `clipInTime`, `clipOutTime`, and `appState` (which holds `markers`).
  * - `activeQueueIndex`: Integer representing the currently selected video slot in `videoQueue`.
  * - `markers`: Array of current active video markers (syncs back to `videoQueue[activeQueueIndex].appState.markers`).
  *
  * ## PERSISTENCE & LIFECYCLE
- * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `processStartTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
+ * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `clipInTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
  * - `loadLocalState()`: Rehydrates memory from `localStorage` on application mount, resolving `videoQueue` references to initialize the player.
  *
  * ## LEFT SIDEBAR ARCHITECTURE (Playlist UI)
@@ -28,25 +28,38 @@ let videoQueue = [];
 let activeQueueIndex = 0;
 const videoBlobCache = {};
 let markers = [];
-let preserveProcessTimes = false;
+let preserveClipBounds = false;
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let durationMode = "hhmmssms";
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let playerReady = false;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let zoomLevel = 1;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let translateX = 0;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let translateY = 0;
-let processStartTime = 0;
-let processEndTime = 0;
+let clipInTime = 0;
+let clipOutTime = 0;
 let playbackSpeed = 1;
 let volumeLevel = 1;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let groupingMode = "lean";
 
 const APP_VERSION = "0.5.0";
+/** Active project localStorage key (writes only go here). */
+const PROJECT_STORAGE_KEY = "lfvideo_project";
+/** Legacy key from time-study era — read once for migration, never written. */
+const LEGACY_PROJECT_STORAGE_KEY = "timeStudyData";
+
+/**
+ * Normalize a queue entry: map legacy processStartTime/processEndTime → clipIn/Out.
+ * Mutates and returns the video object.
+ */
+const normalizeVideoClipBounds = (video) => {
+	if (!video) return video;
+	if (video.clipInTime === undefined || video.clipInTime === null) {
+		video.clipInTime = video.processStartTime || 0;
+	}
+	if (video.clipOutTime === undefined || video.clipOutTime === null) {
+		video.clipOutTime = video.processEndTime || 0;
+	}
+	delete video.processStartTime;
+	delete video.processEndTime;
+	return video;
+};
 
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let isDrawing = false;
@@ -98,12 +111,6 @@ const DOM = {
 	settingsBackdrop: document.getElementById("settingsBackdrop"),
 	settingsPanel: document.getElementById("settingsPanel"),
 	closeSettingsBtn: document.getElementById("closeSettingsBtn"),
-	masterDataModal: document.getElementById("masterDataModal"),
-	masterDataModalTitle: document.getElementById("masterDataModalTitle"),
-	masterDataList: document.getElementById("masterDataList"),
-	clearMasterDataBtn: document.getElementById("clearMasterDataBtn"),
-	closeMasterDataBtn: document.getElementById("closeMasterDataBtn"),
-	closeMasterDataBtnX: document.getElementById("closeMasterDataBtnX"),
 };
 
 const saveLocalState = () => {
@@ -118,16 +125,17 @@ const saveLocalState = () => {
 	// Sync active global variables to the current video object
 	videoQueue[activeQueueIndex].videoFileName = videoFileName;
 	videoQueue[activeQueueIndex].videoFilePath = videoFilePath;
-	videoQueue[activeQueueIndex].processStartTime = processStartTime;
-	videoQueue[activeQueueIndex].processEndTime = processEndTime;
+	videoQueue[activeQueueIndex].clipInTime = clipInTime;
+	videoQueue[activeQueueIndex].clipOutTime = clipOutTime;
 	videoQueue[activeQueueIndex].appState = { markers };
+	// Drop legacy field names if still present on the active slot
+	delete videoQueue[activeQueueIndex].processStartTime;
+	delete videoQueue[activeQueueIndex].processEndTime;
 
 	const state = {
 		projectMeta: {
 			projectName,
 			projectComments,
-			masterParts,
-			masterLabour,
 			lastSaved: new Date().toISOString(),
 			appVersion: APP_VERSION,
 		},
@@ -139,11 +147,17 @@ const saveLocalState = () => {
 		activeQueueIndex,
 	};
 
-	localStorage.setItem("timeStudyData", JSON.stringify(state));
+	localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(state));
+	// Stop writing the legacy key; remove any stale copy after successful write
+	localStorage.removeItem(LEGACY_PROJECT_STORAGE_KEY);
 };
 
 const loadLocalState = () => {
-	const data = localStorage.getItem("timeStudyData");
+	// Prefer new key; fall back once to legacy timeStudyData for migration
+	let data = localStorage.getItem(PROJECT_STORAGE_KEY);
+	if (!data) {
+		data = localStorage.getItem(LEGACY_PROJECT_STORAGE_KEY);
+	}
 	let restored = false;
 
 	if (data) {
@@ -151,13 +165,9 @@ const loadLocalState = () => {
 			const state = JSON.parse(data);
 
 			if (state.projectMeta) {
-				masterParts = state.projectMeta.masterParts || [];
-				masterLabour = state.projectMeta.masterLabour || [];
 				projectName = state.projectMeta.projectName || "";
 				projectComments = state.projectMeta.projectComments || "";
 			} else {
-				masterParts = state.masterParts || [];
-				masterLabour = state.masterLabour || [];
 				projectName = "";
 				projectComments = "";
 			}
@@ -178,7 +188,7 @@ const loadLocalState = () => {
 			}
 
 			if (state.videoQueue && state.videoQueue.length > 0) {
-				videoQueue = state.videoQueue;
+				videoQueue = state.videoQueue.map(normalizeVideoClipBounds);
 				activeQueueIndex = state.activeQueueIndex || 0;
 			} else {
 				videoQueue = [
@@ -187,8 +197,8 @@ const loadLocalState = () => {
 						videoName: "Video 1",
 						videoFileName: "",
 						videoFilePath: "",
-						processStartTime: 0,
-						processEndTime: 0,
+						clipInTime: 0,
+						clipOutTime: 0,
 						appState: { markers: [] },
 					},
 				];
@@ -197,11 +207,7 @@ const loadLocalState = () => {
 
 			projectFilePath = localStorage.getItem("projectFilePath") || "";
 			restored = true;
-			toConsole(
-				"Global settings and master data restored",
-				"Success",
-				debuggin,
-			);
+			toConsole("Project state restored from localStorage", "Success", debuggin);
 		} catch (e) {
 			toConsole("Error parsing local state", e, debuggin);
 		}
@@ -217,8 +223,8 @@ const loadLocalState = () => {
 				videoName: "Video 1",
 				videoFileName: "",
 				videoFilePath: "",
-				processStartTime: 0,
-				processEndTime: 0,
+				clipInTime: 0,
+				clipOutTime: 0,
 				appState: { markers: [] },
 			},
 		];
@@ -229,44 +235,23 @@ const loadLocalState = () => {
 	const currentVideo = videoQueue[activeQueueIndex];
 	videoFileName = currentVideo.videoFileName || "";
 	videoFilePath = currentVideo.videoFilePath || "";
-	processStartTime = currentVideo.processStartTime || 0;
-	processEndTime = currentVideo.processEndTime || 0;
+	clipInTime = currentVideo.clipInTime || 0;
+	clipOutTime = currentVideo.clipOutTime || 0;
 
 	markers = currentVideo.appState?.markers || [];
 	for (const m of markers) {
 		if (!m.type) m.type = "standard";
 	}
 
-	// Sync UI
+	// Sync UI only — media src is set by callers via window.loadVideo
+	// (verify_and_prepare_video proxy). Avoid convertFileSrc here so H.265 works.
 	if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
 	if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
-
-	if (videoQueue && videoQueue.length > 0) {
-		const currentVideo = videoQueue[activeQueueIndex];
-		if (currentVideo?.videoFilePath) {
-			const isTauri =
-				window.TAURI !== undefined || window.__TAURI__ !== undefined;
-			const tauriObj = window.TAURI || window.__TAURI__;
-			if (isTauri && tauriObj?.core?.convertFileSrc) {
-				const assetUrl = tauriObj.core.convertFileSrc(
-					currentVideo.videoFilePath,
-				);
-				player.src = assetUrl;
-				player.preload = "auto";
-				toggleVideoPlaceholder(false);
-				player.load();
-
-				if (typeof window.loadSubtitleTrack === "function") {
-					window.loadSubtitleTrack(currentVideo.videoFilePath);
-				}
-			}
-		}
-	}
 };
 
 const exportToJSON = async (isSaveAs = false) => {
 	saveLocalState(); // Force sync of globals to current video before export
-	const dataStr = localStorage.getItem("timeStudyData");
+	const dataStr = localStorage.getItem(PROJECT_STORAGE_KEY);
 	if (!dataStr) return;
 
 	let formattedDataStr = dataStr;
@@ -356,13 +341,22 @@ const exportToJSON = async (isSaveAs = false) => {
 	}
 };
 
-const importFromJSON = (jsonText) => {
+/**
+ * Import a project JSON payload into memory and (optionally) load the active video.
+ * @param {string} jsonText
+ * @param {{ skipVideoLoad?: boolean }} [options]
+ *   skipVideoLoad: when true, only hydrate state (used by .tmvz extract which
+ *   re-links temp paths then calls window.loadVideo itself).
+ */
+const importFromJSON = async (jsonText, options = {}) => {
+	const { skipVideoLoad = false } = options;
+
 	if (typeof window.resetVideoViewport === "function") {
 		window.resetVideoViewport(player);
 	}
 
 	try {
-		preserveProcessTimes = true;
+		preserveClipBounds = true;
 		const data = JSON.parse(jsonText);
 
 		if (data.videoQueue) {
@@ -370,19 +364,20 @@ const importFromJSON = (jsonText) => {
 			activeQueueIndex = data.activeQueueIndex || 0;
 			projectName = data.projectMeta?.projectName || "";
 			projectComments = data.projectMeta?.projectComments || "";
-			masterParts = data.projectMeta?.masterParts || [];
-			masterLabour = data.projectMeta?.masterLabour || [];
 		} else {
 			alert("Invalid project file format.");
 			return;
 		}
 
+		// Normalize legacy processStartTime/processEndTime on every queue entry
+		videoQueue = videoQueue.map(normalizeVideoClipBounds);
+
 		// Load active video into memory
 		const currentVideo = videoQueue[activeQueueIndex];
 		videoFileName = currentVideo.videoFileName || "";
 		videoFilePath = currentVideo.videoFilePath || "";
-		processStartTime = currentVideo.processStartTime || 0;
-		processEndTime = currentVideo.processEndTime || 0;
+		clipInTime = currentVideo.clipInTime || 0;
+		clipOutTime = currentVideo.clipOutTime || 0;
 
 		markers = currentVideo.appState?.markers || [];
 		for (const m of markers) {
@@ -392,35 +387,38 @@ const importFromJSON = (jsonText) => {
 		if (DOM.projectNameInput) DOM.projectNameInput.value = projectName;
 		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 
-		DOM.markersList.innerHTML = "";
+		if (DOM.markersList) DOM.markersList.innerHTML = "";
 
 		// Handle Video Relinking
 		if (typeof window.resetClosedCaptions === "function") {
 			window.resetClosedCaptions();
 		}
 		player.pause();
-		const isTauri = window.__TAURI__ !== undefined;
-		if (isTauri && videoFilePath) {
-			const tauriAssetUrl = window.__TAURI__.core.convertFileSrc(videoFilePath);
-			player.src = tauriAssetUrl;
-			player.preload = "auto";
-			toggleVideoPlaceholder(false);
-			if (typeof window.loadSubtitleTrack === "function") {
-				window.loadSubtitleTrack(videoFilePath);
+
+		if (!skipVideoLoad) {
+			const isTauri = window.__TAURI__ !== undefined;
+			if (isTauri && videoFilePath && typeof window.loadVideo === "function") {
+				// Filesystem path — route through H.265 proxy
+				await window.loadVideo(videoFilePath);
+			} else if (videoFileName && videoBlobCache[videoFileName]) {
+				// Browser blob cache — intentional exception
+				player.src = videoBlobCache[videoFileName];
+				player.preload = "metadata";
+				toggleVideoPlaceholder(false);
+				const ccTrack = document.getElementById("ccTrack");
+				if (ccTrack) ccTrack.src = "";
+				if (typeof updateLoadButtonColor === "function")
+					updateLoadButtonColor();
+			} else {
+				player.src = "";
+				player.removeAttribute("src");
+				DOM.videoPlaceholder.textContent = videoFileName
+					? `Project loaded. Click here to locate video: ${videoFileName}`
+					: "Load a video to get started";
+				toggleVideoPlaceholder(true);
+				if (typeof updateLoadButtonColor === "function")
+					updateLoadButtonColor();
 			}
-		} else if (videoFileName && videoBlobCache[videoFileName]) {
-			player.src = videoBlobCache[videoFileName];
-			player.preload = "metadata";
-			toggleVideoPlaceholder(false);
-			const ccTrack = document.getElementById("ccTrack");
-			if (ccTrack) ccTrack.src = "";
-		} else {
-			player.src = "";
-			player.removeAttribute("src");
-			DOM.videoPlaceholder.textContent = videoFileName
-				? `Project loaded. Click here to locate video: ${videoFileName}`
-				: "Load a video to get started";
-			toggleVideoPlaceholder(true);
 		}
 
 		if (typeof updateMarkersList === "function") updateMarkersList();
@@ -440,35 +438,6 @@ const importFromJSON = (jsonText) => {
 			`Error reading project file. It may be corrupted or in an invalid format. Details: ${e.message || e}`,
 		);
 	}
-};
-
-const parsePartTag = (tagStr) => {
-	let qty = "";
-	let partStr = tagStr;
-	const xIdx = tagStr.indexOf(" x ");
-	if (xIdx !== -1) {
-		qty = tagStr.substring(0, xIdx).trim();
-		partStr = tagStr.substring(xIdx + 3).trim();
-	}
-	let partNumber = partStr;
-	let partDescription = "";
-	const dashIdx = partStr.indexOf(" - ");
-	if (dashIdx !== -1) {
-		partNumber = partStr.substring(0, dashIdx).trim();
-		partDescription = partStr.substring(dashIdx + 3).trim();
-	}
-	return { qty, partNumber, partDescription };
-};
-
-const parseLabourTag = (tagStr) => {
-	let code = tagStr;
-	let description = "";
-	const dashIdx = tagStr.indexOf(" - ");
-	if (dashIdx !== -1) {
-		code = tagStr.substring(0, dashIdx).trim();
-		description = tagStr.substring(dashIdx + 3).trim();
-	}
-	return { code, description };
 };
 
 const formatDurationForExport = (ms) => {
@@ -515,9 +484,9 @@ const exportToCSV = async () => {
 	// 1. Metadata Block
 	// Row 1: Titles
 	csvContent +=
-		"Project Name,Video Name,Process Start Time,Process End Time,Video File Name\n";
+		"Project Name,Video Name,Clip In,Clip Out,Video File Name\n";
 	// Row 2: Values
-	csvContent += `${escapeCSV(projectName)},${escapeCSV(videoNameVal)},${formatTimeToHHMMSSMS(processStartTime)},${formatTimeToHHMMSSMS(processEndTime)},${escapeCSV(videoFileName)}\n`;
+	csvContent += `${escapeCSV(projectName)},${escapeCSV(videoNameVal)},${formatTimeToHHMMSSMS(clipInTime)},${formatTimeToHHMMSSMS(clipOutTime)},${escapeCSV(videoFileName)}\n`;
 	// Row 3: Blank
 	csvContent += "\n";
 

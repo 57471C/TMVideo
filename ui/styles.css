@@ -309,7 +309,7 @@ body.cinema-mode #toastContainer {
 	grid-template-rows: auto 240px;
 }
 
-#peaks-timeline-wrapper {
+#detailed-timeline-panel {
 	grid-column: 1 / -1;
 	grid-row: 2;
 	height: 0 !important;
@@ -329,8 +329,7 @@ body.cinema-mode #toastContainer {
 }
 
 .timeline-expanded #detailed-timeline-panel,
-.timeline-expanded .detailed-timeline-wrapper,
-.timeline-expanded #peaks-timeline-wrapper {
+.timeline-expanded .detailed-timeline-wrapper {
 	height: 240px !important;
 	max-height: none !important;
 	padding-top: 12px !important;
@@ -432,7 +431,6 @@ body.normal-mode #video-wrapper-id {
 body.cinema-mode header,
 body.cinema-mode #playlist-queue-sidebar,
 body.cinema-mode #mainLayoutGrid #rightPanel,
-body.cinema-mode #peaks-timeline-wrapper,
 body.cinema-mode #marker-table-container,
 body.cinema-mode #sidebar,
 body.cinema-mode #detailed-timeline-panel {
@@ -497,7 +495,6 @@ body.cinema-mode #mediaControlsContainer {
 body.miniplayer-mode header,
 body.miniplayer-mode #playlist-queue-sidebar,
 body.miniplayer-mode #mainLayoutGrid #rightPanel,
-body.miniplayer-mode #peaks-timeline-wrapper,
 body.miniplayer-mode #marker-table-container,
 body.miniplayer-mode #sidebar,
 body.miniplayer-mode #detailed-timeline-panel {
