@@ -390,7 +390,11 @@ const updateMarkersListImmediate = () => {
 
 			// Attach loop count input event handlers
 			// Editing ## must also set type === "loop" (badge, cyan band, seektimeupdate)
-			const applyLoopCountEdit = (index, rawValue, { reRender = false } = {}) => {
+			const applyLoopCountEdit = (
+				index,
+				rawValue,
+				{ reRender = false } = {},
+			) => {
 				const digits = String(rawValue ?? "").replace(/\D/g, "");
 				const parsed = parseInt(digits, 10);
 				const finalVal = !Number.isNaN(parsed)
