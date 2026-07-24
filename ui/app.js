@@ -68,8 +68,11 @@ let isAborted = false;
 window.currentWaveformDataPath = null;
 
 // Cache the live collection of playheads globally
-const playheadsLiveCollection = document.getElementsByClassName("sequencer-playhead");
-const batchVideoCheckboxesLive = document.getElementsByClassName("batch-video-checkbox");
+const playheadsLiveCollection =
+	document.getElementsByClassName("sequencer-playhead");
+const batchVideoCheckboxesLive = document.getElementsByClassName(
+	"batch-video-checkbox",
+);
 const selectionStart = { x: 0, y: 0 };
 const selectionEnd = { x: 0, y: 0 };
 
@@ -266,8 +269,7 @@ window.loadVideo = async (incomingVideoPath) => {
 		}
 
 		// 2. Pass track path metrics down to our backend Rust transcoding checker command
-		const invokeFn =
-			window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+		const invokeFn = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
 		if (invokeFn) {
 			resolvedFilePath = await invokeFn("verify_and_prepare_video", {
 				videoPath: incomingVideoPath,
@@ -1271,8 +1273,11 @@ function resetCinemaIdleTimer() {
 /** Initializes the primary video player events, controls, and UI state. */
 const initializePlayer = () => {
 	player = DOM.video;
+	// Expose for classic scripts (timeline-engine, ui-components) outside module scope
+	window.player = player;
 	player.preservesPitch = true;
 	playerReady = true;
+	window.playerReady = true;
 	toConsole("Video element initialized", "Success", debuggin);
 	toConsole("App Version", APP_VERSION, debuggin);
 
@@ -1382,7 +1387,6 @@ const initializePlayer = () => {
 			saveSettingsData();
 			toggleSettings(false);
 		});
-
 	}
 
 	function configureTimelineTicks(duration) {
@@ -1879,17 +1883,11 @@ const initializePlayer = () => {
 	});
 
 	rewind5sButton.addEventListener("click", () => {
-		player.currentTime = Math.max(
-			clipInTime || 0,
-			player.currentTime - 5,
-		);
+		player.currentTime = Math.max(clipInTime || 0, player.currentTime - 5);
 		toConsole("Rewind 5s", player.currentTime, debuggin);
 	});
 	rewind1sButton.addEventListener("click", () => {
-		player.currentTime = Math.max(
-			clipInTime || 0,
-			player.currentTime - 1,
-		);
+		player.currentTime = Math.max(clipInTime || 0, player.currentTime - 1);
 		toConsole("Rewind 1s", player.currentTime, debuggin);
 	});
 	forward1sButton.addEventListener("click", () => {
@@ -1969,8 +1967,7 @@ const initializePlayer = () => {
 		seekBar.addEventListener("input", (event) => {
 			let time = Number.parseFloat(event.target.value);
 			if (!Number.isNaN(time)) {
-				if (clipInTime > 0 && time < clipInTime)
-					time = clipInTime;
+				if (clipInTime > 0 && time < clipInTime) time = clipInTime;
 				if (clipOutTime > 0 && time > clipOutTime) time = clipOutTime;
 				player.currentTime = time;
 				const duration = player.duration || 1;
@@ -2187,19 +2184,13 @@ const initializePlayer = () => {
 			case "ArrowLeft":
 				e.preventDefault();
 				if (!player.src) return;
-				player.currentTime = Math.max(
-					clipInTime || 0,
-					player.currentTime - 1,
-				);
+				player.currentTime = Math.max(clipInTime || 0, player.currentTime - 1);
 				toConsole("Rewind 1s (Left Arrow)", player.currentTime, debuggin);
 				break;
 			case "ArrowDown":
 				e.preventDefault();
 				if (!player.src) return;
-				player.currentTime = Math.max(
-					clipInTime || 0,
-					player.currentTime - 5,
-				);
+				player.currentTime = Math.max(clipInTime || 0, player.currentTime - 5);
 				toConsole("Rewind 5s (Down Arrow)", player.currentTime, debuggin);
 				break;
 			case "ArrowRight":
@@ -3269,10 +3260,7 @@ async function processBatchQueue(presetType) {
 						if (!m.type) m.type = "standard";
 					});
 
-					segments = getExportSegments(
-						currentMarkers,
-						video.clipOutTime || 0,
-					);
+					segments = getExportSegments(currentMarkers, video.clipOutTime || 0);
 
 					if (segments.length === 0) {
 						throw new Error("No segments to export.");
