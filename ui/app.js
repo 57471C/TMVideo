@@ -179,6 +179,8 @@ window.clearAllPreviousProjectData = () => {
 	window.currentWaveformData = [];
 	window.currentWaveformDataPath = null;
 
+	// Single project-reset path: keep queue UI and sliders in sync
+	if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 	saveLocalState();
 	if (typeof updateSliderTicks === "function") updateSliderTicks();
 };
@@ -1083,14 +1085,8 @@ const takeSnapshot = () => {
 	downloadCanvasImage(video, rect);
 };
 
-/** Toggles cinema mode layout and fullscreen state. */
-// 1. Establish global tracker state variable if not already defined
-if (typeof window.currentViewMode === "undefined") {
-	window.currentViewMode = "normal"; // Choices: 'normal', 'cinema', 'miniplayer'
-}
-
-// TARGET: Completely overhaul the window management logic block within window.cycleViewMode
-// TARGET: Completely overhaul the view state lifecycle configuration block inside window.cycleViewMode
+/** Cycles layout mode: normal ↔ cinema ↔ miniplayer (or explicit target). */
+// window.currentViewMode is initialized once at module top
 window.cycleViewMode = async (targetMode) => {
 	const mainGrid = document.getElementById("mainLayoutGrid");
 	const modeBtn = document.getElementById("expand-player-btn");
@@ -1818,8 +1814,8 @@ const initializePlayer = () => {
 			if (!proceed) return;
 		}
 
+		// Single reset path — clearAllPreviousProjectData owns full wipe + UI sync
 		window.clearAllPreviousProjectData();
-		if (typeof renderVideoQueueSelect === "function") renderVideoQueueSelect();
 		showToast("New project started.", "success");
 	});
 	loadVideoButton?.addEventListener("click", async () => {
