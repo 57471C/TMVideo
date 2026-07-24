@@ -15,6 +15,13 @@
  * - The new layout shifts away from modal drag-and-drop to a unified persistent side panel (`#playlist-queue-sidebar`).
  * - Render loops (`renderSidebarPlaylist`) rebuild the visual DOM nodes entirely based on `videoQueue` data.
  * - Interaction logic toggles active indices by swapping elements directly in the array (`videoQueue[index] = videoQueue[index+1]`) and forcing a re-render.
+ */
+import {
+	initializeVideoViewportZoomPan,
+	resetVideoViewport,
+	updateViewportTransform,
+} from "./js/viewport-engine.js";
+
 // --- CENTRAL APPLICATION RUNTIME STATE SAFETIES ---
 window.cinemaIdleTimer = window.cinemaIdleTimer || null;
 window.currentViewMode = window.currentViewMode || "normal"; // Valid options: 'normal', 'cinema', 'miniplayer'
@@ -129,8 +136,6 @@ window.clearAllPreviousProjectData = () => {
 	localStorage.removeItem("tmvideo_project_metadata");
 	projectName = "";
 	projectComments = "";
-	masterParts = [];
-	masterLabour = [];
 	processStartTime = 0;
 	processEndTime = 0;
 
@@ -878,9 +883,7 @@ window.joinAndCompressVideos = async (videoSegments) => {
 
 /** Processes and loads a new video file into the active project slot. */
 const processNewVideoFile = async (fileOrPath, isTauriPath = false) => {
-	if (typeof window.resetVideoViewport === "function") {
-		window.resetVideoViewport(player);
-	}
+	resetVideoViewport(player);
 	const currentSrc = player.getAttribute("src");
 	const hasExistingVideo = currentSrc && currentSrc !== "";
 
@@ -1399,7 +1402,9 @@ const initializePlayer = () => {
 	player.addEventListener("timeupdate", seektimeupdate);
 	player.addEventListener("loadedmetadata", () => {
 		const duration = player.duration;
-		seekBar.max = duration;
+		if (typeof seekBar !== "undefined" && seekBar) {
+			seekBar.max = duration || 0;
+		}
 		configureTimelineTicks(duration);
 		if (preserveProcessTimes) {
 			if (
@@ -1437,12 +1442,10 @@ const initializePlayer = () => {
 		toConsole("Video muted on load", "Success", debuggin);
 
 		bootTimelineVisualizers();
-		if (typeof window.initializeVideoViewportZoomPan === "function") {
-			window.initializeVideoViewportZoomPan(
-				player,
-				document.getElementById("video-wrapper-id"),
-			);
-		}
+		initializeVideoViewportZoomPan(
+			player,
+			document.getElementById("video-wrapper-id"),
+		);
 	});
 	player.addEventListener("play", () => {
 		DOM.playIcon.classList.add("hidden");
@@ -1505,15 +1508,11 @@ const initializePlayer = () => {
 	});
 
 	addMarkerBtn = document.getElementById("addMarkerBtn");
-	exportButton = document.getElementById("exportButton");
-
-	projectExportButton = document.getElementById("projectExportButton");
 	projectSaveAsButton = document.getElementById("projectSaveAsButton");
 	projectImportButton = document.getElementById("projectImportButton");
 	newProjectButton = document.getElementById("newProjectButton");
 	packageBtn = document.getElementById("packageBtn");
 	loadVideoButton = document.getElementById("loadVideoButton");
-	toggleFormatButton = document.getElementById("toggleFormatButton");
 	speedSlider = document.getElementById("speedSlider");
 	seekBar = document.getElementById("seekBar");
 	playPauseButton = document.getElementById("playPauseButton");
@@ -1820,8 +1819,6 @@ const initializePlayer = () => {
 		localStorage.removeItem("projectFilePath");
 		projectName = "";
 		projectComments = "";
-		masterParts = [];
-		masterLabour = [];
 		processStartTime = 0;
 		processEndTime = 0;
 
@@ -2072,11 +2069,7 @@ const initializePlayer = () => {
 		window.translateY = centerY - (centerY - oldY) * scaleRatio;
 
 		const videoElement = document.querySelector("video");
-		if (typeof window.updateViewportTransform === "function") {
-			window.updateViewportTransform(videoElement);
-		} else {
-			updateZoom();
-		}
+		updateViewportTransform(videoElement);
 		window.triggerPlaybackOverlay(
 			`Zoom: ${Math.round(window.zoomLevel * 100)}%`,
 		);
@@ -2100,11 +2093,7 @@ const initializePlayer = () => {
 		window.translateY = centerY - (centerY - oldY) * scaleRatio;
 
 		const videoElement = document.querySelector("video");
-		if (typeof window.updateViewportTransform === "function") {
-			window.updateViewportTransform(videoElement);
-		} else {
-			updateZoom();
-		}
+		updateViewportTransform(videoElement);
 		window.triggerPlaybackOverlay(
 			`Zoom: ${Math.round(window.zoomLevel * 100)}%`,
 		);
@@ -2113,11 +2102,7 @@ const initializePlayer = () => {
 		window.zoomLevel = 1.0;
 		window.translateX = 0;
 		window.translateY = 0;
-		if (typeof window.updateViewportTransform === "function") {
-			window.updateViewportTransform(document.querySelector("video"));
-		} else {
-			updateZoom();
-		}
+		updateViewportTransform(document.querySelector("video"));
 		//window.triggerPlaybackOverlay("Zoom Reset");
 	});
 	if (DOM.takeSnapshotBtn) {
@@ -2490,12 +2475,7 @@ window.endMarquee = (e) => {
 		debuggin,
 	);
 
-	if (typeof window.updateViewportTransform === "function") {
-		window.updateViewportTransform(videoElement);
-	} else {
-		videoElement.style.transformOrigin = "0px 0px";
-		videoElement.style.transform = `translate(${window.translateX}px, ${window.translateY}px) scale(${window.zoomLevel})`;
-	}
+	updateViewportTransform(videoElement);
 
 	// Clear memory trackers completely to terminate the drag cycle cleanly
 	window.marqueeSelectionStartRef = null;
@@ -2505,14 +2485,7 @@ window.endMarquee = (e) => {
 /** Applies the current zoom and translation transform to the video element. */
 const updateZoom = () => {
 	const video = DOM.video;
-	if (typeof window.updateViewportTransform === "function") {
-		if (window.viewportState) {
-			window.viewportState.syncFromGlobals();
-		}
-		window.updateViewportTransform(video);
-	} else {
-		video.style.transform = `scale(${zoomLevel}) translate(${translateX}px, ${translateY}px)`;
-	}
+	updateViewportTransform(video);
 	toConsole(
 		"Zoom updated",
 		`Level: ${zoomLevel}, Translate: (${translateX}, ${translateY})`,
@@ -2535,7 +2508,9 @@ const seektimeupdate = () => {
 		const duration = player.duration;
 		if (seekBar) {
 			seekBar.value = currentTime;
-			seekBar.max = duration || 0;
+			if (typeof seekBar !== "undefined" && seekBar) {
+				seekBar.max = duration || 0;
+			}
 		}
 		updateTimeDisplay(currentTime, "currentTime");
 		if (duration) {
@@ -3989,9 +3964,7 @@ const renderVideoQueueSelect = () => {
 const switchVideoInQueue = async (index) => {
 	if (index === activeQueueIndex) return;
 
-	if (typeof window.resetVideoViewport === "function") {
-		window.resetVideoViewport(player);
-	}
+	resetVideoViewport(player);
 	preserveProcessTimes = true;
 	saveLocalState();
 
@@ -4047,9 +4020,7 @@ const switchVideoInQueue = async (index) => {
 
 /** Removes the currently active video from the project queue. */
 const removeCurrentVideo = async () => {
-	if (typeof window.resetVideoViewport === "function") {
-		window.resetVideoViewport(player);
-	}
+	resetVideoViewport(player);
 	if (videoQueue.length === 0) return;
 
 	const confirmRemove = await asyncConfirm(
@@ -4168,59 +4139,77 @@ const addVideoToQueue = async () => {
 };
 
 async function addNewVideoToQueue(event) {
-  if (event) event.preventDefault();
-  
-  console.log("[Queue Subsystem] Invoking system native file selector...");
+	if (event) event.preventDefault();
 
-  // 1. Map explicit Tauri v2 dialog plugin endpoints
-  const nativeTauriOpenDialog = window.__TAURI__?.dialog?.open || 
-                                (window.__TAURI__?.core?.invoke ? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options) : null);
+	console.log("[Queue Subsystem] Invoking system native file selector...");
 
-  if (!nativeTauriOpenDialog) {
-    console.error("[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.");
-    return;
-  }
+	// 1. Map explicit Tauri v2 dialog plugin endpoints
+	const nativeTauriOpenDialog =
+		window.__TAURI__?.dialog?.open ||
+		(window.__TAURI__?.core?.invoke
+			? (options) => window.__TAURI__.core.invoke("plugin:dialog|open", options)
+			: null);
 
-  try {
-    // 2. Call the file selector securely using standard Tauri filter options
-    const selectedFilePathFile = await nativeTauriOpenDialog({
-      multiple: false,
-      title: "Select Target Video Asset for Processing Queue",
-      filters: [{
-        name: "Media Containers",
-        extensions: ["mp4", "mkv", "avi", "mov", "webm"]
-      }]
-    });
+	if (!nativeTauriOpenDialog) {
+		console.error(
+			"[Queue Subsystem] Failed to map Tauri dialog plugin components. Check capability settings.",
+		);
+		return;
+	}
 
-    if (!selectedFilePathFile) {
-      console.log("[Queue Subsystem] User cancelled file selection dialog channel block.");
-      return;
-    }
+	try {
+		// 2. Call the file selector securely using standard Tauri filter options
+		const selectedFilePathFile = await nativeTauriOpenDialog({
+			multiple: false,
+			title: "Select Target Video Asset for Processing Queue",
+			filters: [
+				{
+					name: "Media Containers",
+					extensions: ["mp4", "mkv", "avi", "mov", "webm"],
+				},
+			],
+		});
 
-    // 3. Pass the clean absolute string path token to your queue handler logic downstream
-    const filePath = typeof selectedFilePathFile === 'string' ? selectedFilePathFile : selectedFilePathFile.path;
-    console.log("[Queue Subsystem] Enqueuing verified target selection asset path:", filePath);
+		if (!selectedFilePathFile) {
+			console.log(
+				"[Queue Subsystem] User cancelled file selection dialog channel block.",
+			);
+			return;
+		}
 
-    const extractedFileName = filePath.split(/[/\\]/).pop();
+		// 3. Pass the clean absolute string path token to your queue handler logic downstream
+		const filePath =
+			typeof selectedFilePathFile === "string"
+				? selectedFilePathFile
+				: selectedFilePathFile.path;
+		console.log(
+			"[Queue Subsystem] Enqueuing verified target selection asset path:",
+			filePath,
+		);
 
-    const newItem = {
-      videoId: Date.now(),
-      videoName: extractedFileName,
-      videoFileName: extractedFileName,
-      videoFilePath: filePath,
-      processStartTime: 0,
-      processEndTime: 0,
-      appState: { markers: [] },
-	};
+		const extractedFileName = filePath.split(/[/\\]/).pop();
 
-	saveLocalState();
-	videoQueue.push(newItem);
+		const newItem = {
+			videoId: Date.now(),
+			videoName: extractedFileName,
+			videoFileName: extractedFileName,
+			videoFilePath: filePath,
+			processStartTime: 0,
+			processEndTime: 0,
+			appState: { markers: [] },
+		};
 
-	renderVideoQueueSelect();
-	await switchVideoInQueue(videoQueue.length - 1);
-  } catch (dialogProcessException) {
-    console.error("[Queue Subsystem] Dialog process interaction channel failed:", dialogProcessException);
-  }
+		saveLocalState();
+		videoQueue.push(newItem);
+
+		renderVideoQueueSelect();
+		await switchVideoInQueue(videoQueue.length - 1);
+	} catch (dialogProcessException) {
+		console.error(
+			"[Queue Subsystem] Dialog process interaction channel failed:",
+			dialogProcessException,
+		);
+	}
 }
 
 /** Renames the current video in the queue based on user input. */

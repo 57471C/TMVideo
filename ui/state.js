@@ -22,8 +22,6 @@ let videoFileName = "";
 let videoFilePath = "";
 let projectName = "";
 let projectComments = "";
-// let masterParts = [];
-// let masterLabour = [];
 let projectFilePath = "";
 let projectFileHandle = null;
 let videoQueue = [];
@@ -35,12 +33,6 @@ let preserveProcessTimes = false;
 let durationMode = "hhmmssms";
 // biome-ignore lint/style/useConst: Global state modified in other scripts
 let playerReady = false;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let zoomLevel = 1;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let translateX = 0;
-// biome-ignore lint/style/useConst: Global state modified in other scripts
-let translateY = 0;
 let processStartTime = 0;
 let processEndTime = 0;
 let playbackSpeed = 1;
@@ -128,8 +120,6 @@ const saveLocalState = () => {
 		projectMeta: {
 			projectName,
 			projectComments,
-			masterParts,
-			masterLabour,
 			lastSaved: new Date().toISOString(),
 			appVersion: APP_VERSION,
 		},
@@ -153,13 +143,9 @@ const loadLocalState = () => {
 			const state = JSON.parse(data);
 
 			if (state.projectMeta) {
-				masterParts = state.projectMeta.masterParts || [];
-				masterLabour = state.projectMeta.masterLabour || [];
 				projectName = state.projectMeta.projectName || "";
 				projectComments = state.projectMeta.projectComments || "";
 			} else {
-				masterParts = state.masterParts || [];
-				masterLabour = state.masterLabour || [];
 				projectName = "";
 				projectComments = "";
 			}
@@ -372,8 +358,6 @@ const importFromJSON = (jsonText) => {
 			activeQueueIndex = data.activeQueueIndex || 0;
 			projectName = data.projectMeta?.projectName || "";
 			projectComments = data.projectMeta?.projectComments || "";
-			masterParts = data.projectMeta?.masterParts || [];
-			masterLabour = data.projectMeta?.masterLabour || [];
 		} else {
 			alert("Invalid project file format.");
 			return;

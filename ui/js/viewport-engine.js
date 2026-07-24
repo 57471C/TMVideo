@@ -3,6 +3,10 @@
  * Manages cursor-anchored scroll zooming and right-click panning.
  */
 
+export let zoomLevel = 1.0;
+export let translateX = 0;
+export let translateY = 0;
+
 let videoScale = 1.0;
 let videoPanX = 0;
 let videoPanY = 0;
@@ -10,10 +14,40 @@ let isPanningVideo = false;
 let startMouseX = 0;
 let startMouseY = 0;
 
+Object.defineProperty(window, "zoomLevel", {
+	get() {
+		return zoomLevel;
+	},
+	set(val) {
+		zoomLevel = val;
+	},
+	configurable: true,
+});
+
+Object.defineProperty(window, "translateX", {
+	get() {
+		return translateX;
+	},
+	set(val) {
+		translateX = val;
+	},
+	configurable: true,
+});
+
+Object.defineProperty(window, "translateY", {
+	get() {
+		return translateY;
+	},
+	set(val) {
+		translateY = val;
+	},
+	configurable: true,
+});
+
 function syncFromGlobals() {
-	videoScale = zoomLevel || 1.0;
-	videoPanX = (translateX || 0) * videoScale;
-	videoPanY = (translateY || 0) * videoScale;
+	videoScale = zoomLevel;
+	videoPanX = translateX * videoScale;
+	videoPanY = translateY * videoScale;
 }
 
 function syncToGlobals() {
@@ -22,11 +56,11 @@ function syncToGlobals() {
 	translateY = videoScale > 0 ? videoPanY / videoScale : 0;
 }
 
-function updateViewportTransform(video) {
+export function updateViewportTransform(video) {
 	if (!video) return;
-	const scale = window.zoomLevel || 1.0;
-	const tX = window.translateX || 0;
-	const tY = window.translateY || 0;
+	const scale = zoomLevel;
+	const tX = translateX;
+	const tY = translateY;
 
 	videoScale = scale;
 	videoPanX = tX;
@@ -46,12 +80,16 @@ function updateViewportTransform(video) {
 	}
 }
 
-window.getNormalizedVideoCoordinates = (screenX, screenY, videoRect) => ({
-	x: (screenX - videoRect.left - translateX) / zoomLevel,
-	y: (screenY - videoRect.top - translateY) / zoomLevel,
-});
+export function getNormalizedVideoCoordinates(screenX, screenY, videoRect) {
+	return {
+		x: (screenX - videoRect.left - translateX) / zoomLevel,
+		y: (screenY - videoRect.top - translateY) / zoomLevel,
+	};
+}
 
-window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
+window.getNormalizedVideoCoordinates = getNormalizedVideoCoordinates;
+
+export function initializeVideoViewportZoomPan(videoElement, containerElement) {
 	if (!videoElement || !containerElement) return;
 
 	// Intercept scroll event for zooming on containerElement
@@ -64,9 +102,9 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 			const mouseX = event.clientX - containerRect.left;
 			const mouseY = event.clientY - containerRect.top;
 
-			const oldZoom = window.zoomLevel || 1.0;
-			const oldX = window.translateX || 0;
-			const oldY = window.translateY || 0;
+			const oldZoom = zoomLevel;
+			const oldX = translateX;
+			const oldY = translateY;
 
 			let targetZoom = oldZoom;
 			if (event.deltaY < 0) {
@@ -79,9 +117,9 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 			targetZoom = Math.min(15.0, Math.max(1.0, targetZoom));
 
 			const scaleRatio = targetZoom / oldZoom;
-			window.zoomLevel = targetZoom;
-			window.translateX = mouseX - (mouseX - oldX) * scaleRatio;
-			window.translateY = mouseY - (mouseY - oldY) * scaleRatio;
+			zoomLevel = targetZoom;
+			translateX = mouseX - (mouseX - oldX) * scaleRatio;
+			translateY = mouseY - (mouseY - oldY) * scaleRatio;
 
 			updateViewportTransform(videoElement);
 		},
@@ -92,8 +130,6 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 		if (event.button === 2) {
 			event.preventDefault();
 			event.stopPropagation();
-			translateX = window.translateX || 0;
-			translateY = window.translateY || 0;
 			isPanningVideo = true;
 			startMouseX = event.clientX;
 			startMouseY = event.clientY;
@@ -115,9 +151,6 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 			translateX += rawDeltaX;
 			translateY += rawDeltaY;
 
-			window.translateX = translateX;
-			window.translateY = translateY;
-
 			startMouseX = event.clientX;
 			startMouseY = event.clientY;
 
@@ -134,9 +167,11 @@ window.initializeVideoViewportZoomPan = (videoElement, containerElement) => {
 
 	containerElement.addEventListener("mouseup", stopPanning);
 	containerElement.addEventListener("mouseleave", stopPanning);
-};
+}
 
-window.resetVideoViewport = (video) => {
+window.initializeVideoViewportZoomPan = initializeVideoViewportZoomPan;
+
+export function resetVideoViewport(video) {
 	videoScale = 1.0;
 	videoPanX = 0;
 	videoPanY = 0;
@@ -146,10 +181,14 @@ window.resetVideoViewport = (video) => {
 	if (video) {
 		video.style.transform = "none";
 	}
-};
+}
 
-window.viewportState = {
+window.resetVideoViewport = resetVideoViewport;
+
+export const viewportState = {
 	syncFromGlobals: syncFromGlobals,
 	syncToGlobals: syncToGlobals,
 };
+
 window.updateViewportTransform = updateViewportTransform;
+window.viewportState = viewportState;
