@@ -2855,6 +2855,17 @@ const syncMarkerToPlayhead = (markerIndex) => {
 	updateMarkersList();
 };
 
+// Expose marker/table helpers for classic scripts (ui-components.js is not a module)
+window.jumpToMarkerTime = jumpToMarkerTime;
+window.playFromMarkerTime = playFromMarkerTime;
+window.syncMarkerToPlayhead = syncMarkerToPlayhead;
+window.deleteMarker = deleteMarker;
+window.updateMarkerType = updateMarkerType;
+window.updateMarkerName = updateMarkerName;
+window.addMarker = addMarker;
+window.updateSliderTicks = updateSliderTicks;
+window.toggleSettings = toggleSettings;
+
 /** Parses the FFmpeg log output to extract timestamp and update progress. */
 function parseFFmpegTime(line, totalSeconds, progressBar) {
 	if (!line) return;

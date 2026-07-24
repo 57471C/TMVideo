@@ -300,8 +300,8 @@ const updateMarkersListImmediate = () => {
 					event.preventDefault();
 					event.stopPropagation();
 					const time = parseFloat(jumpBtn.getAttribute("data-time"));
-					if (typeof jumpToMarkerTime === "function") {
-						jumpToMarkerTime(time);
+					if (typeof window.jumpToMarkerTime === "function") {
+						window.jumpToMarkerTime(time);
 					}
 					return;
 				}
@@ -312,8 +312,8 @@ const updateMarkersListImmediate = () => {
 					event.preventDefault();
 					event.stopPropagation();
 					const time = parseFloat(playBtn.getAttribute("data-time"));
-					if (typeof playFromMarkerTime === "function") {
-						playFromMarkerTime(time);
+					if (typeof window.playFromMarkerTime === "function") {
+						window.playFromMarkerTime(time);
 					}
 					return;
 				}
@@ -327,8 +327,8 @@ const updateMarkersListImmediate = () => {
 						syncBtn.getAttribute("data-marker-index"),
 						10,
 					);
-					if (typeof syncMarkerToPlayhead === "function") {
-						syncMarkerToPlayhead(markerIndex);
+					if (typeof window.syncMarkerToPlayhead === "function") {
+						window.syncMarkerToPlayhead(markerIndex);
 					}
 					return;
 				}
@@ -342,8 +342,8 @@ const updateMarkersListImmediate = () => {
 						deleteBtn.getAttribute("data-marker-index"),
 						10,
 					);
-					if (typeof deleteMarker === "function") {
-						deleteMarker(markerIndex);
+					if (typeof window.deleteMarker === "function") {
+						window.deleteMarker(markerIndex);
 					}
 					return;
 				}
@@ -358,21 +358,32 @@ const updateMarkersListImmediate = () => {
 						10,
 					);
 					const type = typeBtn.getAttribute("data-type");
-					if (typeof updateMarkerType === "function") {
-						updateMarkerType(markerIndex, type);
+					if (typeof window.updateMarkerType === "function") {
+						window.updateMarkerType(markerIndex, type);
+					}
+					return;
+				}
+
+				// 7. Add Marker (button is re-created each render)
+				const addBtn = event.target.closest("#addMarkerBtn");
+				if (addBtn) {
+					event.preventDefault();
+					event.stopPropagation();
+					if (typeof window.addMarker === "function") {
+						window.addMarker();
 					}
 					return;
 				}
 			});
 
-			// Attach name input change listeners
+			// Attach name input change listeners (terry/tetris easter egg via updateMarkerName)
 			markerTableBody
 				.querySelectorAll(".marker-name-input")
 				.forEach((input) => {
 					input.addEventListener("change", () => {
 						const index = parseInt(input.getAttribute("data-marker-index"), 10);
-						if (typeof updateMarkerName === "function") {
-							updateMarkerName(index, input.value);
+						if (typeof window.updateMarkerName === "function") {
+							window.updateMarkerName(index, input.value);
 						}
 					});
 				});
@@ -439,7 +450,11 @@ const updateMarkersListImmediate = () => {
 			}
 		}
 
-		if (typeof updateSliderTicks === "function") updateSliderTicks();
+		if (typeof window.updateSliderTicks === "function") {
+			window.updateSliderTicks();
+		} else if (typeof updateSliderTicks === "function") {
+			updateSliderTicks();
+		}
 		if (typeof window.paintTimelineMarkersAndShading === "function") {
 			window.paintTimelineMarkersAndShading();
 		}
@@ -456,6 +471,8 @@ const updateMarkersList = () => {
 		updateMarkersListImmediate();
 	});
 };
+// Classic-script globals + window aliases for module consumers
+window.updateMarkersList = updateMarkersList;
 
 const updateVideoTimeSummary = () => {
 	try {
@@ -534,3 +551,4 @@ const updateVideoTimeSummary = () => {
 		toConsole("updateVideoTimeSummary error", error.message, debuggin);
 	}
 };
+window.updateVideoTimeSummary = updateVideoTimeSummary;
