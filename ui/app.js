@@ -585,17 +585,14 @@ if (window.__TAURI__ !== undefined) {
 }
 
 // 3. Media Initialization & Streaming Event Subsystems
-/** Resets closed captions and destroys peaks instance. */
+/** Resets closed captions state and related local caches. */
 window.resetClosedCaptions = () => {
 	window.currentCaptions = [];
 	window.captionsVisible = true;
 
-	// No active visualizer instances to destroy
+	// Clear waveform path so timeline reloads against the next media source
 	window.currentWaveformDataPath = null;
-	const peaksContainer = document.getElementById("peaks-timeline-wrapper");
-	if (peaksContainer) {
-		peaksContainer.style.display = "none";
-	}
+	// Keep the custom detailed timeline mounted; only ensure the seek bar is visible
 	const seekBarContainer = document.getElementById("seekBarContainer");
 	if (seekBarContainer) {
 		seekBarContainer.style.display = "block";
@@ -617,22 +614,16 @@ window.resetClosedCaptions = () => {
 		window.subInterval = null;
 	}
 
-	// Recent Memory Purge
+	// Caption / subtitle local caches (Whisper leftovers removed)
 	localStorage.removeItem("captions");
 	localStorage.removeItem("subtitles");
 	localStorage.removeItem("transcript");
-	localStorage.removeItem("whisper_results");
 	sessionStorage.removeItem("captions");
 	sessionStorage.removeItem("subtitles");
 
 	if (window.indexedDB) {
-		const dbsToPurge = [
-			"TMVideoDB",
-			"TranscriptDB",
-			"WhisperDB",
-			"captions",
-			"subtitles",
-		];
+		// Keep TMVideoDB purge for any prior installs; Whisper/Transcript DBs dropped
+		const dbsToPurge = ["TMVideoDB", "captions", "subtitles"];
 		for (const dbName of dbsToPurge) {
 			try {
 				const deleteRequest = window.indexedDB.deleteDatabase(dbName);
@@ -736,14 +727,8 @@ window.loadSubtitleTrack = async (filePath) => {
 				ccToggleBtn.classList.remove("text-zinc-400", "dark:text-zinc-600");
 				ccToggleBtn.classList.add("text-yellow-500", "dark:text-yellow-400");
 			}
-		} else {
-			const genBtn =
-				document.getElementById("generateBtn") ||
-				document.getElementById("generateAutoCaptionsBtn");
-			if (genBtn) {
-				genBtn.classList.remove("hidden");
-			}
 		}
+		// No Whisper auto-caption fallback — sidecars via resolve_subtitles / save_vtt_file only
 	} catch (err) {
 		toConsole("Error resolving subtitles", err, debuggin);
 	}
@@ -754,11 +739,12 @@ window.loadWaveformTimeline = async () => {
 	const isTauri = window.__TAURI__ !== undefined;
 	if (!isTauri || !videoFilePath) return;
 
-	const wrapper = document.getElementById("peaks-timeline-wrapper");
+	// Custom timeline panel (Rust waveform + filmstrip) — not Peaks.js
+	const wrapper = document.getElementById("detailed-timeline-panel");
 	const seekBarContainer = document.getElementById("seekBarContainer");
 
 	if (document.body.classList.contains("miniplayer-mode")) {
-		if (wrapper) wrapper.style.display = "none";
+		// Miniplayer: keep seek bar only; detailed panel is CSS-hidden by mode
 		if (seekBarContainer) seekBarContainer.style.display = "block";
 		return;
 	}
@@ -766,9 +752,7 @@ window.loadWaveformTimeline = async () => {
 	if (seekBarContainer) {
 		seekBarContainer.style.display = "block";
 	}
-	if (wrapper) {
-		wrapper.style.display = "block";
-	}
+	// Visibility of #detailed-timeline-panel is driven by .timeline-expanded CSS
 
 	try {
 		const videoEl = document.querySelector("video") || player;
