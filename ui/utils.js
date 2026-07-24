@@ -316,6 +316,5 @@ if (typeof module !== "undefined" && module.exports) {
 		formatDurationValue,
 		debounce,
 		escapeHTML,
-		debounce
 	};
 }

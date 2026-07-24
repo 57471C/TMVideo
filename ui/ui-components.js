@@ -357,7 +357,7 @@ const updateMarkersListImmediate = () => {
 			markerTableBody
 				.querySelectorAll(".marker-name-input")
 				.forEach((input) => {
-					input.addEventListener("change", (e) => {
+					input.addEventListener("change", () => {
 						const index = parseInt(input.getAttribute("data-marker-index"), 10);
 						if (typeof updateMarkerName === "function") {
 							updateMarkerName(index, input.value);
