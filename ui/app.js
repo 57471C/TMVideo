@@ -396,15 +396,27 @@ window.loadVideo = async (incomingVideoPath) => {
 		videoQueue[activeQueueIndex].videoFileName = videoFileName;
 	}
 
+	const toAssetUrl = (diskPath) => {
+		if (!window.__TAURI__) return diskPath;
+		const convertFn =
+			window.__TAURI__.core?.convertFileSrc ||
+			window.__TAURI__.tauri?.convertFileSrc;
+		if (convertFn) return convertFn(diskPath);
+		return `https://asset.localhost/${encodeURIComponent(diskPath)}`;
+	};
+
+	// Track one-shot fallback from bad proxy → original source
+	let proxyFallbackAttempted = false;
+	const resolvedIsProxy =
+		resolvedFilePath !== incomingVideoPath ||
+		/proxy_/i.test(resolvedFilePath || "");
+
 	// Attach error tracking only after we have a real stream URL.
-	// Skip toast for empty/origin-only MediaError 4 during load transitions.
+	// Suppress code 4 ONLY for empty/origin-only src — never solely for _videoLoadInProgress.
 	videoElement.onerror = () => {
 		const err = videoElement.error;
 		const srcNow = videoElement.getAttribute("src") || videoElement.src || "";
 		const code = err?.code;
-		const isBenignEmptySrc =
-			code === 4 &&
-			(isEmptyOrOriginOnlyMediaSrc(srcNow) || window._videoLoadInProgress);
 
 		console.error(
 			"[Loader Core] Browser multimedia layer rejected stream target!",
@@ -415,13 +427,38 @@ window.loadVideo = async (incomingVideoPath) => {
 			videoElement.src,
 		);
 
-		if (isBenignEmptySrc) {
+		// Benign: empty or origin-only URL during src swap (no media path yet)
+		if (code === 4 && isEmptyOrOriginOnlyMediaSrc(srcNow)) {
 			console.warn(
 				"[Loader Core] Suppressing empty-src MediaError toast during load transition.",
 			);
 			return;
 		}
 
+		// Real proxy failure → fall back once to original disk path (no re-verify)
+		const srcLooksLikeProxy =
+			/proxy_/i.test(srcNow) ||
+			/proxy_/i.test(resolvedFilePath || "") ||
+			resolvedIsProxy;
+		if (
+			srcLooksLikeProxy &&
+			!proxyFallbackAttempted &&
+			incomingVideoPath &&
+			resolvedFilePath !== incomingVideoPath
+		) {
+			proxyFallbackAttempted = true;
+			console.warn(
+				"[Loader Core] Proxy stream rejected; falling back to original path once:",
+				incomingVideoPath,
+			);
+			const originalUrl = toAssetUrl(incomingVideoPath);
+			videoElement.src = originalUrl;
+			videoElement.preload = "auto";
+			videoElement.load();
+			return;
+		}
+
+		// Real failure after fallback (or non-proxy path)
 		if (typeof showToast === "function") {
 			showToast(
 				"Media engine failed to parse safe stream address URL",
@@ -449,8 +486,6 @@ window.loadVideo = async (incomingVideoPath) => {
 		setTimeout(window.repositionControls, 100);
 	}
 
-	// Clear load-in-progress after a short settle so late MediaError 4 from
-	// the previous src swap is still suppressed.
 	setTimeout(() => {
 		window._videoLoadInProgress = false;
 	}, 500);
@@ -1980,7 +2015,9 @@ const initializePlayer = () => {
 
 	playPauseButton.addEventListener("click", () => {
 		if (player.paused) {
-			player.play();
+			void player.play()?.catch((e) =>
+				console.warn("[Playback] play() blocked or unsupported:", e),
+			);
 		} else {
 			player.pause();
 		}
@@ -2276,7 +2313,9 @@ const initializePlayer = () => {
 				e.preventDefault();
 				if (!player.src) return;
 				if (player.paused) {
-					player.play();
+					void player.play()?.catch((err) =>
+						console.warn("[Playback] play() blocked or unsupported:", err),
+					);
 				} else {
 					player.pause();
 				}
@@ -2634,7 +2673,12 @@ const seektimeupdate = () => {
 							if (window.activeLoopCount + 1 < (marker.loopCount || 1)) {
 								window.activeLoopCount++;
 								video.currentTime = marker.startTime;
-								video.play();
+								void video.play()?.catch((err) =>
+									console.warn(
+										"[Playback] loop play() blocked or unsupported:",
+										err,
+									),
+								);
 							} else {
 								window.activeLoopId = `exhausted_${marker.id}`;
 							}
@@ -2952,7 +2996,9 @@ const playFromMarkerTime = (markerIndexOrTime, type) => {
 	}
 	if (time !== undefined && time !== null) {
 		player.currentTime = time;
-		player.play();
+		void player.play()?.catch((err) =>
+			console.warn("[Playback] play() blocked or unsupported:", err),
+		);
 		toConsole("Playing from marker time", time, debuggin);
 	}
 };
@@ -4772,11 +4818,8 @@ setTimeout(() => {
 			const err = physicalVideoNode.error;
 			const srcNow =
 				physicalVideoNode.getAttribute("src") || physicalVideoNode.src || "";
-			// Benign during loadVideo transition (empty / origin-only MediaError 4)
-			if (
-				window._videoLoadInProgress ||
-				(err?.code === 4 && isEmptyOrOriginOnlyMediaSrc(srcNow))
-			) {
+			// Benign only for empty/origin-only MediaError 4 (not every load-in-progress error)
+			if (err?.code === 4 && isEmptyOrOriginOnlyMediaSrc(srcNow)) {
 				console.warn(
 					"[DOM HARDWARE ERROR] Suppressed empty-src error during load transition:",
 					srcNow,
