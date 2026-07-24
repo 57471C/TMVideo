@@ -157,7 +157,7 @@ const setupVideoTrack = () => {
 	if (!videoTrack.dataset.hasClickListener) {
 		videoTrack.addEventListener("click", (e) => {
 			const p = getPlayer();
-			if (!p || !p.duration) return;
+			if (!p?.duration) return;
 			const rect = videoTrack.getBoundingClientRect();
 			const clickX = e.clientX - rect.left;
 			const pct = clickX / rect.width;
@@ -190,7 +190,7 @@ const renderAudioWaveformCanvas = () => {
 	if (!audioTrack.dataset.hasClickListener) {
 		audioTrack.addEventListener("click", (e) => {
 			const p = getPlayer();
-			if (!p || !p.duration) return;
+			if (!p?.duration) return;
 			const rect = audioTrack.getBoundingClientRect();
 			const clickX = e.clientX - rect.left;
 			const pct = clickX / rect.width;
