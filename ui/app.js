@@ -200,6 +200,32 @@ window.clearAllPreviousProjectData = () => {
  * - Clearing player.src on project reset / empty queue slot
  * - Post-export reload of an FFmpeg H.264/copy output (already playback-safe)
  */
+/**
+ * True when video.src is empty or only the app origin (no media path).
+ * MediaError code 4 during load transitions is expected and must not toast.
+ */
+const isEmptyOrOriginOnlyMediaSrc = (src) => {
+	if (!src || typeof src !== "string") return true;
+	const trimmed = src.trim();
+	if (!trimmed) return true;
+	// Bare origin: http://127.0.0.1:1430/ or http://localhost:1420/
+	try {
+		const u = new URL(trimmed, window.location.href);
+		const path = (u.pathname || "/").replace(/\/+$/, "") || "";
+		if (
+			(u.protocol === "http:" || u.protocol === "https:") &&
+			(path === "" || path === "/") &&
+			!u.search &&
+			!u.hash
+		) {
+			return true;
+		}
+	} catch {
+		// non-URL strings fall through
+	}
+	return false;
+};
+
 window.loadVideo = async (incomingVideoPath) => {
 	if (!incomingVideoPath || incomingVideoPath.trim() === "") {
 		console.error(
@@ -207,6 +233,8 @@ window.loadVideo = async (incomingVideoPath) => {
 		);
 		return;
 	}
+
+	window._videoLoadInProgress = true;
 
 	// Hard visual reset of timeline graphics panels
 	const videoTrack = document.getElementById("timeline-video-track");
@@ -236,6 +264,18 @@ window.loadVideo = async (incomingVideoPath) => {
 	const optimizationOverlayNode = document.getElementById("optimizingOverlay");
 	let resolvedFilePath = incomingVideoPath;
 	let unlistenTranscode = null;
+
+	// Resolve video element early so we can suppress errors during verify/swap
+	const videoElement =
+		document.querySelector("video") ||
+		document.getElementById("video-player") ||
+		document.getElementById("my_video") ||
+		(typeof player !== "undefined" ? player : null);
+
+	// Suppress transition noise while verify/proxy runs (before real URL is set)
+	if (videoElement) {
+		videoElement.onerror = null;
+	}
 
 	try {
 		// 1. Reveal fullscreen progress indicator spinner with neutral text on launch
@@ -308,15 +348,11 @@ window.loadVideo = async (incomingVideoPath) => {
 	}
 
 	// 3. Pin down the core HTML5 video rendering element tag
-	const videoElement =
-		document.querySelector("video") ||
-		document.getElementById("video-player") ||
-		document.getElementById("my_video") ||
-		(typeof player !== "undefined" ? player : null);
 	if (!videoElement) {
 		console.error(
 			"[Loader Core] CRITICAL EXCEPTION: HTML5 <video> element missing from DOM grid structure.",
 		);
+		window._videoLoadInProgress = false;
 		return;
 	}
 
@@ -349,21 +385,38 @@ window.loadVideo = async (incomingVideoPath) => {
 		videoQueue[activeQueueIndex].videoFileName = videoFileName;
 	}
 
-	// Attach immediate error tracking to catch hidden decoding runtime faults
+	// Attach error tracking only after we have a real stream URL.
+	// Skip toast for empty/origin-only MediaError 4 during load transitions.
 	videoElement.onerror = () => {
+		const err = videoElement.error;
+		const srcNow = videoElement.getAttribute("src") || videoElement.src || "";
+		const code = err?.code;
+		const isBenignEmptySrc =
+			code === 4 &&
+			(isEmptyOrOriginOnlyMediaSrc(srcNow) || window._videoLoadInProgress);
+
 		console.error(
 			"[Loader Core] Browser multimedia layer rejected stream target!",
-			videoElement.error,
+			err,
 		);
 		console.error(
 			"[Loader Core] Attempted source URL string was:",
 			videoElement.src,
 		);
-		if (typeof showToast === "function")
+
+		if (isBenignEmptySrc) {
+			console.warn(
+				"[Loader Core] Suppressing empty-src MediaError toast during load transition.",
+			);
+			return;
+		}
+
+		if (typeof showToast === "function") {
 			showToast(
 				"Media engine failed to parse safe stream address URL",
 				"error",
 			);
+		}
 	};
 
 	// 5. Fire core media track rehydration paint triggers
@@ -384,6 +437,12 @@ window.loadVideo = async (incomingVideoPath) => {
 	if (typeof window.repositionControls === "function") {
 		setTimeout(window.repositionControls, 100);
 	}
+
+	// Clear load-in-progress after a short settle so late MediaError 4 from
+	// the previous src swap is still suppressed.
+	setTimeout(() => {
+		window._videoLoadInProgress = false;
+	}, 500);
 };
 
 window.initializeLaunchArgumentHandler = async () => {
@@ -4654,6 +4713,21 @@ setTimeout(() => {
 
 		// Catch native browser-level decoding failures immediately as they paint
 		physicalVideoNode.addEventListener("error", (_domErrorEvent) => {
+			const err = physicalVideoNode.error;
+			const srcNow =
+				physicalVideoNode.getAttribute("src") || physicalVideoNode.src || "";
+			// Benign during loadVideo transition (empty / origin-only MediaError 4)
+			if (
+				window._videoLoadInProgress ||
+				(err?.code === 4 && isEmptyOrOriginOnlyMediaSrc(srcNow))
+			) {
+				console.warn(
+					"[DOM HARDWARE ERROR] Suppressed empty-src error during load transition:",
+					srcNow,
+					err,
+				);
+				return;
+			}
 			console.error(
 				"%c[DOM HARDWARE ERROR] WebView2 Media Engine Rejected Source!",
 				"background: #d8000c; color: #fff; font-weight: bold; padding: 4px;",
