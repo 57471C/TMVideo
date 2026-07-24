@@ -112,7 +112,10 @@ async fn run_ffmpeg(
     match exit_code {
         Some(0) => Ok("Success".to_string()),
         Some(code) => {
-            let logs = stderr_logs.lock().unwrap_or_else(|e| e.into_inner()).join("\n");
+            let logs = stderr_logs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .join("\n");
             Err(format!(
                 "FFmpeg failed with exit status code {}.\n\nLogs:\n{}",
                 code, logs
@@ -191,10 +194,7 @@ async fn resolve_subtitles(
     if output.status.success() {
         Ok(Some(vtt_str))
     } else {
-        let vtt_path_clone = vtt_path.clone();
-        tokio::spawn(async move {
-            let _ = tokio::fs::remove_file(vtt_path_clone).await;
-        });
+        let _ = std::fs::remove_file(&vtt_path);
         Ok(None)
     }
 }
@@ -1166,19 +1166,19 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_shell::init())
     .setup(|app| {
-      let app_handle = app.handle().clone();
-      tokio::spawn(async move {
-          let _ = clear_old_proxy_caches(app_handle).await;
-      });
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
+  let app_handle = app.handle().clone();
+  tauri::async_runtime::spawn(async move {
+      let _ = clear_old_proxy_caches(app_handle).await;
+  });
+  if cfg!(debug_assertions) {
+    app.handle().plugin(
+      tauri_plugin_log::Builder::default()
+        .level(log::LevelFilter::Info)
+        .build(),
+    )?;
+  }
+  Ok(())
+})
      // Add this line to register your new commands:
     .invoke_handler(tauri::generate_handler![
         get_startup_file,
