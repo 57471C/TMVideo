@@ -154,8 +154,8 @@ const updateMarkersListImmediate = () => {
 			const isNegative = marker.startTime < 0;
 			const isInvalid =
 				isNegative ||
-				marker.startTime < processStartTime ||
-				(processEndTime > 0 && marker.startTime > processEndTime);
+				marker.startTime < clipInTime ||
+				(clipOutTime > 0 && marker.startTime > clipOutTime);
 			const inputClass = isInvalid ? "text-red-500 dark:text-red-400" : "";
 			const rowBgClass = isNegative
 				? "bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400"
@@ -224,10 +224,10 @@ const updateMarkersListImmediate = () => {
                              data-marker-index="${i}">
                     </button>
                     <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="in">
-                      ${ICONS.inType} Set Video Start
+                      ${ICONS.inType} Set Clip In
                     </button>
                     <button class="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 flex items-center gap-2 cursor-pointer font-semibold marker-type-trigger" data-marker-index="${i}" data-type="out">
-                      ${ICONS.outType} Set Video End
+                      ${ICONS.outType} Set Clip Out
                     </button>
                   </div>
                 </div>
@@ -463,23 +463,23 @@ const updateVideoTimeSummary = () => {
 		const startMarker = markers.find(
 			(m) => m.type === "in" || m.type === "start",
 		);
-		processStartTime = startMarker ? startMarker.startTime : 0;
+		clipInTime = startMarker ? startMarker.startTime : 0;
 
 		const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
 		if (endMarker) {
-			processEndTime = endMarker.startTime;
+			clipOutTime = endMarker.startTime;
 		} else if (
 			typeof player !== "undefined" &&
 			player &&
 			player.duration &&
-			!preserveProcessTimes
+			!preserveClipBounds
 		) {
-			processEndTime = player.duration;
-		} else if (!preserveProcessTimes) {
-			processEndTime = 0;
+			clipOutTime = player.duration;
+		} else if (!preserveClipBounds) {
+			clipOutTime = 0;
 		}
 
-		let duration = processEndTime - processStartTime;
+		let duration = clipOutTime - clipInTime;
 		if (duration < 0) duration = 0;
 
 		if (markers.length > 0) {
@@ -489,7 +489,7 @@ const updateVideoTimeSummary = () => {
 					if (i < markers.length - 1) {
 						markerDur = markers[i + 1].startTime - markers[i].startTime;
 					} else {
-						markerDur = processEndTime - markers[i].startTime;
+						markerDur = clipOutTime - markers[i].startTime;
 					}
 					if (markerDur > 0) {
 						duration -= markerDur;
@@ -499,18 +499,18 @@ const updateVideoTimeSummary = () => {
 		}
 		if (duration < 0) duration = 0;
 
-		const formattedStartTime = formatTimeToHHMMSSMS(processStartTime);
-		const formattedEndTime = formatTimeToHHMMSSMS(processEndTime);
+		const formattedStartTime = formatTimeToHHMMSSMS(clipInTime);
+		const formattedEndTime = formatTimeToHHMMSSMS(clipOutTime);
 		const formattedDuration = formatTimeToHHMMSSMS(duration);
 
 		footer.innerHTML = `
       <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 w-full py-1 text-sm font-medium">
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-          <span>Video Start Time:</span>
+          <span>Clip In:</span>
           <span id="videoStartTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedStartTime}</span>
         </span>
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-          <span>Video End Time:</span>
+          <span>Clip Out:</span>
           <span id="videoEndTimeDisplay" class="font-mono font-bold text-zinc-900 dark:text-white">${formattedEndTime}</span>
         </span>
         <span class="inline-flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">

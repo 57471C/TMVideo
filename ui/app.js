@@ -3,12 +3,12 @@
  * # AI CONTEXT MAP
  *
  * ## GLOBAL STATE STRUCTURE
- * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `processStartTime`, `processEndTime`, and `appState` (which holds `markers`).
+ * - `videoQueue`: Array of objects representing the loaded videos. Each object contains metadata and state like `videoId`, `videoName`, `videoFileName`, `videoFilePath`, `clipInTime`, `clipOutTime`, and `appState` (which holds `markers`).
  * - `activeQueueIndex`: Integer representing the currently selected video slot in `videoQueue`.
  * - `markers`: Array of current active video markers (syncs back to `videoQueue[activeQueueIndex].appState.markers`).
  *
  * ## PERSISTENCE & LIFECYCLE
- * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `processStartTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
+ * - `saveLocalState()`: Synchronizes memory (active globals like `videoFileName`, `clipInTime`, `markers`) back to the current `videoQueue` slot, and serializes the complete application state payload to `localStorage`.
  * - `loadLocalState()`: Rehydrates memory from `localStorage` on application mount, resolving `videoQueue` references to initialize the player.
  *
  * ## LEFT SIDEBAR ARCHITECTURE (Playlist UI)
@@ -126,7 +126,7 @@ window.clearAllPreviousProjectData = () => {
 
 	markers = [];
 	videoFileName = "";
-	preserveProcessTimes = false;
+	preserveClipBounds = false;
 
 	for (const key in videoBlobCache) {
 		URL.revokeObjectURL(videoBlobCache[key]);
@@ -135,13 +135,14 @@ window.clearAllPreviousProjectData = () => {
 	videoFilePath = "";
 	projectFilePath = "";
 	localStorage.removeItem("projectFilePath");
-	localStorage.removeItem("timeStudyData");
+	localStorage.removeItem("lfvideo_project");
+	localStorage.removeItem("timeStudyData"); // legacy key
 	localStorage.removeItem("tmvideo_markers");
 	localStorage.removeItem("tmvideo_project_metadata");
 	projectName = "";
 	projectComments = "";
-	processStartTime = 0;
-	processEndTime = 0;
+	clipInTime = 0;
+	clipOutTime = 0;
 
 	videoQueue = [
 		{
@@ -149,8 +150,8 @@ window.clearAllPreviousProjectData = () => {
 			videoName: "Video 1",
 			videoFileName: "",
 			videoFilePath: "",
-			processStartTime: 0,
-			processEndTime: 0,
+			clipInTime: 0,
+			clipOutTime: 0,
 			appState: { markers: [] },
 		},
 	];
@@ -1402,11 +1403,6 @@ const initializePlayer = () => {
 			toggleSettings(false);
 		});
 
-		const closeMasterModal = () => DOM.masterDataModal.close();
-		if (DOM.closeMasterDataBtnX)
-			DOM.closeMasterDataBtnX.addEventListener("click", closeMasterModal);
-		if (DOM.closeMasterDataBtn)
-			DOM.closeMasterDataBtn.addEventListener("click", closeMasterModal);
 	}
 
 	function configureTimelineTicks(duration) {
@@ -1448,19 +1444,19 @@ const initializePlayer = () => {
 			seekBar.max = duration || 0;
 		}
 		configureTimelineTicks(duration);
-		if (preserveProcessTimes) {
+		if (preserveClipBounds) {
 			if (
-				processEndTime === undefined ||
-				processEndTime === null ||
-				processEndTime <= 0 ||
-				processEndTime > duration
+				clipOutTime === undefined ||
+				clipOutTime === null ||
+				clipOutTime <= 0 ||
+				clipOutTime > duration
 			) {
-				processEndTime = duration;
+				clipOutTime = duration;
 			}
-			preserveProcessTimes = false;
+			preserveClipBounds = false;
 		} else {
-			processStartTime = 0;
-			processEndTime = duration;
+			clipInTime = 0;
+			clipOutTime = duration;
 		}
 
 		updateTimeDisplay(duration, "durationTime");
@@ -1637,7 +1633,10 @@ const initializePlayer = () => {
 		try {
 			// Sync state to localStorage first
 			saveLocalState();
-			const projectJson = localStorage.getItem("timeStudyData") || "{}";
+			const projectJson =
+				localStorage.getItem("lfvideo_project") ||
+				localStorage.getItem("timeStudyData") ||
+				"{}";
 			const videoPaths = (videoQueue || [])
 				.map((v) => v.videoFilePath || "")
 				.filter((p) => p.length > 0);
@@ -1895,20 +1894,20 @@ const initializePlayer = () => {
 	});
 
 	jumpToStartButton.addEventListener("click", () => {
-		player.currentTime = processStartTime || 0;
+		player.currentTime = clipInTime || 0;
 		toConsole("Jumped to Start", player.currentTime, debuggin);
 	});
 
 	rewind5sButton.addEventListener("click", () => {
 		player.currentTime = Math.max(
-			processStartTime || 0,
+			clipInTime || 0,
 			player.currentTime - 5,
 		);
 		toConsole("Rewind 5s", player.currentTime, debuggin);
 	});
 	rewind1sButton.addEventListener("click", () => {
 		player.currentTime = Math.max(
-			processStartTime || 0,
+			clipInTime || 0,
 			player.currentTime - 1,
 		);
 		toConsole("Rewind 1s", player.currentTime, debuggin);
@@ -1990,9 +1989,9 @@ const initializePlayer = () => {
 		seekBar.addEventListener("input", (event) => {
 			let time = Number.parseFloat(event.target.value);
 			if (!Number.isNaN(time)) {
-				if (processStartTime > 0 && time < processStartTime)
-					time = processStartTime;
-				if (processEndTime > 0 && time > processEndTime) time = processEndTime;
+				if (clipInTime > 0 && time < clipInTime)
+					time = clipInTime;
+				if (clipOutTime > 0 && time > clipOutTime) time = clipOutTime;
 				player.currentTime = time;
 				const duration = player.duration || 1;
 				const pct = (time / duration) * 100;
@@ -2209,7 +2208,7 @@ const initializePlayer = () => {
 				e.preventDefault();
 				if (!player.src) return;
 				player.currentTime = Math.max(
-					processStartTime || 0,
+					clipInTime || 0,
 					player.currentTime - 1,
 				);
 				toConsole("Rewind 1s (Left Arrow)", player.currentTime, debuggin);
@@ -2218,7 +2217,7 @@ const initializePlayer = () => {
 				e.preventDefault();
 				if (!player.src) return;
 				player.currentTime = Math.max(
-					processStartTime || 0,
+					clipInTime || 0,
 					player.currentTime - 5,
 				);
 				toConsole("Rewind 5s (Down Arrow)", player.currentTime, debuggin);
@@ -2578,18 +2577,18 @@ const seektimeupdate = () => {
 			}
 		}
 
-		// Constrain seek if we try to go before the processStartTime
-		if (processStartTime > 0 && currentTime < processStartTime) {
-			player.currentTime = processStartTime;
+		// Constrain seek if we try to go before the clipInTime
+		if (clipInTime > 0 && currentTime < clipInTime) {
+			player.currentTime = clipInTime;
 			return;
 		}
 
-		// Stop playback and constrain seek if we hit the processEndTime
-		if (processEndTime > 0 && currentTime > processEndTime) {
+		// Stop playback and constrain seek if we hit the clipOutTime
+		if (clipOutTime > 0 && currentTime > clipOutTime) {
 			if (!player.paused) {
 				player.pause();
 			}
-			player.currentTime = processEndTime;
+			player.currentTime = clipOutTime;
 			return;
 		}
 	}
@@ -2609,8 +2608,8 @@ const updateSliderTicks = () => {
 
 	if (!player?.duration) return;
 
-	if (processStartTime > 0) {
-		const startPct = (processStartTime / player.duration) * 100;
+	if (clipInTime > 0) {
+		const startPct = (clipInTime / player.duration) * 100;
 		DOM.startTick.style.left = `calc(${startPct}% - 1px)`;
 		DOM.startTick.classList.remove("hidden");
 		if (DOM.startGreyOut) {
@@ -2619,8 +2618,8 @@ const updateSliderTicks = () => {
 		}
 	}
 
-	if (processEndTime > 0 && processEndTime < player.duration) {
-		const endPct = (processEndTime / player.duration) * 100;
+	if (clipOutTime > 0 && clipOutTime < player.duration) {
+		const endPct = (clipOutTime / player.duration) * 100;
 		DOM.endTick.style.left = `calc(${endPct}% - 1px)`;
 		DOM.endTick.classList.remove("hidden");
 		if (DOM.endGreyOut) {
@@ -2750,10 +2749,10 @@ const addMarker = () => {
 	const startTime = player.currentTime;
 	toConsole("Marker start time", startTime, debuggin);
 
-	if (startTime < processStartTime) {
-		showToast("Marker starts before Process Start Time.", "error");
-	} else if (processEndTime > 0 && startTime > processEndTime) {
-		showToast("Marker starts after Process End Time.", "error");
+	if (startTime < clipInTime) {
+		showToast("Marker starts before Clip In.", "error");
+	} else if (clipOutTime > 0 && startTime > clipOutTime) {
+		showToast("Marker starts after Clip Out.", "error");
 	}
 
 	const defaultName = `Marker ${markers.length + 1}`;
@@ -2918,9 +2917,9 @@ const initializeTrimFeature = () => {
 				return;
 			}
 			document.getElementById("trimStartInput").value =
-				formatTimeToHHMMSSMS(processStartTime);
+				formatTimeToHHMMSSMS(clipInTime);
 			document.getElementById("trimEndInput").value = formatTimeToHHMMSSMS(
-				processEndTime || player.duration,
+				clipOutTime || player.duration,
 			);
 			resetTrimModalUI();
 			toggleSettings(true);
@@ -3043,8 +3042,8 @@ const initializeTrimFeature = () => {
 							const loopMarker = activeMarkers.find((m) => m.type === "loop");
 							checkedSegments.push({
 								path: vid.videoFilePath,
-								start_time: vid.processStartTime || 0.0,
-								end_time: vid.processEndTime || 0.0,
+								start_time: vid.clipInTime || 0.0,
+								end_time: vid.clipOutTime || 0.0,
 								loopCount: loopMarker ? loopMarker.loopCount || 1 : 1,
 							});
 						}
@@ -3292,7 +3291,7 @@ async function processBatchQueue(presetType) {
 
 					segments = getExportSegments(
 						currentMarkers,
-						video.processEndTime || 0,
+						video.clipOutTime || 0,
 					);
 
 					if (segments.length === 0) {
@@ -3522,8 +3521,8 @@ async function processBatchQueue(presetType) {
 				}
 
 				video.appState.markers = remappedMarkers;
-				video.processStartTime = 0;
-				video.processEndTime = exportDuration;
+				video.clipInTime = 0;
+				video.clipOutTime = exportDuration;
 			} catch (fileErr) {
 				toConsole("Batch item processing failed", fileErr, debuggin);
 				if (statusIconContainer) {
@@ -3898,8 +3897,8 @@ async function executeExport(presetType) {
 		markers.length = 0;
 		markers.push(...updatedMarkers);
 
-		processStartTime = 0;
-		processEndTime = duration;
+		clipInTime = 0;
+		clipOutTime = duration;
 
 		videoFilePath = actualOutputPath;
 		videoFileName = actualOutputPath.replace(/^.*[\\/]/, "");
@@ -4003,7 +4002,7 @@ const switchVideoInQueue = async (index) => {
 	if (index === activeQueueIndex) return;
 
 	resetVideoViewport(player);
-	preserveProcessTimes = true;
+	preserveClipBounds = true;
 	saveLocalState();
 
 	activeQueueIndex = index;
@@ -4011,8 +4010,8 @@ const switchVideoInQueue = async (index) => {
 
 	videoFileName = currentVideo.videoFileName || "";
 	videoFilePath = currentVideo.videoFilePath || "";
-	processStartTime = currentVideo.processStartTime || 0;
-	processEndTime = currentVideo.processEndTime || 0;
+	clipInTime = currentVideo.clipInTime || 0;
+	clipOutTime = currentVideo.clipOutTime || 0;
 
 	markers = currentVideo.appState?.markers || [];
 	for (const m of markers) {
@@ -4071,8 +4070,8 @@ const removeCurrentVideo = async () => {
 		activeQueueIndex = 0;
 		videoFileName = "";
 		videoFilePath = "";
-		processStartTime = 0;
-		processEndTime = 0;
+		clipInTime = 0;
+		clipOutTime = 0;
 		markers = [];
 
 		player.src = "";
@@ -4093,8 +4092,8 @@ const removeCurrentVideo = async () => {
 		const currentVideo = videoQueue[activeQueueIndex];
 		videoFileName = currentVideo.videoFileName || "";
 		videoFilePath = currentVideo.videoFilePath || "";
-		processStartTime = currentVideo.processStartTime || 0;
-		processEndTime = currentVideo.processEndTime || 0;
+		clipInTime = currentVideo.clipInTime || 0;
+		clipOutTime = currentVideo.clipOutTime || 0;
 		markers = currentVideo.appState?.markers || [];
 		for (const m of markers) {
 			if (!m.type) m.type = "standard";
@@ -4163,8 +4162,8 @@ const addVideoToQueue = async () => {
 				videoName,
 				videoFileName: "",
 				videoFilePath: "",
-				processStartTime: 0,
-				processEndTime: 0,
+				clipInTime: 0,
+				clipOutTime: 0,
 				appState: { markers: [] },
 			};
 
@@ -4228,8 +4227,8 @@ async function addNewVideoToQueue(event) {
 			videoName: extractedFileName,
 			videoFileName: extractedFileName,
 			videoFilePath: filePath,
-			processStartTime: 0,
-			processEndTime: 0,
+			clipInTime: 0,
+			clipOutTime: 0,
 			appState: { markers: [] },
 		};
 
@@ -4688,7 +4687,7 @@ setTimeout(() => {
 			);
 		});
 	}
-}, 1500); // Waits for the initial master data rehydration layout pass to settle down
+}, 1500); // Wait for initial project rehydration layout pass to settle
 
 // Export for testing in Node.js environment without breaking browser execution
 if (typeof module !== "undefined" && module.exports) {
