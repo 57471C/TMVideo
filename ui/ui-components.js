@@ -121,10 +121,22 @@ const updateStickyOffsets = () => {
 	}
 };
 
+/** Resolve video element — app.js `let player` is module-scoped; use window.player. */
+const getMarkersPlayer = () =>
+	window.player ||
+	(typeof player !== "undefined" ? player : null) ||
+	document.getElementById("my_video") ||
+	document.querySelector("video");
+
 let _updateMarkersListScheduled = false;
 const updateMarkersListImmediate = () => {
-	if (typeof player === "undefined" || !player) return;
+	const playerEl = getMarkersPlayer();
+	if (!playerEl) return;
 	try {
+		// Re-bind if scripts raced DOM or prior import cleared the ref
+		if (!DOM.markersList) {
+			DOM.markersList = document.getElementById("markersList");
+		}
 		if (!DOM.markersList) throw new Error("Markers list element not found");
 		const rows = [
 			`<table class="table table-fixed w-full font-mono text-base tabular-nums [&_th]:align-middle [&_td]:align-middle [&_th]:text-sm sm:[&_th]:text-base [&_td]:text-sm sm:[&_td]:text-base [&_th]:py-1 [&_th]:h-5">
@@ -165,13 +177,13 @@ const updateMarkersListImmediate = () => {
 			let duration = 0;
 			if (i < markers.length - 1) {
 				duration = markers[i + 1].startTime - marker.startTime;
-			} else if (typeof player !== "undefined" && player) {
+			} else if (playerEl) {
 				const activeVideo = videoQueue[activeQueueIndex] || {};
 				const endLimit =
 					activeVideo.virtualEndTime !== null &&
 					activeVideo.virtualEndTime !== undefined
 						? activeVideo.virtualEndTime
-						: player.duration;
+						: playerEl.duration;
 				duration = endLimit - marker.startTime;
 			}
 			if (duration < 0) duration = 0;
@@ -447,16 +459,21 @@ const updateMarkersList = () => {
 
 const updateVideoTimeSummary = () => {
 	try {
-		const footer = document.getElementById("markersTableFoot");
+		let footer = document.getElementById("markersTableFoot");
+		// Footer is created by updateMarkersListImmediate; ensure shell exists first
 		if (!footer) {
-			toConsole(
-				"updateVideoTimeSummary skipped",
-				"markersTableFoot is null",
-				debuggin,
-			);
+			const playerEl = getMarkersPlayer();
+			if (playerEl && DOM.markersList) {
+				updateMarkersListImmediate();
+				footer = document.getElementById("markersTableFoot");
+			}
+		}
+		if (!footer) {
+			// Still missing — list not ready yet; silent skip (avoid spam)
 			return;
 		}
 
+		const playerEl = getMarkersPlayer();
 		const activeVideo =
 			(typeof videoQueue !== "undefined" && videoQueue[activeQueueIndex]) || {};
 
@@ -468,13 +485,8 @@ const updateVideoTimeSummary = () => {
 		const endMarker = markers.find((m) => m.type === "out" || m.type === "end");
 		if (endMarker) {
 			clipOutTime = endMarker.startTime;
-		} else if (
-			typeof player !== "undefined" &&
-			player &&
-			player.duration &&
-			!preserveClipBounds
-		) {
-			clipOutTime = player.duration;
+		} else if (playerEl?.duration && !preserveClipBounds) {
+			clipOutTime = playerEl.duration;
 		} else if (!preserveClipBounds) {
 			clipOutTime = 0;
 		}

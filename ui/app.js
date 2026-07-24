@@ -1448,7 +1448,9 @@ const initializePlayer = () => {
 		updateLoadButtonColor();
 		toggleVideoPlaceholder(false);
 		updateSliderTicks();
-		updateVideoTimeSummary();
+		// Render markers table shell (incl. #markersTableFoot) before filling the footer
+		if (typeof updateMarkersList === "function") updateMarkersList();
+		if (typeof updateVideoTimeSummary === "function") updateVideoTimeSummary();
 
 		player.playbackRate = playbackSpeed;
 		speedSlider.value = playbackSpeed;
