@@ -2830,10 +2830,18 @@ const updateMarkerName = (markerIndex, newName) => {
 
 /** Updates the behavioral type of an existing marker. */
 const updateMarkerType = (markerIndex, newType) => {
+	if (!markers[markerIndex]) return;
 	markers[markerIndex].type = newType;
+	// Preserve existing loopCount when selecting Loop; default to 1 if unset
+	if (newType === "loop") {
+		markers[markerIndex].loopCount = markers[markerIndex].loopCount || 1;
+	}
 	saveLocalState();
 	updateVideoTimeSummary();
 	updateMarkersList();
+	if (typeof window.paintTimelineMarkersAndShading === "function") {
+		window.paintTimelineMarkersAndShading();
+	}
 };
 
 /** Prompts for confirmation and deletes the specified marker. */

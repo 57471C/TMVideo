@@ -389,35 +389,56 @@ const updateMarkersListImmediate = () => {
 				});
 
 			// Attach loop count input event handlers
+			// Editing ## must also set type === "loop" (badge, cyan band, seektimeupdate)
+			const applyLoopCountEdit = (index, rawValue, { reRender = false } = {}) => {
+				const digits = String(rawValue ?? "").replace(/\D/g, "");
+				const parsed = parseInt(digits, 10);
+				const finalVal = !Number.isNaN(parsed)
+					? Math.min(99, Math.max(1, parsed))
+					: 1;
+				if (!markers[index]) return finalVal;
+				markers[index].type = "loop";
+				markers[index].loopCount = finalVal;
+				saveLocalState();
+				if (reRender) {
+					if (typeof window.updateMarkersList === "function") {
+						window.updateMarkersList();
+					} else if (typeof updateMarkersList === "function") {
+						updateMarkersList();
+					}
+					if (typeof window.paintTimelineMarkersAndShading === "function") {
+						window.paintTimelineMarkersAndShading();
+					}
+				}
+				return finalVal;
+			};
+
 			markerTableBody.querySelectorAll(".loop-count-input").forEach((input) => {
 				const index = parseInt(input.getAttribute("data-marker-index"), 10);
 				input.addEventListener("click", (e) => e.stopPropagation());
 				input.addEventListener("mousedown", (e) => e.stopPropagation());
 				input.addEventListener("mouseup", (e) => e.stopPropagation());
 				input.addEventListener("focus", (e) => e.stopPropagation());
-				input.addEventListener("blur", (e) => e.stopPropagation());
+				input.addEventListener("blur", (e) => {
+					e.stopPropagation();
+					// Commit type=loop + count on blur so badge/timeline update without waiting for change
+					const finalVal = applyLoopCountEdit(index, input.value, {
+						reRender: true,
+					});
+					input.value = String(finalVal).padStart(2, "0");
+				});
 				input.addEventListener("input", (e) => {
 					e.stopPropagation();
 					input.value = input.value.replace(/\D/g, "");
-					const parsed = parseInt(input.value, 10);
-					if (!Number.isNaN(parsed)) {
-						markers[index].loopCount = Math.min(99, Math.max(1, parsed));
-					} else {
-						markers[index].loopCount = 1;
-					}
-					saveLocalState();
+					// Persist type+count while typing; defer re-render to avoid focus loss
+					applyLoopCountEdit(index, input.value, { reRender: false });
 				});
 				input.addEventListener("change", (e) => {
 					e.stopPropagation();
-					input.value = input.value.replace(/\D/g, "");
-					const parsed = parseInt(input.value, 10);
-					const finalVal = !Number.isNaN(parsed)
-						? Math.min(99, Math.max(1, parsed))
-						: 1;
-					markers[index].loopCount = finalVal;
+					const finalVal = applyLoopCountEdit(index, input.value, {
+						reRender: true,
+					});
 					input.value = String(finalVal).padStart(2, "0");
-					saveLocalState();
-					updateMarkersList();
 				});
 			});
 		}
