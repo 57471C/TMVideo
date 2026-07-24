@@ -110,6 +110,17 @@ document.addEventListener("DOMContentLoaded", () => {
 			const mainGrid = document.getElementById("mainLayoutGrid");
 			if (mainGrid) {
 				mainGrid.classList.toggle("timeline-expanded");
+				// Re-measure track width after expand so filmstrip tile density matches full width
+				if (
+					mainGrid.classList.contains("timeline-expanded") &&
+					typeof videoFilePath !== "undefined" &&
+					videoFilePath &&
+					typeof window.loadWaveformTimeline === "function"
+				) {
+					requestAnimationFrame(() => {
+						window.loadWaveformTimeline();
+					});
+				}
 			}
 		});
 	}
@@ -849,8 +860,13 @@ window.loadWaveformTimeline = async () => {
 			window.setupVideoTrack();
 		}
 
-		const totalTrackWidth = videoTrack?.offsetWidth || 1200;
-		const requiredTileCount = Math.ceil(totalTrackWidth / 120);
+		// Prefer expanded track width; floor so collapsed/zero measurements still request enough tiles
+		const totalTrackWidth = Math.max(
+			videoTrack?.offsetWidth || 0,
+			videoTrack?.parentElement?.offsetWidth || 0,
+			800,
+		);
+		const requiredTileCount = Math.max(1, Math.ceil(totalTrackWidth / 100));
 
 		window.__TAURI__.core
 			.invoke("generate_timeline_thumbnails", {
@@ -858,19 +874,28 @@ window.loadWaveformTimeline = async () => {
 				tileCount: requiredTileCount,
 			})
 			.then((thumbnailPaths) => {
-				if (videoTrack) {
-					videoTrack.innerHTML = "";
-					videoTrack.style.justifyContent = "flex-start";
-					videoTrack.style.overflowX = "auto";
-					for (const pathString of thumbnailPaths) {
-						const imgElement = document.createElement("img");
-						imgElement.src = window.__TAURI__.core.convertFileSrc(pathString);
-						imgElement.className =
-							"h-full w-[120px] object-cover flex-shrink-0 border-r border-zinc-200 dark:border-zinc-700 pointer-events-none";
-						videoTrack.appendChild(imgElement);
-					}
-					window.setupVideoTrack();
+				if (!videoTrack || !thumbnailPaths || thumbnailPaths.length === 0) {
+					return;
 				}
+				// Stretch thumbs across 100% of the track (no fixed 120px gap on the right)
+				videoTrack.innerHTML = "";
+				videoTrack.style.display = "flex";
+				videoTrack.style.width = "100%";
+				videoTrack.style.overflow = "hidden";
+				videoTrack.style.justifyContent = "flex-start";
+				const n = thumbnailPaths.length;
+				const tileWidthPct = 100 / n;
+				for (const pathString of thumbnailPaths) {
+					const imgElement = document.createElement("img");
+					imgElement.src = window.__TAURI__.core.convertFileSrc(pathString);
+					imgElement.className =
+						"h-full object-cover flex-shrink-0 border-r border-zinc-200 dark:border-zinc-700 pointer-events-none";
+					imgElement.style.width = `${tileWidthPct}%`;
+					imgElement.style.minWidth = "0";
+					imgElement.style.flex = `0 0 ${tileWidthPct}%`;
+					videoTrack.appendChild(imgElement);
+				}
+				window.setupVideoTrack();
 			})
 			.catch((err) => {
 				console.error("Error generating filmstrip thumbnails:", err);
